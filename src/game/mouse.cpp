@@ -18,11 +18,12 @@ constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
 // manager: +0x3C contexts, +0x40 count; context: +0x14 draw stack, +0x18 input stack;
 // stack: +4 begin, +8 end of {page, flags}; screen: +0x84 width, +0x86 height
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668;
-// page: +8 instances begin, +0xC end, +0x14 id; instance: +8 widget, +0x4C flags (2 enabled, 8 focused),
+// page: +8 instances begin, +0xC end, +0x14 id, +0x1C layer (100 HUD, the base default), +0x24 focused; instance: +8 widget, +0x4C flags (2 enabled, 8 focused),
 // vtable +0xC Focus, +0x10 Unfocus; widget: vtable +0xC type, +0x10 GetBounds(short rect[4] left right top bottom)
 // list: +0x3C up arrow, +0x50 down arrow, +0x7C up arrow rect, +0x8C down arrow rect, +0x9C selection
 constexpr uint32_t kListType = 10;
-constexpr uint32_t kListHitTest = 0x2C1190, kListSelect = 0x2C2040, kPageFocus = 0x2C5450;
+constexpr uint32_t kHudLayer = 100;
+constexpr uint32_t kListHitTest = 0x2C1190, kListSelect = 0x2C2040, kPageSetFocus = 0x2C5370;
 
 struct Game {
     X86Context& ctx;
@@ -96,13 +97,16 @@ bool Point(uint32_t& point) {
 
 // true while a menu takes the input
 bool Menu(Game& g) {
-    uint32_t page = InputPage();
+    uint32_t top = InputPage();
+    // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu
+    uint32_t layer = top ? R32(top + 0x1C) : 0, focus = top ? R32(top + 0x24) : 0;
+    uint32_t page = layer == kHudLayer || !focus ? 0 : top;
     uint32_t begin = page ? R32(page + 8) : 0, end = page ? R32(page + 0xC) : 0;
     if (end < begin || end - begin > 4 * 512) begin = end = 0;
     uint32_t focusable = 0, hovered = 0, focused = 0;
     uint32_t point = g_point, clicks = input::Clicks();
     // a new page starts from where the cursor rests, only movement or a click after it acts
-    bool fresh = page != g_page;
+    bool fresh = top != g_page;
     bool moved = Point(point) && point != g_point && !fresh, clicked = clicks != g_clicks && !fresh;
     g_point = point;
     g_clicks = clicks;
@@ -117,17 +121,13 @@ bool Menu(Game& g) {
         if (Inside(g, g.scratch + 8) && (!hovered || (G<uint8_t>(instance + 0x4C) & 8))) hovered = instance;
     }
     if (fresh) {
-        g_page = page;
-        LOGI("mouse: input page %08X id %08X, %u instances, %u focusable", page, page ? R32(page + 0x14) : 0,
-             (end - begin) / 4, focusable);
+        g_page = top;
+        LOGI("mouse: input page %08X id %08X layer %u focus %08X, %u focusable, %s", top, top ? R32(top + 0x14) : 0,
+             layer, focus, focusable, page ? "menu" : "not a menu");
     }
     if (!focusable) return false;
     if (!hovered) return true;
-    if (hovered != focused) {
-        if (focused) Virtual(g.ctx, focused, 0x10);
-        Virtual(g.ctx, hovered, 0xC);
-        Call(g.ctx, kPageFocus, page, {});
-    }
+    if (hovered != focused) Call(g.ctx, kPageSetFocus, page, {hovered});
     uint32_t widget = R32(hovered + 8);
     if (Virtual(g.ctx, widget, 0xC) != kListType) {
         if (clicked) Tap(g, kJoyA);
