@@ -22,16 +22,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, for supersampling or downscaling, independent of the window size.
 - **Max Frame Rate** - Caps the frame rate at your monitor's refresh rate, at a value you pick, or removes the cap, replacing the console's 30 FPS limiter.
 - **FPS Counter** - Shows the frame rate on screen.
-
-### Display
-
-- **Display Mode** - 
-- **Resolution** - 
-- **Render Resolution** - 
-- **Max Frame Rate** - 
-- **VSync** - 
-- **FPS Counter** - 
-
+- 
 ### Graphics
 
 
