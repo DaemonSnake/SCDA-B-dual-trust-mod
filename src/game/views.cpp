@@ -74,6 +74,8 @@ void UpdateView(uint32_t viewport) {
         view = input::View::ScriptedEvent;
     } else if (state == unreal::Name("s_Ledge")) {
         view = input::View::Ledge;
+    } else if (state == unreal::Name("s_PickLock")) {
+        view = input::View::Lockpick;
     } else if (state == unreal::Name("s_Camera")) {
         uint32_t base_offset = unreal::Offset(pc, unreal::Name("Base"));
         uint32_t camera = base_offset ? R32(pc + base_offset) : 0;

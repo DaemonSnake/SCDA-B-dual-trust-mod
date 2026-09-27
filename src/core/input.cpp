@@ -83,6 +83,17 @@ int Remapped(const Remap (&table)[N], int b) {
     return b;
 }
 
+// Lockpicking. The Xbox script (EPickLockSystem) takes the quadrant from the stick's diagonals and tilts the pick
+// only when the stick moved by more than MoveThreshold (0.3) since the last tilt; the PC version gives each key one
+// quadrant and tilts while it is held. So W, A, S and D stand for the PC's diagonals (up-left, down-left, down-right,
+// up-right) and go out as the stick, its length alternating so the pick keeps tilting. Per move key (forward, back,
+// left, right): forward and strafe.
+constexpr float kPickStick[4][2] = {{1.0f, -1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, 1.0f}};
+constexpr auto kWiggle = std::chrono::milliseconds(40);
+int g_pick_last = -1;  // the held move key pressed last
+bool g_wiggle = false;
+std::chrono::steady_clock::time_point g_wiggle_time;
+
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
 // these land the game's axis on 0.2 0.4 0.6 0.8 1.0.
 constexpr float kSpeeds[] = {0.44f, 0.58f, 0.72f, 0.86f, 1.0f};
@@ -226,6 +237,7 @@ void Keyboard(Pad& p) {
             int button = kActions[i].button;
             b = camera ? Remapped(kCameraRemap, button) : menu ? Remapped(kMenuRemap, button) : button;
             g_down_as[i] = b + 1;
+            if (b >= 16) g_pick_last = b - 16;
         }
         if (b >= 16) move[b - 16] = 1;
         else if (b < 8) p.analog[b] = 0xFF;
@@ -267,6 +279,20 @@ void Keyboard(Pad& p) {
     }
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
+    if (View(g_view.load()) != View::Lockpick || menu) return;
+    if (g_pick_last < 0 || !move[g_pick_last]) {
+        g_pick_last = -1;
+        for (int i = 0; i < 4; i++)
+            if (move[i]) g_pick_last = i;
+    }
+    if (g_pick_last < 0) return;
+    if (now - g_wiggle_time >= kWiggle) {
+        g_wiggle = !g_wiggle;
+        g_wiggle_time = now;
+    }
+    float length = g_wiggle ? 1.0f : 0.6f;
+    p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
+    p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
 }
 
 void Clip() {
