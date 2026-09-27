@@ -20,6 +20,7 @@
 
 #include "app/app.h"
 #include "core/input.h"
+#include "game/console.h"
 
 namespace app {
 
@@ -200,7 +201,21 @@ std::atomic<int> g_capture{-1};
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = 0;
-const char* const kPages[] = {"SETTINGS", "MOUSE AND KEYBOARD"};
+const char* const kPages[] = {"SETTINGS", "MOUSE AND KEYBOARD", "LEVEL SELECT"};
+constexpr int kPageCount = int(std::size(kPages));
+constexpr int kControlsPage = 1, kLevelsPage = 2;
+
+// the DataXb\LMaps folders; Menu is the main menu
+const char* const kSoloLevels[] = {
+    "x01_Iceland_a",    "x01_iceland_b",    "x02_prison_a",   "x02_prison_b",   "x04_moneytrain_a", "x04_moneytrain_b",
+    "x05_hq2_r",        "x06_cozumel_a",    "x06_cozumel_b",  "x08_okhotsk_a",  "x08_okhotsk_b",    "x10_kinshasa_a",
+    "x10_kinshasa_b",   "x11_hq5_r",        "x12_ny_a",       "x12_ny_b",       "x12_ny_c",
+};
+const char* const kCoopLevels[] = {
+    "x01_coop_ice_a",  "x01_coop_ice_b",  "x01_coop_ice_c",  "x01_coop_ice_d",  "x01_coop_ice_e",
+    "x02_coop_pris_a", "x02_coop_pris_b", "x02_coop_pris_c", "x02_coop_pris_d", "x02_coop_pris_e",
+    "x03_coop_kin_a",  "x03_coop_kin_b",  "x03_coop_kin_c",  "x03_coop_kin_f",
+};
 
 // label left, keys right; Enter or a click starts the capture
 bool BindRow(const char* label, const std::string& keys, bool capturing) {
@@ -267,9 +282,24 @@ void DrawControls() {
         }
 }
 
+void LevelList(const char* title, const char* const* levels, size_t count) {
+    Section(title);
+    for (size_t i = 0; i < count; i++)
+        if (ImGui::Selectable(levels[i], false, 0, ImVec2(0.0f, ImGui::GetFrameHeight()))) {
+            game::QueueCommand(std::string("open ") + levels[i]);
+            ToggleMenu();
+        }
+}
+
+void DrawLevels() {
+    LevelList("SOLO", kSoloLevels, std::size(kSoloLevels));
+    LevelList("CO-OP", kCoopLevels, std::size(kCoopLevels));
+}
+
 void Defaults() {
     g_capture = -1;
-    if (g_page) {
+    if (g_page == kLevelsPage) return;
+    if (g_page == kControlsPage) {
         Settings& s = Get();
         s.mouse_sensitivity = Settings{}.mouse_sensitivity;
         s.invert_mouse = false;
@@ -307,18 +337,20 @@ void DrawPanel() {
         ImGui::TextUnformatted(title);
         ImGui::Separator();
         if (int step = OptionRow("PAGE", kPages[g_page])) {
-            g_page = StepIndex(g_page, step, 2);
+            g_page = StepIndex(g_page, step, kPageCount);
             g_capture = -1;
         }
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
-        if (g_page) DrawControls();
+        if (g_page == kLevelsPage) DrawLevels();
+        else if (g_page == kControlsPage) DrawControls();
         else DrawRows();
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        ImGui::TextUnformatted(g_capture >= 0 ? "Press a key or mouse button to bind, Escape cancels"
-                                               : "Up and Down select, Left and Right change, Enter rebinds, F10 or Escape closes");
+        ImGui::TextUnformatted(g_capture >= 0            ? "Press a key or mouse button to bind, Escape cancels"
+                               : g_page == kLevelsPage ? "Up and Down select, Enter or a click loads the level, F10 or Escape closes"
+                                                       : "Up and Down select, Left and Right change, Enter rebinds, F10 or Escape closes");
         ImGui::PopStyleColor();
         float bw = em * 8;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 2 - ImGui::GetStyle().ItemSpacing.x, 0.0f));

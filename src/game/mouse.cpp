@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "core/input.h"
+#include "game/console.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -172,5 +173,6 @@ X86_FUNC(sub_0004B525) {
         if (dx != 0.0f) Event(g, kMouseX, kAxis, dx);
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
+    game::RunCommands(ctx, engine);
     ctx.esp = esp;
 }
