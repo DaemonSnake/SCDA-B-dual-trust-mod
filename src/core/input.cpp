@@ -244,7 +244,7 @@ void Keyboard(Pad& p) {
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    float v = camera ? 1.0f : kSpeeds[g_speed];
+    float v = camera || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -306,7 +306,7 @@ void OnRawInput(void* handle) {
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
-        if (View(g_view.load()) != View::Normal) g_wheel += notch;
+        if (View view = View(g_view.load()); view == View::Eev || view == View::StickyCamera) g_wheel += notch;
         else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
     }
 }

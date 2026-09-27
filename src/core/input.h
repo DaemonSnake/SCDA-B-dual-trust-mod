@@ -31,10 +31,12 @@ void SetMenu(bool menu);
 // the title screen, which only Start gets past: Enter and the interact key press it there
 void SetTitleScreen(bool title);
 
-// What the player looks through, set by the game side each input update. Outside Normal the wheel zooms
-// instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
+// What the player looks through, set by the game side each input update. In the EEV and the sticky camera
+// the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
 // A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
-enum class View { Normal, StickyCamera, Eev, ScriptedEvent };
+// On a ledge the move keys push the stick fully: climbing up wants aForward past 0.9, which slow walking
+// speeds never reach.
+enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
