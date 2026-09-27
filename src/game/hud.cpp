@@ -2,8 +2,10 @@
 // placed per page and element, menus and loading screens are centred 4:3.
 #include <algorithm>
 #include <bit>
+#include <cctype>
 #include <cstring>
 #include <span>
+#include <string>
 #include <string_view>
 
 #include "gpu/backend.h"
@@ -61,13 +63,10 @@ struct Page {
         : id(Crc32(name)), rules(r), others(m), half(h) {}
 };
 
-// pause and OPSAT pages are Fill (P_hud is not drawn under them); pages not listed are menus, Centre
+// pages not listed are menus: Fill
 constexpr Page kPages[] = {
     {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
-    {"P_Pause", {}},    {"P_PauseTeamate", {}}, {"P_Opsat", {}},    {"P_PDA", {}},       {"P_Goals", {}},
-    {"P_Goals_details", {}}, {"P_Notes", {}},   {"P_Datas", {}},    {"P_DataFile", {}},  {"P_Map", {}},
-    {"P_Equipment", {}}, {"P_Trust", {}},       {"P_TrustReview", {}}, {"P_Msg", {}},    {"P_MsgBox", {}},
 };
 
 constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8;  // page units
@@ -206,7 +205,7 @@ X86_FUNC(sub_002BE990) {
     g_page = nullptr;
     for (auto& p : kPages)
         if (p.id == id) g_page = &p;
-    Draw(ctx, base, Mode::Centre, __imp__sub_002BE990);
+    Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
 }
 
@@ -231,9 +230,14 @@ X86_FUNC(sub_002303E8) {
     g_hud_seen = false;
 }
 
-// render device splash: CPU writes a tga into the frame buffer and presents it
+// render device splash(path, ...): draws a tga over the frame buffer and presents it; the ESRB notice
+// has its side columns carried out to the screen edges
 X86_EXTERN_FUNC(__imp__sub_002E5F95);
 X86_FUNC(sub_002E5F95) {
+    std::string path;
+    uint32_t p = R32(ctx.esp + 4), step = p && !G<uint8_t>(p + 1) ? 2 : 1;  // TCHAR or char
+    for (uint32_t i = 0; p && i < 256 && G<uint8_t>(p + i * step); i++) path += char(std::tolower(G<uint8_t>(p + i * step)));
+    gpu::g_splash_fill = path.find("esrb") != std::string::npos;
     gpu::g_splash = gpu::g_in_splash = true;
     __imp__sub_002E5F95(ctx, base);
     gpu::g_in_splash = false;

@@ -34,6 +34,6 @@ public:
 std::unique_ptr<Backend> CreateBackend();
 
 // the frame buffer holds a 4:3 splash image until a draw from outside the splash
-inline bool g_splash = false, g_in_splash = false;
+inline bool g_splash = false, g_in_splash = false, g_splash_fill = false;
 
 }  // namespace gpu

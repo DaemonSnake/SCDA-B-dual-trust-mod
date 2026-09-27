@@ -1246,13 +1246,14 @@ void D3D12Backend::Present(const Surface& front) {
         // 16:9, the console reports a widescreen display
         float aspect = 16.0f / 9.0f, w = float(bb_w_), h = float(bb_h_);
         float vw = std::min(w, h * aspect), vh = vw / aspect;
-        if (g_splash) vw = vh * 4.0f / 3.0f;
+        float uv[4] = {0, 0, 1, 1};
+        if (g_splash && g_splash_fill) uv[0] = -1.0f / 6, uv[2] = 4.0f / 3;
+        else if (g_splash) vw = vh * 4.0f / 3.0f;
         D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
         D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
         cl_->RSSetViewports(1, &vp);
         cl_->RSSetScissorRects(1, &sc);
         Transition(t->res.Get(), t->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        float uv[4] = {0, 0, 1, 1};
         Blit(t->res.Get(), DXGI_FORMAT_B8G8R8A8_UNORM, uv, gamma_, false);
     }
     {
