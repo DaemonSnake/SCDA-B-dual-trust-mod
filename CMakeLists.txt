@@ -19,6 +19,7 @@ FetchContent_MakeAvailable(zydis tomlplusplus imgui)
 file(GLOB RECOMP_SOURCES CONFIGURE_DEPENDS tools/recomp/*.cpp)
 add_executable(xbe_recomp ${RECOMP_SOURCES})
 target_include_directories(xbe_recomp PRIVATE src tools/recomp)
+target_compile_definitions(xbe_recomp PRIVATE _CRT_SECURE_NO_WARNINGS)
 target_link_libraries(xbe_recomp PRIVATE Zydis tomlplusplus::tomlplusplus)
 
 # default.xbe to generated/, the partition count is set in config/scda_v2.toml
@@ -37,7 +38,7 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Recompiling default.xbe"
     VERBATIM)
-add_custom_target(codegen DEPENDS ${GEN}/codegen.stamp)
+add_custom_target(recompile_xbe DEPENDS ${GEN}/codegen.stamp)
 set_source_files_properties(${GEN_SOURCES} PROPERTIES GENERATED TRUE
     COMPILE_OPTIONS "-O2;-fno-strict-aliasing;-Wno-unused-label;-Wno-parentheses-equality;-Wno-unused-variable")
 
@@ -51,11 +52,12 @@ set(IMGUI_SOURCES
 
 file(GLOB HOST_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
 add_executable(scda WIN32 ${HOST_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES})
-add_dependencies(scda codegen)
+add_dependencies(scda recompile_xbe)
 set_target_properties(scda PROPERTIES OUTPUT_NAME SCDA)
-target_include_directories(scda PRIVATE src ${GEN} ${imgui_SOURCE_DIR})
+target_include_directories(scda PRIVATE src ${GEN})
+target_include_directories(scda SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 target_compile_options(scda PRIVATE -fno-strict-aliasing)
-target_compile_definitions(scda PRIVATE UNICODE _UNICODE)
+target_compile_definitions(scda PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
 target_link_libraries(scda PRIVATE tomlplusplus::tomlplusplus d3d12 dxgi dxguid d3dcompiler xaudio2 xinput ole32 dbghelp winmm dwmapi)
 # lld keeps the recompiled weak functions overridable by the host ones
 target_link_options(scda PRIVATE -fuse-ld=lld -g)

@@ -1,4 +1,5 @@
 // DirectSound (XDK 5849) on a host software mixer. Buffers and streams are read from guest memory as they play.
+#include <algorithm>
 #include <cmath>
 #include <condition_variable>
 #include <deque>

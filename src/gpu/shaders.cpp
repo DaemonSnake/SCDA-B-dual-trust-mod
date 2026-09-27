@@ -1,6 +1,8 @@
 #include "gpu/shaders.h"
 
+#include <algorithm>
 #include <cstdarg>
+#include <cstdio>
 #include <cstring>
 
 namespace gpu {

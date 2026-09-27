@@ -1,5 +1,7 @@
 // Direct3D 8 (XDK 5849) entry points the title calls, implemented on the host renderer.
 // Resource creation, locking and the XG helpers stay recompiled: they only manage memory.
+#include <algorithm>
+#include <chrono>
 #include <unordered_map>
 
 #include "gpu/backend.h"

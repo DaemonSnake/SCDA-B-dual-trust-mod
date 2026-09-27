@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -68,6 +69,10 @@ void InitKernelData() {
     PutAnsi(DataAddress(42), "0000000000000000");
     W32(DataAddress(40), 3);
     W32(DataAddress(356), 0);
+    // IDE_CHANNEL_OBJECT DeviceQueue.DeviceListHead, XAPI walks it to cancel file I/O
+    uint32_t queue = DataAddress(357) + 0x28;
+    W32(queue, queue);
+    W32(queue + 4, queue);
     // the start of the clock
     std::thread([] {
         auto start = std::chrono::steady_clock::now();

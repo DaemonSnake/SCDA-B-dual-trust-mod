@@ -1,5 +1,6 @@
 // XAPI functions that talk to hardware: controller ports and the hard disk cache partition
 #include <cctype>
+#include <chrono>
 
 #include "core/input.h"
 #include "xdk/hle.h"
