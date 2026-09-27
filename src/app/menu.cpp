@@ -383,16 +383,17 @@ void ToggleMenu() {
     bool open = !g_open.load(std::memory_order_relaxed);
     g_open.store(open, std::memory_order_relaxed);
     g_capture = -1;
-    input::SetBlocked(open);
+    input::SetBlocked(open || ConsoleOpen());
 }
 
 void DrawUi(double fps) {
     ImGuiIO& io = ImGui::GetIO();
-    if (MenuOpen()) io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+    if (MenuOpen() || ConsoleOpen()) io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     // scale the font with the output height
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
     if (Get().fps_counter) DrawFps(fps);
+    if (ConsoleOpen()) DrawConsole();
     if (MenuOpen()) {
         PollCapture();
         DrawPanel();

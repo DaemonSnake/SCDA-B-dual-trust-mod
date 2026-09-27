@@ -109,6 +109,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == VK_F10) ToggleMenu();
             if (wp == VK_F3) DumpThreads();
             if (wp == VK_ESCAPE && MenuOpen() && !Capturing()) ToggleMenu();
+            else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
+            if (wp == VK_OEM_3 && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
             return 0;
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
@@ -121,7 +123,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
-                SetCursor(MenuOpen() || input::InMenu() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
+                SetCursor(MenuOpen() || ConsoleOpen() || input::InMenu() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
                 return TRUE;
             }
             break;

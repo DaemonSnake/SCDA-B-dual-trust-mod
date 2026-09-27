@@ -177,6 +177,6 @@ X86_FUNC(sub_0004B525) {
         if (dx != 0.0f) Event(g, kMouseX, kAxis, dx);
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
-    game::RunCommands(ctx, engine);
+    game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

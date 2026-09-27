@@ -45,6 +45,11 @@ bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
 void DrawUi(double fps);
 
+// the console on the backtick key, drawn by DrawUi
+bool ConsoleOpen();
+void ToggleConsole();
+void DrawConsole();
+
 // sleeps out the rest of the frame for the fps cap
 void Pace();
 
