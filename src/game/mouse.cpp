@@ -81,7 +81,7 @@ uint32_t g_page = 0;
 uint32_t g_clicks = 0;
 uint32_t g_point = 0xFFFFFFFF;
 
-// window cursor to page space: the frame is drawn 16:9 in the middle of the window
+// window cursor to page space: the frame is drawn 16:9 in the middle of the window, menu pages 4:3 in its middle
 bool Point(uint32_t& point) {
     int x, y, w, h;
     if (!input::Cursor(x, y, w, h) || w <= 0 || h <= 0) return false;
@@ -89,7 +89,8 @@ bool Point(uint32_t& point) {
     float sw = screen ? float(int16_t(R16(screen + 0x84))) : 0, sh = screen ? float(int16_t(R16(screen + 0x86))) : 0;
     if (sw <= 0 || sh <= 0) sw = 640, sh = 480;
     float vw = std::min(float(w), h * 16.0f / 9.0f), vh = vw * 9.0f / 16.0f;
-    int px = int((x - (w - vw) / 2) / vw * sw), py = int((y - (h - vh) / 2) / vh * sh);
+    float fx = ((x - (w - vw) / 2) / vw - 0.125f) / 0.75f;
+    int px = int(fx * sw), py = int((y - (h - vh) / 2) / vh * sh);
     point = uint32_t(uint16_t(int16_t(px))) | uint32_t(uint16_t(int16_t(py))) << 16;
     LOG_FIRST(1, "mouse: menu space %gx%g", sw, sh);
     return true;

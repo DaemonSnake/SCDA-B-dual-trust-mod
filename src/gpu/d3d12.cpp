@@ -904,6 +904,7 @@ uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4]) {
 }
 
 void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, uint32_t indices) {
+    g_splash = false;
     Assembled a;
     if (!Assemble(s, prim, start, count, indices, a)) return;
     if (!BindTargets(s)) return;
@@ -1245,6 +1246,7 @@ void D3D12Backend::Present(const Surface& front) {
         // 16:9, the console reports a widescreen display
         float aspect = 16.0f / 9.0f, w = float(bb_w_), h = float(bb_h_);
         float vw = std::min(w, h * aspect), vh = vw / aspect;
+        if (g_splash) vw = vh * 4.0f / 3.0f;
         D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
         D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
         cl_->RSSetViewports(1, &vp);
