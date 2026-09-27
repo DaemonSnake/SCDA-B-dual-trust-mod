@@ -45,13 +45,17 @@ uint32_t LinearColorFormat(uint32_t fmt);
 uint32_t LinearDepthFormat(uint32_t fmt);
 void SurfaceSize(const Surface& s, uint32_t& w, uint32_t& h);
 
+// CopyRects done in guest memory, false when the formats do not allow it
+bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, uint32_t rects, uint32_t points);
+
 // the title locked a resource, the next bind re-uploads it
 void MarkDirty(uint32_t resource);
 uint64_t DirtyEpoch(uint32_t data_va);
 
 // vertex declarations and pixel shader constant routing, both follow the XDK's definitions
 void ParseDeclaration(VertexShader& vs);
-void ApplyPixelConstants(State& s);
+// SetPixelShaderConstant: the stages of the current shader mapped to these registers take the values
+void ApplyPixelConstants(State& s, uint32_t first, uint32_t count);
 uint32_t PackColor(const std::array<float, 4>& c);
 
 }  // namespace gpu

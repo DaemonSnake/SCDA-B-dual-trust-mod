@@ -63,6 +63,8 @@ bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::s
         std::memcpy(g_base + s.va, img.file.data() + s.raw, std::min(s.rsize, s.vsize));
         W32(sec_hdr + uint32_t(i) * 56 + 0x18, 1);
     }
+    // the engine holds frames to 1/60 s itself, the frame rate cap in the options menu replaces it
+    if (img.title_id == 0x5553005E && R32(0x4F64CC) == 0x3C888723) W32(0x4F64CC, 0);
 
     InitKernelData();
     dispatch::Init();

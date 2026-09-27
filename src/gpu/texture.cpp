@@ -439,6 +439,46 @@ uint64_t DirtyEpoch(uint32_t data) {
     return it == g_dirty.end() ? 0 : it->second;
 }
 
+bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, uint32_t rects, uint32_t points) {
+    TextureDesc a, b;
+    if (!DescribeSurface(src, a) || !DescribeSurface(dst, b)) return false;
+    const FormatInfo &fa = Format(a.format), &fb = Format(b.format);
+    if (fa.compressed || fb.compressed || fa.bits != fb.bits || fa.bits < 8) return false;
+    uint32_t bpp = fa.bits / 8;
+    uint32_t ax, ay, az, bx, by, bz;
+    SwizzleMasks(a.width, a.height, 1, ax, ay, az);
+    SwizzleMasks(b.width, b.height, 1, bx, by, bz);
+    auto addr = [&](const TextureDesc& d, uint32_t mx, uint32_t my, uint32_t x, uint32_t y) {
+        return d.data + (d.linear ? y * d.pitch + x * bpp : (Deposit(x, mx) | Deposit(y, my)) * bpp);
+    };
+    uint32_t n = count && rects ? count : 1;
+    for (uint32_t i = 0; i < n; i++) {
+        int32_t x0 = 0, y0 = 0, x1 = int32_t(a.width), y1 = int32_t(a.height), dx = 0, dy = 0;
+        if (count && rects) {
+            uint32_t r = rects + i * 16;
+            x0 = int32_t(kernel::R32(r));
+            y0 = int32_t(kernel::R32(r + 4));
+            x1 = int32_t(kernel::R32(r + 8));
+            y1 = int32_t(kernel::R32(r + 12));
+            dx = x0;
+            dy = y0;
+        }
+        if (points) {
+            dx = int32_t(kernel::R32(points + i * 8));
+            dy = int32_t(kernel::R32(points + i * 8 + 4));
+        }
+        for (int32_t y = std::max(y0, 0); y < std::min(y1, int32_t(a.height)); y++)
+            for (int32_t x = std::max(x0, 0); x < std::min(x1, int32_t(a.width)); x++) {
+                int32_t tx = dx + x - x0, ty = dy + y - y0;
+                if (tx < 0 || ty < 0 || tx >= int32_t(b.width) || ty >= int32_t(b.height)) continue;
+                std::memcpy(kernel::HostPtr(addr(b, bx, by, uint32_t(tx), uint32_t(ty))),
+                            kernel::HostPtr(addr(a, ax, ay, uint32_t(x), uint32_t(y))), bpp);
+            }
+    }
+    MarkDirty(dst.header);
+    return true;
+}
+
 // ---------------------------------------------------------------- declarations
 
 static uint32_t TypeSize(uint32_t t) {
@@ -498,18 +538,19 @@ uint32_t PackColor(const std::array<float, 4>& c) {
 
 // PSC0Mapping and PSC1Mapping give each combiner stage the D3D constant its C0 and C1 read,
 // PSFinalCombinerConstants does the same for the final combiner. 0xF leaves the literal in place.
-void ApplyPixelConstants(State& s) {
+void ApplyPixelConstants(State& s, uint32_t first, uint32_t count) {
     if (!s.ps) return;
     const uint32_t* d = s.ps->def;
     uint32_t c0map = d[57], c1map = d[58], fmap = d[59];
+    auto mine = [&](uint32_t m) { return m >= first && m < first + count && m < 8; };
     for (uint32_t i = 0; i < 8; i++) {
         uint32_t m0 = (c0map >> (i * 4)) & 0xF, m1 = (c1map >> (i * 4)) & 0xF;
-        if (m0 < 8) s.simple[(kMPsConstant0 >> 2) + i] = PackColor(s.psc[m0]);
-        if (m1 < 8) s.simple[(kMPsConstant1 >> 2) + i] = PackColor(s.psc[m1]);
+        if (mine(m0)) s.simple[(kMPsConstant0 >> 2) + i] = PackColor(s.psc[m0]);
+        if (mine(m1)) s.simple[(kMPsConstant1 >> 2) + i] = PackColor(s.psc[m1]);
     }
     uint32_t f0 = fmap & 0xF, f1 = (fmap >> 4) & 0xF;
-    if (f0 < 8) s.simple[kMPsFinalConstant0 >> 2] = PackColor(s.psc[f0]);
-    if (f1 < 8) s.simple[kMPsFinalConstant1 >> 2] = PackColor(s.psc[f1]);
+    if (mine(f0)) s.simple[kMPsFinalConstant0 >> 2] = PackColor(s.psc[f0]);
+    if (mine(f1)) s.simple[kMPsFinalConstant1 >> 2] = PackColor(s.psc[f1]);
 }
 
 }  // namespace gpu

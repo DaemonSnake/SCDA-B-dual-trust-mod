@@ -1006,7 +1006,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     c.misc[0] = float(sm(kMAlphaRef) & 0xFF);
     c.misc[1] = sm(kMAlphaTestEnable) ? float(Cmp(sm(kMAlphaFunc)) - 1) : 7.0f;
     c.misc[2] = float(Cmp(s.rs[kRsShadowFunc]) - 1);
-    c.misc[3] = prog || s.rs[kRsSpecularEnable] ? 1.0f : 0.0f;
+    c.misc[3] = s.rs[kRsSpecularEnable] ? 1.0f : 0.0f;
     for (int i = 0; i < 8; i++) {
         Color(sm(kMPsConstant0 + i * 4), c.pc[i * 2]);
         Color(sm(kMPsConstant1 + i * 4), c.pc[i * 2 + 1]);
@@ -1143,13 +1143,15 @@ void D3D12Backend::Clear(const State& s, uint32_t count, uint32_t rects, uint32_
 }
 
 void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count, uint32_t src_rects, uint32_t dst_points) {
-    Target* d = GetTarget(dst, false);
-    if (!d) return;
     Target* s = GetTarget(src, false, false);
-    if (!s || s == d) {
-        if (!s) UploadTarget(*d, src);
+    // pixels the CPU made: the copy happens in memory, textures and targets pick it up from there
+    if (!s || !s->drawn) {
+        if (!CopySurfaceMemory(src, dst, count, src_rects, dst_points)) LOG_FIRST(8, "d3d12: CopyRects %08X to %08X skipped", src.data, dst.data);
+        else if (Target* d = GetTarget(dst, false, false)) UploadTarget(*d, dst);
         return;
     }
+    Target* d = GetTarget(dst, false);
+    if (!d || s == d) return;
     Transition(s->res.Get(), s->state, D3D12_RESOURCE_STATE_COPY_SOURCE);
     Transition(d->res.Get(), d->state, D3D12_RESOURCE_STATE_COPY_DEST);
     D3D12_TEXTURE_COPY_LOCATION dl{d->res.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};

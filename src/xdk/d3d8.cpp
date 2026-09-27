@@ -583,7 +583,6 @@ HLE_STDCALL(004A5CD0, D3DDevice_SetPixelShader, 1) {
     put(gpu::kMPsDotMapping, d[55]);
     put(gpu::kMPsInputTexture, d[56]);
     SetComplex(gpu::kRsPsTextureModes, d[54]);
-    gpu::ApplyPixelConstants(g_state);
     return 0;
 }
 
@@ -591,7 +590,7 @@ HLE_STDCALL(004A5ED0, D3DDevice_SetPixelShaderConstant, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t reg = a[0], src = a[1], n = a[2];
     for (uint32_t i = 0; i < n && reg + i < 16; i++) std::memcpy(g_state.psc[reg + i].data(), HostPtr(src + i * 16), 16);
-    gpu::ApplyPixelConstants(g_state);
+    gpu::ApplyPixelConstants(g_state, reg, n);
     return 0;
 }
 

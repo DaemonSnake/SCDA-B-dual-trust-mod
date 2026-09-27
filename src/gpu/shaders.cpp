@@ -266,35 +266,36 @@ struct Ps {
         }
     }
 
-    void Stage(uint32_t inputs, uint32_t output, bool alpha) {
+    // rgb and alpha halves read the registers before either writes, so the writes come back to the caller
+    std::string Stage(uint32_t inputs, uint32_t output, bool alpha) {
         In d = ParseIn(inputs & 0xFF), c = ParseIn((inputs >> 8) & 0xFF), b = ParseIn((inputs >> 16) & 0xFF),
            a = ParseIn(inputs >> 24);
         uint32_t cd_dst = output & 0xF, ab_dst = (output >> 4) & 0xF, sum_dst = (output >> 8) & 0xF, fl = output >> 12;
         const char* m = alpha ? "a" : "rgb";
         const char* T = alpha ? "float" : "float3";
+        const char* n = alpha ? "a" : "c";
         std::string A = Input(a, alpha), B = Input(b, alpha), C = Input(c, alpha), D = Input(d, alpha);
         std::string ab = (fl & 2) ? "dot(" + A + ", " + B + ")" : "(" + A + " * " + B + ")";
         std::string cd = (fl & 1) ? "dot(" + C + ", " + D + ")" : "(" + C + " * " + D + ")";
         uint32_t map = fl & 0x38;
-        std::string post;
-        code += "{\n";
-        code += F("%s ab = clamp((%s)%s, -1, 1);\n", T, T, Map(ab, map).c_str());
-        code += F("%s cd = clamp((%s)%s, -1, 1);\n", T, T, Map(cd, map).c_str());
+        code += F("%s ab%s = clamp((%s)%s, -1, 1);\n", T, n, T, Map(ab, map).c_str());
+        code += F("%s cd%s = clamp((%s)%s, -1, 1);\n", T, n, T, Map(cd, map).c_str());
         std::string sum = (fl & 4) ? F("((%s) ? (%s)%s : (%s)%s)",
                                        ((k.count >> 8) & 1) ? "r0.a >= 0.5" : "(uint(r0.a * 255) & 1) == 1", T,
                                        cd.c_str(), T, ab.c_str())
                                    : "(" + ab + " + " + cd + ")";
-        code += F("%s ms = clamp((%s)%s, -1, 1);\n", T, T, Map(sum, map).c_str());
+        code += F("%s ms%s = clamp((%s)%s, -1, 1);\n", T, n, T, Map(sum, map).c_str());
+        std::string post;
         if (const char* r = Dest(ab_dst)) {
-            post += F("%s.%s = ab;\n", r, m);
-            if (!alpha && (fl & 0x80)) post += F("%s.a = ab.b;\n", r);
+            post += F("%s.%s = ab%s;\n", r, m, n);
+            if (!alpha && (fl & 0x80)) post += F("%s.a = abc.b;\n", r);
         }
         if (const char* r = Dest(cd_dst)) {
-            post += F("%s.%s = cd;\n", r, m);
-            if (!alpha && (fl & 0x40)) post += F("%s.a = cd.b;\n", r);
+            post += F("%s.%s = cd%s;\n", r, m, n);
+            if (!alpha && (fl & 0x40)) post += F("%s.a = cdc.b;\n", r);
         }
-        if (const char* r = Dest(sum_dst)) post += F("%s.%s = ms;\n", r, m);
-        code += post + "}\n";
+        if (const char* r = Dest(sum_dst)) post += F("%s.%s = ms%s;\n", r, m, n);
+        return post;
     }
 };
 
@@ -590,21 +591,26 @@ std::string PixelHlsl(const PixelKey& k) {
     s += F("float4 main(VOut i, bool front : SV_IsFrontFace) : SV_Target {\n");
     s += "    float4 pT0 = i.t0, pT1 = i.t1, pT2 = i.t2, pT3 = i.t3;\n";
     s += k.two_sided ? "    float4 v0 = front ? i.d0 : i.b0, v1 = front ? i.d1 : i.b1;\n" : "    float4 v0 = i.d0, v1 = i.d1;\n";
-    s += "    if (misc.w == 0) v1 = 0;\n";
+    s += "    if (misc.w == 0) v1 = float4(0, 0, 0, 1);\n";
     s += "    float4 pFog = float4(fogcolor.rgb, saturate(i.fog));\n";
     std::string body;
     if (k.programmable) {
         for (int i = 0; i < 4; i++) body += TexFetch(k, i);
-        for (int i = 0; i < 4; i++)
-            if ((k.alphakill >> i) & 1) body += F("if (t%d.a == 0) discard;\n", i);
+        for (int i = 0; i < 4; i++) {
+            uint32_t m = (k.tex_modes >> (i * 5)) & 0x1F;
+            bool fetch = m && m != 4 && m != 5 && m != 0xA && m != 0x11;
+            if (fetch && ((k.alphakill >> i) & 1)) body += F("if (t%d.a == 0) discard;\n", i);
+        }
         uint32_t mode0 = k.tex_modes & 0x1F;
         body += F("float4 r0 = float4(0, 0, 0, %s), r1 = 0;\n", mode0 ? "t0.a" : "1");
         Ps ps{k};
         uint32_t n = std::min<uint32_t>(k.count & 0xFF, 8);
         for (uint32_t st = 0; st < n; st++) {
             ps.stage = int(st);
-            ps.Stage(k.rgb_in[st], k.rgb_out[st], false);
-            ps.Stage(k.a_in[st], k.a_out[st], true);
+            ps.code += "{\n";
+            std::string wc = ps.Stage(k.rgb_in[st], k.rgb_out[st], false);
+            std::string wa = ps.Stage(k.a_in[st], k.a_out[st], true);
+            ps.code += wc + wa + "}\n";
         }
         body += ps.code;
         if (k.final_abcd || k.final_efg) {
