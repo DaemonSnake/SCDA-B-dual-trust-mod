@@ -169,7 +169,9 @@ X86_FUNC(sub_0004B525) {
     bool menu = Menu(g);
     input::SetMenu(menu);
     uint32_t top = InputPage();
-    input::SetTitleScreen(top && R32(top + 0x14) == game::magma::Id("P_Start"));
+    uint32_t page = top ? R32(top + 0x14) : 0;
+    input::SetTitleScreen(page == game::magma::Id("P_Start"));
+    input::SetPauseMenu(page == game::magma::Id("P_Pause"));
     game::UpdateView(viewport);
     float dx, dy;
     // the axis command stores its value, so each axis gets one summed event per update

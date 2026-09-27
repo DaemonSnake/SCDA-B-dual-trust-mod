@@ -30,6 +30,8 @@ bool TakeMouse(float& dx, float& dy);
 void SetMenu(bool menu);
 // the title screen, which only Start gets past: Enter and the interact key press it there
 void SetTitleScreen(bool title);
+// the pause menu, which Start closes and B does not: the pause key stays Start there
+void SetPauseMenu(bool pause);
 
 // What the player looks through, set by the game side each input update. In the EEV and the sticky camera
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.

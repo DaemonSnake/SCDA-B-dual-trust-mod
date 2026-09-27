@@ -71,9 +71,9 @@ constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 +
 // closes under it
 std::array<std::atomic<int>, 32> g_down_as{};
 
-// In a menu pause (Escape) backs out as B.
+// In a menu pause (Escape) backs out as B, except in the pause menu, which only Start closes.
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
-std::atomic<bool> g_title{false};
+std::atomic<bool> g_title{false}, g_pause_menu{false};
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
 template <size_t N>
@@ -235,7 +235,9 @@ void Keyboard(Pad& p) {
         int b = g_down_as[i] - 1;
         if (b < 0) {
             int button = kActions[i].button;
-            b = camera ? Remapped(kCameraRemap, button) : menu ? Remapped(kMenuRemap, button) : button;
+            b = camera                    ? Remapped(kCameraRemap, button)
+                : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
+                                        : button;
             g_down_as[i] = b + 1;
             if (b >= 16) g_pick_last = b - 16;
         }
@@ -356,6 +358,8 @@ bool TakeMouse(float& dx, float& dy) {
 }
 
 void SetTitleScreen(bool title) { g_title = title; }
+
+void SetPauseMenu(bool pause) { g_pause_menu = pause; }
 
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
