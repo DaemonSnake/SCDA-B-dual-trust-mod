@@ -1271,6 +1271,8 @@ void D3D12Backend::Clear(const State& s, uint32_t count, uint32_t rects, uint32_
             D3D12_CLEAR_FLAGS cf = D3D12_CLEAR_FLAGS(((flags & kClearZ) ? D3D12_CLEAR_FLAG_DEPTH : 0) | ((flags & kClearStencil) ? D3D12_CLEAR_FLAG_STENCIL : 0));
             cl_->ClearDepthStencilView(Cpu(dsv_heap_.Get(), t->view, dsv_inc_), cf, std::clamp(z, 0.0f, 1.0f), UINT8(stencil), UINT(rs.size()), rs.data());
         } else {
+            // pixels the CPU wrote before this clear go in first, a later upload would paint over the clear
+            if (CpuWrote(*t)) UploadTarget(*t, s.rt);
             Transition(t->res.Get(), t->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
             float c[4];
             Color(color, c);
