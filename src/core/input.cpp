@@ -21,6 +21,9 @@ namespace {
 std::atomic<bool> g_blocked{false}, g_menu{false};
 // keys held while the game had no focus (the focusing click, Escape closing the options) wait for release
 std::atomic<bool> g_settle{false};
+// a click that opened or closed a menu must not reach the game, the mouse buttons wait for release; keys stay held
+// through the change, so a held button that opens a menu (quick inventory) keeps it open
+std::atomic<bool> g_settle_mouse{false};
 HWND g_hwnd = nullptr;
 std::atomic<int> g_dx{0}, g_dy{0};
 std::atomic<uint32_t> g_clicks{0};
@@ -144,11 +147,15 @@ void Keyboard(Pad& p) {
         if (Down(VK_BACK)) return;
         g_settle = false;
     }
+    if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
+        !Down(VK_XBUTTON2))
+        g_settle_mouse = false;
+    bool no_mouse = menu || g_settle_mouse;
     int move[4] = {};
     for (size_t i = 0; i < kCount; i++) {
         bool held = false;
         // in a menu the mouse buttons belong to the cursor
-        for (int vk : binds[i]) held |= Down(vk) && !(menu && Mouse(vk));
+        for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
         if (!held) continue;
         int b = kActions[i].button;
         if (b >= 16) move[b - 16] = 1;
@@ -227,7 +234,7 @@ bool TakeMouse(float& dx, float& dy) {
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
         if (menu) ClipCursor(nullptr);
-        g_settle = true;
+        g_settle_mouse = true;
     }
 }
 
