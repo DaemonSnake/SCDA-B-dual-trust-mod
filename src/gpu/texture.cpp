@@ -443,14 +443,19 @@ bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, u
     TextureDesc a, b;
     if (!DescribeSurface(src, a) || !DescribeSurface(dst, b)) return false;
     const FormatInfo &fa = Format(a.format), &fb = Format(b.format);
-    if (fa.compressed || fb.compressed || fa.bits != fb.bits || fa.bits < 8) return false;
-    uint32_t bpp = fa.bits / 8;
+    // DXT copies whole 4x4 blocks, rows of blocks in memory
+    bool block = fa.compressed;
+    if (block != fb.compressed || (block && a.format != b.format) || fa.bits != fb.bits || fa.bits < 8) return false;
+    uint32_t bpp = block ? fa.bits : fa.bits / 8, u = block ? 4 : 1;
     uint32_t ax, ay, az, bx, by, bz;
     SwizzleMasks(a.width, a.height, 1, ax, ay, az);
     SwizzleMasks(b.width, b.height, 1, bx, by, bz);
     auto addr = [&](const TextureDesc& d, uint32_t mx, uint32_t my, uint32_t x, uint32_t y) {
+        if (block) return d.data + (y * ((d.width + 3) / 4) + x) * bpp;
         return d.data + (d.linear ? y * d.pitch + x * bpp : (Deposit(x, mx) | Deposit(y, my)) * bpp);
     };
+    int32_t aw = int32_t((a.width + u - 1) / u), ah = int32_t((a.height + u - 1) / u);
+    int32_t bw = int32_t((b.width + u - 1) / u), bh = int32_t((b.height + u - 1) / u);
     uint32_t n = count && rects ? count : 1;
     for (uint32_t i = 0; i < n; i++) {
         int32_t x0 = 0, y0 = 0, x1 = int32_t(a.width), y1 = int32_t(a.height), dx = 0, dy = 0;
@@ -467,10 +472,12 @@ bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, u
             dx = int32_t(kernel::R32(points + i * 8));
             dy = int32_t(kernel::R32(points + i * 8 + 4));
         }
-        for (int32_t y = std::max(y0, 0); y < std::min(y1, int32_t(a.height)); y++)
-            for (int32_t x = std::max(x0, 0); x < std::min(x1, int32_t(a.width)); x++) {
+        int32_t U = int32_t(u);
+        x0 /= U, y0 /= U, dx /= U, dy /= U, x1 = (x1 + U - 1) / U, y1 = (y1 + U - 1) / U;
+        for (int32_t y = std::max(y0, 0); y < std::min(y1, ah); y++)
+            for (int32_t x = std::max(x0, 0); x < std::min(x1, aw); x++) {
                 int32_t tx = dx + x - x0, ty = dy + y - y0;
-                if (tx < 0 || ty < 0 || tx >= int32_t(b.width) || ty >= int32_t(b.height)) continue;
+                if (tx < 0 || ty < 0 || tx >= bw || ty >= bh) continue;
                 std::memcpy(kernel::HostPtr(addr(b, bx, by, uint32_t(tx), uint32_t(ty))),
                             kernel::HostPtr(addr(a, ax, ay, uint32_t(x), uint32_t(y))), bpp);
             }

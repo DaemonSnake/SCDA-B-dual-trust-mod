@@ -20,6 +20,7 @@
 #include "app/app.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "gpu/backend.h"
 #include "kernel/kernel.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -53,6 +54,7 @@ LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
 }
 
 void DumpThreads() {
+    gpu::g_capture = true;
     for (auto& t : kernel::Threads())
         if (t->ctx) {
             LOGI("thread %X", t->id);

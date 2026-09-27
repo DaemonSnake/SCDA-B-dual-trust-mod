@@ -92,6 +92,7 @@ enum : uint32_t {
     kMStencilZFail = 0x374,
     kMStencilPass = 0x378,
     kMShadeMode = 0x37C,
+    kMSolidOffsetEnable = 0x338,
     kMSlopeScale = 0x384,
     kMDepthOffset = 0x388,
     kMPsAlphaInputs = 0x260,     // 8

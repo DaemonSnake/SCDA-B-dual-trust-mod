@@ -182,6 +182,17 @@ HLE_STDCALL(004A17C0, D3D_BlockOnResource, 1) {
     gpu::MarkDirty(res);
     return 0;
 }
+// lock(resource, face, level, locked, rect, flags): D3DLOCK_NOOVERWRITE skips the block above, yet the
+// title reads what the GPU drew (eye adaptation average, save image)
+X86_EXTERN_FUNC(__imp__sub_0049DE60);
+X86_FUNC(sub_0049DE60) {
+    uint32_t res = R32(ctx.esp + 4);
+    if ((R32(ctx.esp + 24) & 0x20) && res && g_backend) {
+        std::lock_guard<std::recursive_mutex> lock(g_lock);
+        g_backend->Sync(mem::VirtualFromPhysical(R32(res + 4)), 0);
+    }
+    __imp__sub_0049DE60(ctx, base);
+}
 HLE_STDCALL(0049BF20, D3DResource_BlockUntilNotBusy, 1) {
     gpu::MarkDirty(a[0]);
     return 0;
@@ -360,7 +371,6 @@ COMPLEX_STATE(004A0340, StencilFail, gpu::kRsStencilFail)
 COMPLEX_STATE(0049F400, FrontFace, gpu::kRsFrontFace)
 COMPLEX_STATE(0049F390, CullMode, gpu::kRsCullMode)
 COMPLEX_STATE(0049F480, TextureFactor, gpu::kRsTextureFactor)
-COMPLEX_STATE(0049F5D0, ZBias, gpu::kRsZBias)
 COMPLEX_STATE(0049F650, LogicOp, gpu::kRsLogicOp)
 COMPLEX_STATE(0049F2C0, EdgeAntiAlias, gpu::kRsEdgeAntiAlias)
 COMPLEX_STATE(004A0580, MultiSampleAntiAlias, gpu::kRsMultiSampleAntiAlias)

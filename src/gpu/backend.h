@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <memory>
 
@@ -35,5 +36,8 @@ std::unique_ptr<Backend> CreateBackend();
 
 // the frame buffer holds a 4:3 splash image until a draw from outside the splash
 inline bool g_splash = false, g_in_splash = false, g_splash_fill = false;
+
+// F3: save the next frame, every draw and target, under claude-outputs
+inline std::atomic<bool> g_capture{false};
 
 }  // namespace gpu

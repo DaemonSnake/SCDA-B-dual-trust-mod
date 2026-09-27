@@ -161,13 +161,15 @@ std::string VsInputStruct(uint16_t regs) {
 
 const char* kVsEpilogue = R"(
     VOut o;
-    float4 p = oPos;
+    precise float4 p = oPos;
     p.w = awayzero(p.w);
-    o.pos.x = p.x * 2 / surf.x - 1;
-    o.pos.y = 1 - p.y * 2 / surf.y;
-    o.pos.z = p.z * surf.z;
-    o.pos.xyz *= p.w;
-    o.pos.w = p.w;
+    precise float4 q;
+    q.x = p.x * 2 / surf.x - 1;
+    q.y = 1 - p.y * 2 / surf.y;
+    q.z = p.z * surf.z;
+    q.xyz *= p.w;
+    q.w = p.w;
+    o.pos = q;
     o.d0 = saturate(oD0);
     o.d1 = saturate(oD1);
     o.b0 = saturate(oB0);
@@ -183,8 +185,10 @@ const char* kVsEpilogue = R"(
 
 const char* kVsPrologue = R"(
     int a0 = 0;
-    float4 R0 = 0, R1 = 0, R2 = 0, R3 = 0, R4 = 0, R5 = 0, R6 = 0, R7 = 0, R8 = 0, R9 = 0, R10 = 0, R11 = 0;
-    float4 oPos = 0, oD0 = float4(0, 0, 0, 1), oD1 = 0, oB0 = float4(0, 0, 0, 1), oB1 = 0, oFog = 0, oPts = 1;
+    // precise: EQUAL depth passes need bit exact positions
+    precise float4 R0 = 0, R1 = 0, R2 = 0, R3 = 0, R4 = 0, R5 = 0, R6 = 0, R7 = 0, R8 = 0, R9 = 0, R10 = 0, R11 = 0;
+    precise float4 oPos = 0;
+    float4 oD0 = float4(0, 0, 0, 1), oD1 = 0, oB0 = float4(0, 0, 0, 1), oB1 = 0, oFog = 0, oPts = 1;
     float4 oT0 = float4(0, 0, 0, 1), oT1 = float4(0, 0, 0, 1), oT2 = float4(0, 0, 0, 1), oT3 = float4(0, 0, 0, 1);
 )";
 
@@ -306,7 +310,7 @@ std::string TexFetch(const PixelKey& k, int i) {
     uint32_t in = i == 1 ? 0 : i == 2 ? (k.input_texture >> 16) & 0xF : (k.input_texture >> 20) & 0xF;
     uint32_t dm = i == 0 ? 0 : (k.dot_mapping >> ((i - 1) * 4)) & 0xF;
     const char* dotmap[] = {"dot01", "dotd3d", "dotgl", "dotm11", "dot01", "dot01", "dot01", "dot01"};
-    std::string norm = t.rect ? F(" / texsize[%d].xy", i) : "";
+    std::string norm = (t.rect ? F(" / texsize[%d].xy", i) : "") + F(" + texsize[%d].zw", i);
     auto sample2 = [&](const std::string& uv) {
         if (t.kind == kTex2D) return F("tex%d.Sample(smp%d, (%s)%s)", i, i, uv.c_str(), norm.c_str());
         if (t.kind == kTexCube) return F("tex%d.Sample(smp%d, float3(%s, 1))", i, i, uv.c_str());
@@ -322,11 +326,11 @@ std::string TexFetch(const PixelKey& k, int i) {
     switch (mode) {
         case 0: return F("float4 t%d = float4(0,0,0,1);\n", i);
         case 1:  // project 2d
-            if (t.shadow) return F("float4 t%d = shadow(tex%d.Sample(smp%d, (pT%d.xy / pT%d.w)%s).x, 0, %d);\n", i, i, i, i, i, norm.c_str(), t.shadow);
+            if (t.shadow) return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, 0, %d);\n", i, i, i, i, i, norm.c_str(), t.shadow);
             return F("float4 t%d = %s;\n", i, sample2(F("pT%d.xy / pT%d.w", i, i)).c_str());
         case 2:  // project 3d
             if (t.shadow)
-                return F("float4 t%d = shadow(tex%d.Sample(smp%d, (pT%d.xy / pT%d.w)%s).x, pT%d.z / pT%d.w, %d);\n", i, i, i, i, i,
+                return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d);\n", i, i, i, i, i,
                          norm.c_str(), i, i, t.shadow);
             return F("float4 t%d = %s;\n", i, sample3(F("pT%d.xyz / pT%d.w", i, i)).c_str());
         case 3: return F("float4 t%d = %s;\n", i, sample3(F("pT%d.xyz", i)).c_str());
@@ -378,13 +382,10 @@ float3 dot01(float4 c) { return c.rgb; }
 float3 dotd3d(float4 c) { return float3(sgn1(c.r), sgn1(c.g), sgn1(c.b)); }
 float3 dotgl(float4 c) { return float3(sgn2(c.r), sgn2(c.g), sgn2(c.b)); }
 float3 dotm11(float4 c) { return float3(sgn3(c.r), sgn3(c.g), sgn3(c.b)); }
-float4 shadow(float depth, float z, int fmt) {
+// the sampler compares, a linear filter blends the four results like the console does
+float4 shadow(Texture2D<float> t, SamplerComparisonState s, float2 uv, float z, int fmt) {
     float mx = fmt == 2 ? 65535.0 : 16777215.0;
-    float d = depth * mx;
-    z = clamp(z, 0, mx);
-    int f = (int)misc.z;
-    bool r = f == 1 ? d < z : f == 2 ? d == z : f == 3 ? d <= z : f == 4 ? d > z : f == 5 ? d != z : f == 6 ? d >= z : f == 7;
-    return r ? (float4)1 : (float4)0;
+    return t.SampleCmpLevelZero(s, uv, clamp(z, 0, mx) / mx).xxxx;
 }
 void alphatest(float a) {
     int f = (int)misc.y;
@@ -511,8 +512,8 @@ std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs) 
         if (mac || ilu) {
             std::string a = Src(k, 0, regs), b = Src(k, 1, regs), c = Src(k, 2, regs);
             s += "    {\n";
-            if (mac) s += "        float4 mr = " + MacExpr(mac, a, b, c) + ";\n";
-            if (ilu) s += "        float4 ir = " + IluExpr(ilu, c) + ";\n";
+            if (mac) s += "        precise float4 mr = " + MacExpr(mac, a, b, c) + ";\n";
+            if (ilu) s += "        precise float4 ir = " + IluExpr(ilu, c) + ";\n";
             uint32_t r = k.f(3, 20, 4), omask = k.f(3, 12, 4);
             if (mac == 13) {
                 s += "        a0 = (int)floor(mr.x + 0.001);\n";
@@ -585,8 +586,8 @@ std::string PixelHlsl(const PixelKey& k) {
     s += kPsHelpers;
     for (int i = 0; i < 4; i++) {
         const TexInfo& t = k.tex[i];
-        const char* type = t.shadow ? "Texture2D<float4>" : t.kind == kTex3D ? "Texture3D" : t.kind == kTexCube ? "TextureCube" : "Texture2D";
-        s += F("%s tex%d : register(t%d);\nSamplerState smp%d : register(s%d);\n", type, i, i, i, i);
+        const char* type = t.shadow ? "Texture2D<float>" : t.kind == kTex3D ? "Texture3D" : t.kind == kTexCube ? "TextureCube" : "Texture2D";
+        s += F("%s tex%d : register(t%d);\n%s smp%d : register(s%d);\n", type, i, i, t.shadow ? "SamplerComparisonState" : "SamplerState", i, i);
     }
     s += F("float4 main(VOut i, bool front : SV_IsFrontFace) : SV_Target {\n");
     s += "    float4 pT0 = i.t0, pT1 = i.t1, pT2 = i.t2, pT3 = i.t3;\n";
@@ -636,8 +637,12 @@ std::string PixelHlsl(const PixelKey& k) {
             const uint32_t* f = k.ff[i];
             if (f[0] <= 1) break;
             const TexInfo& t = k.tex[i];
-            std::string uv = F("pT%d.xy%s", i, t.rect ? F(" / texsize[%d].xy", i).c_str() : "");
-            if (t.kind == kTex2D) body += F("float4 t%d = tex%d.Sample(smp%d, %s);\n", i, i, i, uv.c_str());
+            std::string norm = (t.rect ? F(" / texsize[%d].xy", i) : "") + F(" + texsize[%d].zw", i);
+            std::string uv = F("pT%d.xy%s", i, norm.c_str());
+            if (t.shadow)
+                body += F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d);\n", i, i, i, i, i,
+                          norm.c_str(), i, i, t.shadow);
+            else if (t.kind == kTex2D) body += F("float4 t%d = tex%d.Sample(smp%d, %s);\n", i, i, i, uv.c_str());
             else if (t.kind) body += F("float4 t%d = tex%d.Sample(smp%d, pT%d.xyz);\n", i, i, i, i);
             else body += F("float4 t%d = float4(1,1,1,1);\n", i);
             if ((k.alphakill >> i) & 1) body += F("if (t%d.a == 0) discard;\n", i);
