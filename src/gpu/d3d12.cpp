@@ -60,7 +60,12 @@ O vs(uint id : SV_VertexID) {
     return o;
 }
 float4 psmain(O i) : SV_Target {
-    float4 c = img.Sample(ls, i.uv);
+    float4 c = 0;
+    int n = max((int)opts.z, 1);
+    float2 px = fwidth(i.uv);
+    for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) c += img.SampleLevel(ls, i.uv + px * ((float2(x, y) + 0.5) / n - 0.5), 0);
+    c /= n * n;
     if (opts.x > 0) c.rgb = float3(lut.Sample(ps, float2(c.r, 0.5)).r, lut.Sample(ps, float2(c.g, 0.5)).g, lut.Sample(ps, float2(c.b, 0.5)).b);
     return float4(c.rgb, opts.y > 0 ? c.a : 1);
 }
@@ -156,6 +161,10 @@ struct Target {
     bool drawn = false;           // the GPU wrote it since the last readback
     ComPtr<ID3D12Resource> fb;    // copy read by draws that sample the target they render to
     D3D12_RESOURCE_STATES fb_state = D3D12_RESOURCE_STATE_COPY_DEST;
+    bool native = false;          // swizzled color: blur chains step in guest texels, kept at guest size
+    ComPtr<ID3D12Resource> guest; // guest size box filtered copy for native targets to read
+    D3D12_RESOURCE_STATES guest_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    uint64_t guest_draw = ~0ull;
 };
 
 uint64_t MemSig(uint32_t data, uint32_t total) {
@@ -240,7 +249,7 @@ private:
     void Submit(bool wait);
     Target* GetTarget(const Surface& s, bool depth, bool create = true);
     void UploadTarget(Target& t, const Surface& s);
-    void Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha);
+    void Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha, uint32_t taps = 1);
     bool BindTargets(const State& s);
     ID3D12Resource* BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& srv);
     bool tex_rt_[4] = {};  // stage samples a render target
@@ -250,7 +259,7 @@ private:
     ID3D12PipelineState* BlitPipeline();
     void ResizeSwap();
     float Scale() const { return scale_; }
-    ComPtr<ID3D12Resource> Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h);
+    ComPtr<ID3D12Resource> Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h, uint32_t taps = 1);
     bool ReadBack(ID3D12Resource* res, uint32_t w, uint32_t h, std::vector<uint8_t>& out);
     void CapSave(ID3D12Resource* res, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h, const char* name);
     void CapStep(const Surface& rt);
@@ -298,6 +307,7 @@ private:
     Target* bound_ds_ = nullptr;
     uint32_t guest_w_ = 640, guest_h_ = 480, bb_w_ = 0, bb_h_ = 0;
     float scale_ = 1.0f;
+    uint64_t draws_ = 0;
     bool tearing_ = false;
     uint64_t presents_ = 0;
     double fps_ = 0;
@@ -508,22 +518,27 @@ Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
     uint64_t key = uint64_t(data) << 1 | (depth ? 1 : 0);
     uint32_t gw, gh;
     SurfaceSize(s, gw, gh);
+    TextureDesc sd;
+    bool native = !depth && Describe(s.header, sd) && Format(sd.format).swizzled;
     auto it = targets_.find(key);
-    if (it != targets_.end() && it->second.gw == gw && it->second.gh == gh) return &it->second;
+    if (it != targets_.end() && it->second.gw == gw && it->second.gh == gh && it->second.native == native) return &it->second;
     if (!create) return nullptr;
     if (it != targets_.end()) {
         if (bound_rt_ == &it->second || bound_ds_ == &it->second) bound_rt_ = bound_ds_ = nullptr;
         (it->second.depth ? free_dsv_ : free_rtv_).push_back(it->second.view);
         frames_[frame_ % kFrames].garbage.push_back(it->second.res);
         if (it->second.fb) frames_[frame_ % kFrames].garbage.push_back(it->second.fb);
+        if (it->second.guest) frames_[frame_ % kFrames].garbage.push_back(it->second.guest);
         targets_.erase(it);
     }
     Target t;
     t.depth = depth;
+    t.native = native;
     t.gw = gw;
     t.gh = gh;
-    t.w = std::max(1u, uint32_t(std::lround(gw * scale_)));
-    t.h = std::max(1u, uint32_t(std::lround(gh * scale_)));
+    float sc = native ? 1.0f : scale_;
+    t.w = std::max(1u, uint32_t(std::lround(gw * sc)));
+    t.h = std::max(1u, uint32_t(std::lround(gh * sc)));
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC td{};
     td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -637,7 +652,7 @@ void D3D12Backend::UploadTarget(Target& t, const Surface& s) {
     t.sig = MemSig(t.data, t.bytes);
 }
 
-void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha) {
+void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha, uint32_t taps) {
     uint32_t slot = SrvSlots(2);
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
     sv.Format = fmt;
@@ -670,7 +685,7 @@ void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect
         si = it->second;
     }
     Alloc cb = Upload(256, 256);
-    float c[8] = {uvrect[0], uvrect[1], uvrect[2], uvrect[3], gamma ? 1.0f : 0.0f, alpha ? 1.0f : 0.0f, 0, 0};
+    float c[8] = {uvrect[0], uvrect[1], uvrect[2], uvrect[3], gamma ? 1.0f : 0.0f, alpha ? 1.0f : 0.0f, float(taps), 0};
     std::memcpy(cb.cpu, c, sizeof(c));
     cl_->SetPipelineState(BlitPipeline());
     cl_->SetGraphicsRootConstantBufferView(0, cb.gpu);
@@ -800,6 +815,20 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
             UploadTarget(t, su);
         }
         info.kind = kTex2D;
+        Target* rt = GetTarget(s.rt, false, false);
+        if (!t.depth && !t.native && t.w != t.gw && rt && rt->native) {
+            // guest size passes read the scene at console resolution
+            if (t.guest_draw != draws_) {
+                if (t.guest) frames_[frame_ % kFrames].garbage.push_back(t.guest);
+                t.guest = Shrink(t.res.Get(), t.state, DXGI_FORMAT_B8G8R8A8_UNORM, t.gw, t.gh, uint32_t(std::ceil(float(t.w) / t.gw - 1e-3f)));
+                t.guest_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
+                t.guest_draw = draws_;
+            }
+            if (t.guest) {
+                Transition(t.guest.Get(), t.guest_state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                return t.guest.Get();
+            }
+        }
         if (feedback) {
             // the console reads the pixels it is about to overwrite: give the draw a copy
             if (!t.fb) {
@@ -955,6 +984,7 @@ uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4]) {
 
 void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, uint32_t indices) {
     g_splash &= g_in_splash;
+    draws_++;
     if (cap_) CapStep(s.rt);
     Assembled a;
     if (!Assemble(s, prim, start, count, indices, a)) return;
@@ -1263,6 +1293,39 @@ void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count, 
     }
     Target* d = GetTarget(dst, false);
     if (!d || s == d) return;
+    if (s->native != d->native && scale_ != 1.0f) {
+        // sizes differ: filter across
+        Transition(s->res.Get(), s->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        Transition(d->res.Get(), d->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), d->view, rtv_inc_);
+        cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
+        float ss = float(s->w) / s->gw, ds = float(d->w) / d->gw;
+        uint32_t n = count && src_rects ? count : 1;
+        for (uint32_t i = 0; i < n; i++) {
+            float x0 = 0, y0 = 0, x1 = float(std::min(s->gw, d->gw)), y1 = float(std::min(s->gh, d->gh)), dx = 0, dy = 0;
+            if (count && src_rects) {
+                uint32_t r = src_rects + i * 16;
+                x0 = float(int32_t(kernel::R32(r)));
+                y0 = float(int32_t(kernel::R32(r + 4)));
+                x1 = float(int32_t(kernel::R32(r + 8)));
+                y1 = float(int32_t(kernel::R32(r + 12)));
+                dx = dst_points ? float(int32_t(kernel::R32(dst_points + i * 8))) : x0;
+                dy = dst_points ? float(int32_t(kernel::R32(dst_points + i * 8 + 4))) : y0;
+            }
+            if (x1 <= x0 || y1 <= y0) continue;
+            D3D12_VIEWPORT vp{dx * ds, dy * ds, (x1 - x0) * ds, (y1 - y0) * ds, 0, 1};
+            D3D12_RECT sc{LONG(vp.TopLeftX), LONG(vp.TopLeftY), std::min(LONG(vp.TopLeftX + vp.Width), LONG(d->w)),
+                          std::min(LONG(vp.TopLeftY + vp.Height), LONG(d->h))};
+            if (sc.right <= sc.left || sc.bottom <= sc.top) continue;
+            cl_->RSSetViewports(1, &vp);
+            cl_->RSSetScissorRects(1, &sc);
+            float uv[4] = {x0 / s->gw, y0 / s->gh, (x1 - x0) / s->gw, (y1 - y0) / s->gh};
+            Blit(s->res.Get(), DXGI_FORMAT_B8G8R8A8_UNORM, uv, false, true, uint32_t(std::ceil(std::max(ss / ds, 1.0f) - 1e-3f)));
+        }
+        d->drawn = true;
+        bound_rt_ = bound_ds_ = nullptr;
+        return;
+    }
     Transition(s->res.Get(), s->state, D3D12_RESOURCE_STATE_COPY_SOURCE);
     Transition(d->res.Get(), d->state, D3D12_RESOURCE_STATE_COPY_DEST);
     D3D12_TEXTURE_COPY_LOCATION dl{d->res.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
@@ -1483,7 +1546,7 @@ void D3D12Backend::Sync(uint32_t data, uint32_t) {
 }
 
 // filters src into a new w x h target, left as a copy source
-ComPtr<ID3D12Resource> D3D12Backend::Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
+ComPtr<ID3D12Resource> D3D12Backend::Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h, uint32_t taps) {
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC td{};
     td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1509,7 +1572,7 @@ ComPtr<ID3D12Resource> D3D12Backend::Shrink(ID3D12Resource* src, D3D12_RESOURCE_
     cl_->RSSetViewports(1, &vp);
     cl_->RSSetScissorRects(1, &sc);
     float uv[4] = {0, 0, 1, 1};
-    Blit(src, fmt, uv, false, true);
+    Blit(src, fmt, uv, false, true, taps);
     D3D12_RESOURCE_STATES ds = D3D12_RESOURCE_STATE_RENDER_TARGET;
     Transition(down.Get(), ds, D3D12_RESOURCE_STATE_COPY_SOURCE);
     return down;
