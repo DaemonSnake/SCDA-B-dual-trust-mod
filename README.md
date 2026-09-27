@@ -10,11 +10,18 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 4. Run `build.bat`. The first build recompiles the game and takes a while.
 5. Run `out\build\win-amd64-release\SCDA.exe`.
 
-## Game Setup
-
-
+> [!NOTE]
+> No game data, XEX bytes or generated code are in this repository. You must own the game.
 
 ## Features
+
+### Display
+- **Native Renderer** - The game renders through a native Direct3D 12 renderer, no emulation.
+- **Display Mode** - Allows you to change between Fullscreen, Borderless and Windowed modes.
+- **Resolution** - Lists every mode your monitor reports and defaults to the desktop mode, replacing the 1280x720 lock.
+- **Render Resolution** - Renders the game at 20% to 200% of the output resolution, for supersampling or downscaling, independent of the window size.
+- **Max Frame Rate** - Caps the frame rate at your monitor's refresh rate, at a value you pick, or removes the cap, replacing the console's 30 FPS limiter.
+- **FPS Counter** - Shows the frame rate on screen.
 
 ### Display
 
