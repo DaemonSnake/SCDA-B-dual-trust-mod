@@ -10,6 +10,10 @@
 
 using namespace kernel;
 
+namespace game {
+void UpdateView(uint32_t viewport);               // views.cpp
+}
+
 namespace {
 
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;

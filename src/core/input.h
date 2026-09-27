@@ -28,6 +28,15 @@ bool TakeMouse(float& dx, float& dy);
 
 // a game menu takes the input: the cursor is free and the mouse buttons stop firing
 void SetMenu(bool menu);
+
+// What the player looks through, set by the game side each input update. Outside Normal the wheel zooms
+// instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
+enum class View { Normal, StickyCamera, Eev };
+void SetView(View view, float zoom_speed = 0.0f);
+// EEV: wheel notches since the last call, up positive
+int TakeWheel();
+// holds pad buttons (Pad::buttons bits) long enough for the game to read one press
+void TapButtons(uint16_t buttons);
 bool InMenu();
 // the cursor in window client pixels and the client size; false when the game is not taking input
 bool Cursor(int& x, int& y, int& w, int& h);

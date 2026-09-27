@@ -1,5 +1,6 @@
 #include "core/input.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -10,6 +11,9 @@
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 #include <windows.h>
 #include <xinput.h>
@@ -43,6 +47,36 @@ uint64_t NowMs() {
 
 bool KeyboardLast() { return g_keyboard_ms > g_pad_ms; }
 
+std::atomic<int> g_view{0};
+std::atomic<float> g_zoom_speed{0.0f};
+std::atomic<int> g_wheel{0};
+std::atomic<uint16_t> g_tap{0};
+std::atomic<uint64_t> g_tap_until{0};
+constexpr uint64_t kTapMs = 80;
+
+// As SCCT's PC sticky camera: a wheel notch zooms 105 degrees a second for one 30 Hz tick. The stick tops out
+// at the camera's zoom speed, so the notch holds it at full for as long as the same angle takes.
+constexpr float kNotchDegrees = 105.0f / 30.0f;
+float g_zoom_left = 0.0f;  // seconds of full stick still to hold, negative zooms out
+std::chrono::steady_clock::time_point g_zoom_time;
+
+// The sticky camera reads Interaction for gas, Scope for noise, Duck to leave, and Fire and AltFire to switch
+// cameras. Fire and alt fire are moved onto gas and noise, pause onto leave, and strafing switches cameras.
+struct Remap {
+    int from, to;
+};
+// Interaction is the pad's A and Scope its X.
+constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}};
+// the target each held action went down as plus one, 0 while up, so a key cannot stick when the camera opens or
+// closes under it
+std::array<std::atomic<int>, 32> g_down_as{};
+
+int CameraTarget(int b) {
+    for (const Remap& r : kCameraRemap)
+        if (r.from == b) return r.to;
+    return b;
+}
+
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
 // these land the game's axis on 0.2 0.4 0.6 0.8 1.0.
 constexpr float kSpeeds[] = {0.44f, 0.58f, 0.72f, 0.86f, 1.0f};
@@ -52,6 +86,7 @@ std::atomic<int> g_speed{4};
 struct Target {
     Action action;
     int button;
+    bool play_only = false;  // a pad button that also moves through menus, pressed only in play
 };
 constexpr Target kActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
@@ -71,7 +106,7 @@ constexpr Target kActions[] = {
     {{"goggles", "EMF VISION", "4"}, 8},
     {{"next_vision", "THERMAL VISION", "3"}, 11},
     {{"previous_vision", "NIGHT VISION", "2"}, 10},
-    {{"switch_camera", "SWITCH CAMERA", ""}, 9},
+    {{"switch_camera", "SWITCH CAMERA", "5"}, 9, true},
     {{"opsat", "OPSAT", "F1"}, 13},
     {{"pause", "PAUSE", "Escape"}, 12},
 };
@@ -167,15 +202,24 @@ void Keyboard(Pad& p) {
         !Down(VK_XBUTTON2))
         g_settle_mouse = false;
     bool no_mouse = menu || g_settle_mouse;
+    bool camera = View(g_view.load()) == View::StickyCamera && !menu;
     int move[4] = {};
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
         bool held = false;
         // in a menu the mouse buttons belong to the cursor
         for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
-        if (!held) continue;
+        if (kActions[i].play_only && menu) held = false;
+        if (!held) {
+            g_down_as[i] = 0;
+            continue;
+        }
         keys |= 1u << i;
-        int b = kActions[i].button;
+        int b = g_down_as[i] - 1;
+        if (b < 0) {
+            b = camera ? CameraTarget(kActions[i].button) : kActions[i].button;
+            g_down_as[i] = b + 1;
+        }
         if (b >= 16) move[b - 16] = 1;
         else if (b < 8) p.analog[b] = 0xFF;
         else p.buttons |= uint16_t(1u << (b - 8));
@@ -185,7 +229,23 @@ void Keyboard(Pad& p) {
     keys |= uint32_t(Down(VK_BACK)) << 31;
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
-    float v = kSpeeds[g_speed];
+    // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
+    float v = camera ? 1.0f : kSpeeds[g_speed];
+    auto now = std::chrono::steady_clock::now();
+    float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
+    g_zoom_time = now;
+    float zoom_speed = g_zoom_speed;
+    if (!camera || zoom_speed <= 0.0f) {
+        g_zoom_left = 0.0f;
+    } else {
+        if (int notches = g_wheel.exchange(0)) {
+            if (notches * g_zoom_left < 0.0f) g_zoom_left = 0.0f;
+            g_zoom_left += float(notches) * kNotchDegrees / zoom_speed;
+        }
+        if (g_zoom_left > 0.0f) g_zoom_left = std::max(0.0f, g_zoom_left - seconds);
+        if (g_zoom_left < 0.0f) g_zoom_left = std::min(0.0f, g_zoom_left + seconds);
+        if (!y && g_zoom_left != 0.0f) y = g_zoom_left > 0.0f ? 1 : -1;
+    }
     if (int ax = Down(VK_RIGHT) - Down(VK_LEFT), ay = Down(VK_UP) - Down(VK_DOWN); ax || ay) {
         x = ax;
         y = ay;
@@ -230,8 +290,10 @@ void OnRawInput(void* handle) {
         g_dy += m.lLastY;
     }
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu) {
-        int s = g_speed + (SHORT(m.usButtonData) > 0 ? 1 : -1);
-        if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
+        int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
+        int s = g_speed + notch;
+        if (View(g_view.load()) != View::Normal) g_wheel += notch;
+        else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
     }
 }
 
@@ -261,6 +323,18 @@ void SetMenu(bool menu) {
 }
 
 bool InMenu() { return g_menu; }
+
+void SetView(View view, float zoom_speed) {
+    if (g_view.exchange(int(view)) != int(view)) g_wheel = 0;
+    g_zoom_speed = zoom_speed;
+}
+
+int TakeWheel() { return g_wheel.exchange(0); }
+
+void TapButtons(uint16_t buttons) {
+    g_tap = buttons;
+    g_tap_until = NowMs() + kTapMs;
+}
 
 bool Cursor(int& x, int& y, int& w, int& h) {
     POINT pt;
@@ -362,6 +436,7 @@ Pad Poll(int port) {
         g_rumbling = false;
     }
     if (port == 0 && Active()) Keyboard(p);
+    if (port == 0 && NowMs() < g_tap_until) p.buttons |= g_tap;
     return p;
 }
 
