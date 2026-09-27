@@ -1,0 +1,232 @@
+// Tom Clancy's Splinter Cell: Double Agent (Xbox), statically recompiled
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+#include <timeapi.h>
+
+#include <chrono>
+#include <csignal>
+#include <cwchar>
+#include <thread>
+
+#include <imgui.h>
+#include <backends/imgui_impl_win32.h>
+
+#include "app/app.h"
+#include "core/input.h"
+#include "core/log.h"
+#include "kernel/kernel.h"
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
+
+namespace app {
+
+namespace {
+
+HWND g_hwnd = nullptr;
+constexpr UINT kApplyDisplay = WM_APP + 1;
+bool g_mode_changed = false;
+
+// crash dump in CrashDumps beside the exe
+LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
+    auto dir = ExeDir() / "CrashDumps";
+    CreateDirectoryW(dir.c_str(), nullptr);
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    wchar_t name[64];
+    swprintf(name, 64, L"SCDA.%04u.%02u.%02u_%02u.%02u.%02u.dmp", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    HANDLE f = CreateFileW((dir / name).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return EXCEPTION_CONTINUE_SEARCH;
+    MINIDUMP_EXCEPTION_INFORMATION info{GetCurrentThreadId(), e, FALSE};
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
+                      MINIDUMP_TYPE(MiniDumpWithDataSegs | MiniDumpWithHandleData | MiniDumpWithThreadInfo |
+                                    MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory),
+                      e ? &info : nullptr, nullptr, nullptr);
+    CloseHandle(f);
+    logx::Flush();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void DumpThreads() {
+    for (auto& t : kernel::Threads())
+        if (t->ctx) {
+            LOGI("thread %X", t->id);
+            kernel::LogGuestStack(*t->ctx, 32);
+        }
+}
+
+// window thread only
+void ApplyNow() {
+    const Settings& s = Get();
+    HMONITOR mon = MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(mon, &mi);
+    if (g_mode_changed) {
+        ChangeDisplaySettingsExW(mi.szDevice, nullptr, nullptr, 0, nullptr);
+        g_mode_changed = false;
+    }
+    Mode out = Output();
+    if (s.display_mode == DisplayMode::Fullscreen && s.width && s.height) {
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        dm.dmPelsWidth = s.width;
+        dm.dmPelsHeight = s.height;
+        dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+        g_mode_changed = ChangeDisplaySettingsExW(mi.szDevice, &dm, nullptr, CDS_FULLSCREEN, nullptr) == DISP_CHANGE_SUCCESSFUL;
+        GetMonitorInfoW(mon, &mi);
+    }
+    if (s.display_mode == DisplayMode::Windowed) {
+        RECT r{0, 0, LONG(out.width), LONG(out.height)};
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+        int w = r.right - r.left, h = r.bottom - r.top;
+        const RECT& a = mi.rcWork;
+        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+        SetWindowPos(g_hwnd, HWND_NOTOPMOST, a.left + (a.right - a.left - w) / 2, a.top + (a.bottom - a.top - h) / 2, w, h,
+                     SWP_FRAMECHANGED);
+    } else {
+        const RECT& m = mi.rcMonitor;
+        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowPos(g_hwnd, s.display_mode == DisplayMode::Fullscreen ? HWND_TOPMOST : HWND_NOTOPMOST, m.left, m.top,
+                     m.right - m.left, m.bottom - m.top, SWP_FRAMECHANGED);
+    }
+}
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    {
+        std::lock_guard<std::mutex> lock(UiLock());
+        if (ImGui::GetCurrentContext() && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
+    }
+    switch (msg) {
+        case WM_KEYDOWN:
+            if (wp == VK_F10) ToggleMenu();
+            if (wp == VK_F3) DumpThreads();
+            if (wp == VK_ESCAPE && MenuOpen()) ToggleMenu();
+            return 0;
+        case WM_SETCURSOR:
+            if (LOWORD(lp) == HTCLIENT) {
+                SetCursor(MenuOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
+                return TRUE;
+            }
+            break;
+        case kApplyDisplay:
+            ApplyNow();
+            return 0;
+        case WM_SYSKEYDOWN:
+            if (wp == VK_F10) {
+                ToggleMenu();
+                return 0;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+// assets\default.xbe beside the exe or in any folder above it (the build output)
+std::filesystem::path FindGame() {
+    auto dir = ExeDir();
+    for (int i = 0; i < 6; i++) {
+        if (std::filesystem::exists(dir / "assets" / "default.xbe")) return dir / "assets";
+        if (!dir.has_parent_path() || dir.parent_path() == dir) break;
+        dir = dir.parent_path();
+    }
+    return {};
+}
+
+}  // namespace
+
+std::filesystem::path ExeDir() {
+    wchar_t p[MAX_PATH];
+    GetModuleFileNameW(nullptr, p, MAX_PATH);
+    return std::filesystem::path(p).parent_path();
+}
+
+void* Window() { return g_hwnd; }
+
+std::mutex& UiLock() {
+    static std::mutex m;
+    return m;
+}
+
+void ApplyDisplay() { PostMessageW(g_hwnd, kApplyDisplay, 0, 0); }
+
+void Pace() {
+    using clock = std::chrono::steady_clock;
+    static clock::time_point next = clock::now();
+    uint32_t cap = Get().fps_cap;
+    auto now = clock::now();
+    if (!cap) {
+        next = now;
+        return;
+    }
+    auto period = std::chrono::nanoseconds(1000000000ull / cap);
+    next += period;
+    if (next < now - period) next = now;
+    while (clock::now() + std::chrono::milliseconds(2) < next) Sleep(1);
+    while (clock::now() < next) std::this_thread::yield();
+}
+
+}  // namespace app
+
+int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+    SetUnhandledExceptionFilter(app::WriteCrashDump);
+    std::signal(SIGABRT, [](int) { app::WriteCrashDump(nullptr); });
+    timeBeginPeriod(1);
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    logx::Init((app::ExeDir() / "logs").string(), "scda");
+    app::Load();
+
+    auto game = app::FindGame();
+    if (game.empty()) {
+        MessageBoxW(nullptr, L"Put the game files in the assets folder: default.xbe with the Default and Media folders beside it.",
+                    L"Splinter Cell Double Agent", MB_ICONERROR);
+        return 1;
+    }
+
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = app::WndProc;
+    wc.hInstance = inst;
+    wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
+    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    wc.lpszClassName = L"SCDA";
+    RegisterClassExW(&wc);
+    app::g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"Tom Clancy's Splinter Cell: Double Agent", WS_POPUP, 0, 0, 1280, 720,
+                                  nullptr, nullptr, inst, nullptr);
+    app::ApplyNow();
+    ShowWindow(app::g_hwnd, SW_SHOW);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+    ImGui_ImplWin32_Init(app::g_hwnd);
+
+    input::Init();
+    if (!kernel::Boot((game / "default.xbe").string(), game.string(), (app::ExeDir() / "hdd").string())) {
+        MessageBoxW(app::g_hwnd, L"The game failed to start, see the log in the logs folder.", L"Splinter Cell Double Agent",
+                    MB_ICONERROR);
+        return 1;
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (app::g_mode_changed) ChangeDisplaySettingsW(nullptr, 0);
+    logx::Flush();
+    kernel::Shutdown(0);
+}
