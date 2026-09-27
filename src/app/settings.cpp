@@ -50,6 +50,9 @@ void Load() {
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
+    if (const toml::table* keys = t["keys"].as_table())
+        for (auto&& [id, value] : *keys)
+            if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
 }
 
 void Save() {
@@ -64,6 +67,9 @@ void Save() {
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse}};
+    toml::table keys;
+    for (const auto& [id, value] : s.keys) keys.insert(id, value);
+    t.insert("keys", keys);
     std::ofstream f(File());
     f << t << "\n";
 }

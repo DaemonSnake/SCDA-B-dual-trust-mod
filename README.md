@@ -29,11 +29,12 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 
 
 
-### Controls
-
-- **Keyboard and Mouse** - 
-- **Mouse Sensitivity** - 
-- **Invert Mouse** - 
+### Mouse and Keyboard
+- **Keyboard Support** - Fully supports keyboard and mouse input.
+- **Raw Mouse** - Native raw mouse input driven straight into the camera.
+- **Mouse Look Sensitivity** - Adjusts mouse look sensitivity.
+- **Invert Mouse Look** - Inverts the vertical look axis.
+- **Rebinding** - Every action can be rebound from the Mouse and Keyboard page.
 
 ### General
 

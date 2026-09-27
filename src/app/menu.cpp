@@ -1,6 +1,7 @@
 // the options panel on F10
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <iterator>
@@ -187,7 +188,60 @@ void DrawRows() {
         StepTable(kAnisoValues, s.aniso, step);
         Changed(false);
     }
-    Section("CONTROLS");
+}
+
+// the row being rebound, -1 when idle; its keys must be released before the next press binds
+std::atomic<int> g_capture{-1};
+bool g_capture_armed = false;
+int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
+int g_page = 0;
+const char* const kPages[] = {"SETTINGS", "MOUSE AND KEYBOARD"};
+
+// label left, keys right; Enter or a click starts the capture
+bool BindRow(const char* label, const std::string& keys, bool capturing) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
+    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
+    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    ImGui::PushID(label);
+    bool pressed = ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(row_w, row_h));
+    if (ImGui::IsItemFocused() || capturing)
+        ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_Header));
+    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    std::string value = capturing ? std::string("PRESS A KEY") : keys.empty() ? std::string("UNBOUND") : keys;
+    for (char& c : value) c = c == ',' ? '/' : char(std::toupper(uint8_t(c)));
+    float value_x = row_x + row_w - block_w + row_h + style.ItemSpacing.x;
+    ImGui::SetCursorPos(ImVec2(value_x + std::max((value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
+    ImGui::AlignTextToFramePadding();
+    if (capturing) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+    ImGui::TextUnformatted(value.c_str());
+    if (capturing) ImGui::PopStyleColor();
+    ImGui::PopID();
+    ImGui::SetCursorPos(ImVec2(row_x, row_y));
+    ImGui::Dummy(ImVec2(row_w, row_h));
+    return pressed;
+}
+
+// Escape cancels, any other bindable key or mouse button binds
+void PollCapture() {
+    if (g_capture < 0) return;
+    int vk = input::PressedKey();
+    if (!g_capture_armed) {
+        g_capture_armed = !vk;
+        return;
+    }
+    if (!vk) return;
+    if (vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk);
+    g_capture = -1;
+    g_capture_done = ImGui::GetFrameCount();
+}
+
+void DrawControls() {
+    Settings& s = Get();
+    char text[64];
+    Section("MOUSE");
     std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
     if (int step = OptionRow("MOUSE SENSITIVITY", text)) {
         s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);
@@ -197,13 +251,39 @@ void DrawRows() {
         s.invert_mouse = !s.invert_mouse;
         Changed(false);
     }
+    Section("KEYBOARD");
+    size_t count = 0;
+    const input::Action* actions = input::Actions(&count);
+    for (size_t i = 0; i < count; i++)
+        if (BindRow(actions[i].label, input::Binding(i), g_capture == int(i)) && g_capture < 0 &&
+            ImGui::GetFrameCount() > g_capture_done + 1) {
+            g_capture = int(i);
+            g_capture_armed = false;
+        }
+}
+
+void Defaults() {
+    g_capture = -1;
+    if (g_page) {
+        Settings& s = Get();
+        s.mouse_sensitivity = Settings{}.mouse_sensitivity;
+        s.invert_mouse = false;
+        input::ResetBindings();
+        return;
+    }
+    Settings keep = Get();
+    Get() = Settings{};
+    Get().mouse_sensitivity = keep.mouse_sensitivity;
+    Get().invert_mouse = keep.invert_mouse;
+    Get().keys = keep.keys;
+    Changed(true);
 }
 
 void DrawPanel() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     float em = ImGui::GetFontSize();
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(em * 50, em * 26), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(em * 50, em * 32), ImGuiCond_Always);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, kPanelBg);
     ImGui::PushStyleColor(ImGuiCol_Border, kBorder);
     ImGui::PushStyleColor(ImGuiCol_Text, kText);
@@ -221,22 +301,25 @@ void DrawPanel() {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title).x) * 0.5f, 0.0f));
         ImGui::TextUnformatted(title);
         ImGui::Separator();
+        if (int step = OptionRow("PAGE", kPages[g_page])) {
+            g_page = StepIndex(g_page, step, 2);
+            g_capture = -1;
+        }
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
-        DrawRows();
+        if (g_page) DrawControls();
+        else DrawRows();
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        ImGui::TextUnformatted("Up and Down select, Left and Right change, F10 or Escape closes");
+        ImGui::TextUnformatted(g_capture >= 0 ? "Press a key or mouse button to bind, Escape cancels"
+                                               : "Up and Down select, Left and Right change, Enter rebinds, F10 or Escape closes");
         ImGui::PopStyleColor();
         float bw = em * 8;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 2 - ImGui::GetStyle().ItemSpacing.x, 0.0f));
         if (ImGui::Button("Back", ImVec2(bw, 0))) ToggleMenu();
         ImGui::SameLine();
-        if (ImGui::Button("Defaults", ImVec2(bw, 0))) {
-            Get() = Settings{};
-            Changed(true);
-        }
+        if (ImGui::Button("Defaults", ImVec2(bw, 0))) Defaults();
     }
     ImGui::End();
     ImGui::PopStyleVar(4);
@@ -257,9 +340,12 @@ void DrawFps(double fps) {
 
 bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
 
+bool Capturing() { return g_capture >= 0; }
+
 void ToggleMenu() {
     bool open = !g_open.load(std::memory_order_relaxed);
     g_open.store(open, std::memory_order_relaxed);
+    g_capture = -1;
     input::SetBlocked(open);
 }
 
@@ -270,7 +356,10 @@ void DrawUi(double fps) {
     // scale the font with the output height
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
     if (Get().fps_counter) DrawFps(fps);
-    if (MenuOpen()) DrawPanel();
+    if (MenuOpen()) {
+        PollCapture();
+        DrawPanel();
+    }
 }
 
 }  // namespace app

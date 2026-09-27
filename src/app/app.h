@@ -1,7 +1,9 @@
 #pragma once
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <mutex>
+#include <string>
 
 // the host side: window, settings, options menu
 namespace app {
@@ -18,6 +20,7 @@ struct Settings {
     uint32_t aniso = 0;              // 0 as the game asks
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
+    std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
 
 Settings& Get();
@@ -37,6 +40,7 @@ void* Window();  // HWND
 // options menu, drawn by the renderer each frame with the lock held
 std::recursive_mutex& UiLock();
 bool MenuOpen();
+bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
 void DrawUi(double fps);
 

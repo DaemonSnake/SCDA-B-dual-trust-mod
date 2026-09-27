@@ -1,5 +1,7 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace input {
 
@@ -15,12 +17,33 @@ void Init(void* hwnd);
 // keyboard and mouse buttons are merged into port 0, which is always connected
 Pad Poll(int port);
 void Rumble(int port, uint16_t left, uint16_t right);
-void SetBlocked(bool blocked);  // menus take the input
+void SetBlocked(bool blocked);  // the options panel takes the input
 
-// window thread, WM_INPUT
+// window thread
 void OnRawInput(void* handle);
+void OnClick();
 void ReleaseCursor();
 // raw mouse counts since the last call, scaled by the settings; false when there are none
 bool TakeMouse(float& dx, float& dy);
+
+// a game menu takes the input: the cursor is free and the mouse buttons stop firing
+void SetMenu(bool menu);
+bool InMenu();
+// the cursor in window client pixels and the client size; false when the game is not taking input
+bool Cursor(int& x, int& y, int& w, int& h);
+uint32_t Clicks();
+
+// actions the keyboard and mouse can be bound to, key names comma separated
+struct Action {
+    const char* id;
+    const char* label;
+    const char* defaults;
+};
+const Action* Actions(size_t* count);
+std::string Binding(size_t action);
+void Bind(size_t action, int vk);
+void ResetBindings();
+void LoadBindings();  // after the settings load
+int PressedKey();     // a bindable key or mouse button held now, 0 for none
 
 }  // namespace input
