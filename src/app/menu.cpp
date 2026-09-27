@@ -188,6 +188,11 @@ void DrawRows() {
         StepTable(kAnisoValues, s.aniso, step);
         Changed(false);
     }
+    Section("GAME");
+    if (OptionRow("SKIP INTROS", OnOff(s.skip_intros))) {
+        s.skip_intros = !s.skip_intros;
+        Changed(false);
+    }
 }
 
 // the row being rebound, -1 when idle; its keys must be released before the next press binds

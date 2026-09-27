@@ -20,6 +20,7 @@ struct Settings {
     uint32_t aniso = 0;              // 0 as the game asks
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
+    bool skip_intros = false;        // logos video and rating screen at boot
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
 
