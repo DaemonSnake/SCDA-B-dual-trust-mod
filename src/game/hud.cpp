@@ -25,11 +25,11 @@ static_assert(Crc32("P_hud") == 0x330C9548);
 
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC;
 
-// Centre: 4:3 in the middle; Fill: the same, images touching a page side have their edge texels carried
-// out to the screen side;
+// Centre: 4:3 in the middle; Fill: the same, images touching a page side are stretched out to the screen
+// side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round;
 // Left, Right: 4:3 against that side; Stretch: page width over screen width;
 // Spread: centred, image edges further than kKeep from the middle move out to the screen sides
-enum class Mode { Centre, Fill, Left, Right, Stretch, Spread };
+enum class Mode { Centre, Fill, Extend, Left, Right, Stretch, Spread };
 
 struct Rule {
     uint32_t id;
@@ -39,7 +39,7 @@ struct Rule {
 
 // Magma names pages and elements by crc32 of their name
 constexpr Rule kHud[] = {
-    {"A_HUD", Mode::Right},          {"A_Interact_NPC", Mode::Right},
+    {"A_Goggles", Mode::Extend},       {"A_HUD", Mode::Right},          {"A_Interact_NPC", Mode::Right},
     {"A_Interact_RTN", Mode::Right},    {"B_interact_NPC", Mode::Right}, {"B_interact_RTN", Mode::Right},
     {"List_interaction_NPC", Mode::Right}, {"List_interaction_RTN", Mode::Right}, {"A_Goals", Mode::Right},
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
@@ -47,7 +47,8 @@ constexpr Rule kHud[] = {
     {"A_timer", Mode::Left},            {"Sound_Meter", Mode::Right},
 };
 constexpr Rule kOverlay[] = {
-    {"A_noise", Mode::Stretch}, {"A_timer", Mode::Left}, {"A_Communications", Mode::Left},
+    {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Extend}, {"A_Goggles", Mode::Extend},
+    {"A_timer", Mode::Left},    {"A_Communications", Mode::Left},
 };
 
 // half: an unlisted element sitting in one half of the page goes to that side
@@ -126,14 +127,14 @@ Mode ByHalf(X86Context& ctx, uint32_t instance) {
 }  // namespace
 
 // FCanvasUtil::DrawQuad(4 x {x, y, u, v, colour}, z, material, rotation), stdcall 0x5C. Magma images only
-// (called from 0x2A1181), text keeps its glyphs together. Spread moves edges; Fill draws the quad, then a
-// strip from each page side it touches out to the screen side with that edge's texels.
+// (called from 0x2A1181), text keeps its glyphs together. Spread and Fill move edges; Extend draws the quad,
+// then a strip from each page side it touches out to the screen side with that edge's texels.
 X86_EXTERN_FUNC(__imp__sub_0028F090);
 X86_FUNC(sub_0028F090) {
     uint32_t screen = R32(kMagmaScreen);
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
-    if ((g_mode != Mode::Fill && g_mode != Mode::Spread) || sw <= 0 || R32(ctx.esp) != 0x2A1186)
-        return __imp__sub_0028F090(ctx, base);
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
+    if (!edges || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
     uint32_t esp = ctx.esp, util = ctx.ecx, args = esp + 4;
     float w = float(int(R32(util + 0x28))), unit = w / sw, side = w / 6;
     auto x = [&](int i) -> float& { return G<float>(args + i * 0x14); };
@@ -141,16 +142,25 @@ X86_FUNC(sub_0028F090) {
         for (int i = 0; i < 4; i++) x(i) += x(i) < w / 2 - kKeep * unit ? -side : x(i) > w / 2 + kKeep * unit ? side : 0;
         return __imp__sub_0028F090(ctx, base);
     }
+    float lo = std::min({x(0), x(1), x(2), x(3)}), hi = std::max({x(0), x(1), x(2), x(3)});
+    bool left = lo <= kSlack * unit, right = hi >= w - kSlack * unit;
+    if (g_mode == Mode::Fill) {
+        if (hi - lo >= kMinWidth * unit)
+            for (int i = 0; i < 4; i++) {
+                if (left && x(i) == lo) x(i) = -side;
+                if (right && x(i) == hi) x(i) = w + side;
+            }
+        return __imp__sub_0028F090(ctx, base);
+    }
     uint32_t saved[23];
     std::memcpy(saved, &G<uint32_t>(args), sizeof saved);
     auto was = [&](int i, int field) { return std::bit_cast<float>(saved[i * 5 + field]); };
-    float lo = std::min({x(0), x(1), x(2), x(3)}), hi = std::max({x(0), x(1), x(2), x(3)});
     int at_lo = 0;
     for (int i = 0; i < 4; i++) at_lo += x(i) == lo;
     __imp__sub_0028F090(ctx, base);
     if (at_lo != 2 || hi - lo < kMinWidth * unit) return;
     for (float from : {lo, hi}) {
-        if (from == lo ? lo > kSlack * unit : hi < w - kSlack * unit) continue;
+        if (from == lo ? !left : !right) continue;
         std::memcpy(&G<uint32_t>(args), saved, sizeof saved);
         for (int i = 0; i < 4; i++) {
             if (was(i, 0) == from) {
@@ -224,6 +234,7 @@ X86_FUNC(sub_002303E8) {
 // render device splash: CPU writes a tga into the frame buffer and presents it
 X86_EXTERN_FUNC(__imp__sub_002E5F95);
 X86_FUNC(sub_002E5F95) {
-    gpu::g_splash = true;
+    gpu::g_splash = gpu::g_in_splash = true;
     __imp__sub_002E5F95(ctx, base);
+    gpu::g_in_splash = false;
 }

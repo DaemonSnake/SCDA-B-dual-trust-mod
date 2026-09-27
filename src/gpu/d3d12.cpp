@@ -904,7 +904,7 @@ uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4]) {
 }
 
 void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, uint32_t indices) {
-    g_splash = false;
+    g_splash &= g_in_splash;
     Assembled a;
     if (!Assemble(s, prim, start, count, indices, a)) return;
     if (!BindTargets(s)) return;
