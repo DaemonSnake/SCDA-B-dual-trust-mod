@@ -2,6 +2,7 @@
 // EEV: the pad's left stick click (ZoomInOut) steps EEEV.ZoomIdx through FOVs and wraps. The wheel sets a target
 // level instead, up zooms in and down zooms out, stopping at the ends, and the click is tapped until the level
 // is reached. Sticky camera: the input side zooms it with the stick and remaps its keys.
+// Scripted events (in-game cinematics): s_ScriptedEvent's ProcessPauseMenu skips them, so Enter presses Start too.
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -69,6 +70,8 @@ void UpdateView(uint32_t viewport) {
     float zoom_speed = 0.0f;
     if (state == unreal::Name("s_EEV")) {
         view = input::View::Eev;
+    } else if (state == unreal::Name("s_ScriptedEvent")) {
+        view = input::View::ScriptedEvent;
     } else if (state == unreal::Name("s_Camera")) {
         uint32_t base_offset = unreal::Offset(pc, unreal::Name("Base"));
         uint32_t camera = base_offset ? R32(pc + base_offset) : 0;
