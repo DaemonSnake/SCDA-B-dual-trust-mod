@@ -1252,7 +1252,7 @@ void D3D12Backend::Present(const Surface& front) {
         Blit(t->res.Get(), DXGI_FORMAT_B8G8R8A8_UNORM, uv, gamma_, false);
     }
     {
-        std::lock_guard<std::mutex> lock(app::UiLock());
+        std::lock_guard lock(app::UiLock());
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();

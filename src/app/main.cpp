@@ -99,7 +99,7 @@ void ApplyNow() {
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     {
-        std::lock_guard<std::mutex> lock(UiLock());
+        std::lock_guard lock(UiLock());
         if (ImGui::GetCurrentContext() && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
     }
     switch (msg) {
@@ -154,8 +154,8 @@ std::filesystem::path ExeDir() {
 
 void* Window() { return g_hwnd; }
 
-std::mutex& UiLock() {
-    static std::mutex m;
+std::recursive_mutex& UiLock() {
+    static std::recursive_mutex m;
     return m;
 }
 

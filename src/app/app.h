@@ -33,7 +33,7 @@ std::filesystem::path ExeDir();
 void* Window();  // HWND
 
 // options menu, drawn by the renderer each frame with the lock held
-std::mutex& UiLock();
+std::recursive_mutex& UiLock();
 bool MenuOpen();
 void ToggleMenu();
 void DrawUi(double fps);
