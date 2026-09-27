@@ -48,6 +48,8 @@ void Load() {
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
+    s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
+    s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
 }
 
 void Save() {
@@ -59,7 +61,9 @@ void Save() {
                   {"fps_cap", int64_t(s.fps_cap)},
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
-                  {"anisotropic_filtering", int64_t(s.aniso)}};
+                  {"anisotropic_filtering", int64_t(s.aniso)},
+                  {"mouse_sensitivity", double(s.mouse_sensitivity)},
+                  {"invert_mouse", s.invert_mouse}};
     std::ofstream f(File());
     f << t << "\n";
 }

@@ -29,6 +29,12 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 
 
 
+### Controls
+
+- **Keyboard and Mouse** - 
+- **Mouse Sensitivity** - 
+- **Invert Mouse** - 
+
 ### General
 
 

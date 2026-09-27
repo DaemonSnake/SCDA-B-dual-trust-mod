@@ -1,6 +1,7 @@
 // the options panel on F10
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <iterator>
 #include <string>
@@ -184,6 +185,16 @@ void DrawRows() {
     Section("GRAPHICS");
     if (int step = OptionRow("ANISOTROPIC FILTERING", kAnisoNames[NearestIndex(kAnisoValues, 5, s.aniso)])) {
         StepTable(kAnisoValues, s.aniso, step);
+        Changed(false);
+    }
+    Section("CONTROLS");
+    std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
+    if (int step = OptionRow("MOUSE SENSITIVITY", text)) {
+        s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);
+        Changed(false);
+    }
+    if (OptionRow("INVERT MOUSE", OnOff(s.invert_mouse))) {
+        s.invert_mouse = !s.invert_mouse;
         Changed(false);
     }
 }

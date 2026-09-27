@@ -16,6 +16,8 @@ struct Settings {
     bool fps_counter = false;
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
+    float mouse_sensitivity = 1.0f;
+    bool invert_mouse = false;
 };
 
 Settings& Get();

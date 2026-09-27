@@ -108,6 +108,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == VK_F3) DumpThreads();
             if (wp == VK_ESCAPE && MenuOpen()) ToggleMenu();
             return 0;
+        case WM_INPUT:
+            input::OnRawInput(reinterpret_cast<void*>(lp));
+            break;
+        case WM_ACTIVATE:
+            if (LOWORD(wp) == WA_INACTIVE) input::ReleaseCursor();
+            break;
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
                 SetCursor(MenuOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
@@ -214,7 +220,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
     ImGui_ImplWin32_Init(app::g_hwnd);
 
-    input::Init();
+    input::Init(app::g_hwnd);
     if (!kernel::Boot((game / "default.xbe").string(), game.string(), (app::ExeDir() / "hdd").string())) {
         MessageBoxW(app::g_hwnd, L"The game failed to start, see the log in the logs folder.", L"Splinter Cell Double Agent",
                     MB_ICONERROR);
