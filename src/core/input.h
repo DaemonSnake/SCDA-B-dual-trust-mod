@@ -28,15 +28,21 @@ bool TakeMouse(float& dx, float& dy);
 
 // a game menu takes the input: the cursor is free and the mouse buttons stop firing
 void SetMenu(bool menu);
+// the title screen, which only Start gets past: Enter and the interact key press it there
+void SetTitleScreen(bool title);
 
 // What the player looks through, set by the game side each input update. Outside Normal the wheel zooms
 // instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
-enum class View { Normal, StickyCamera, Eev };
+// A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
+enum class View { Normal, StickyCamera, Eev, ScriptedEvent };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
 void TapButtons(uint16_t buttons);
+
+// blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
+void WaitForPress();
 bool InMenu();
 // the cursor in window client pixels and the client size; false when the game is not taking input
 bool Cursor(int& x, int& y, int& w, int& h);

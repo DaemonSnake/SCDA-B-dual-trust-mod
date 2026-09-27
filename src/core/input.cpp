@@ -71,8 +71,14 @@ constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 +
 // closes under it
 std::array<std::atomic<int>, 32> g_down_as{};
 
-int CameraTarget(int b) {
-    for (const Remap& r : kCameraRemap)
+// In a menu pause (Escape) backs out as B.
+constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
+std::atomic<bool> g_title{false};
+constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
+
+template <size_t N>
+int Remapped(const Remap (&table)[N], int b) {
+    for (const Remap& r : table)
         if (r.from == b) return r.to;
     return b;
 }
@@ -217,14 +223,22 @@ void Keyboard(Pad& p) {
         keys |= 1u << i;
         int b = g_down_as[i] - 1;
         if (b < 0) {
-            b = camera ? CameraTarget(kActions[i].button) : kActions[i].button;
+            int button = kActions[i].button;
+            b = camera ? Remapped(kCameraRemap, button) : menu ? Remapped(kMenuRemap, button) : button;
             g_down_as[i] = b + 1;
         }
         if (b >= 16) move[b - 16] = 1;
         else if (b < 8) p.analog[b] = 0xFF;
         else p.buttons |= uint16_t(1u << (b - 8));
+        if (b == 0 && g_title) p.buttons |= kStart;
     }
     if (Down(VK_BACK) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    // Enter confirms in every menu whatever interact is bound to
+    if (menu && Down(VK_RETURN)) {
+        p.analog[0] = 0xFF;
+        if (g_title) p.buttons |= kStart;
+    }
+    if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN)) p.buttons |= kStart;
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
     keys |= uint32_t(Down(VK_BACK)) << 31;
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
@@ -315,6 +329,8 @@ bool TakeMouse(float& dx, float& dy) {
     return true;
 }
 
+void SetTitleScreen(bool title) { g_title = title; }
+
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
         if (menu) ClipCursor(nullptr);
@@ -334,6 +350,37 @@ int TakeWheel() { return g_wheel.exchange(0); }
 void TapButtons(uint16_t buttons) {
     g_tap = buttons;
     g_tap_until = NowMs() + kTapMs;
+}
+
+void WaitForPress() {
+    auto pads = [] {
+        uint64_t down = 0;
+        for (DWORD port = 0; port < 4; port++) {
+            XINPUT_STATE s{};
+            if (XInputGetState(port, &s) != ERROR_SUCCESS) continue;
+            // the triggers take the two bits XInput leaves unused
+            uint32_t bits = s.Gamepad.wButtons | uint32_t(s.Gamepad.bLeftTrigger > 30) << 10 |
+                            uint32_t(s.Gamepad.bRightTrigger > 30) << 11;
+            down |= uint64_t(bits) << (port * 16);
+        }
+        return down;
+    };
+    // F10 and F3 belong to the host
+    auto key = [](int vk) { return vk != VK_F10 && vk != VK_F3 && Down(vk); };
+    std::array<bool, 256> held{};
+    for (int vk = 1; vk < 256; vk++) held[vk] = key(vk);
+    uint64_t pad_held = pads();
+    for (;;) {
+        Sleep(10);
+        uint64_t pad = pads();
+        if (Active() && (pad & ~pad_held)) return;
+        pad_held = pad;
+        for (int vk = 1; vk < 256; vk++) {
+            bool d = key(vk);
+            if (d && !held[vk] && Active()) return;
+            held[vk] = d;
+        }
+    }
 }
 
 bool Cursor(int& x, int& y, int& w, int& h) {

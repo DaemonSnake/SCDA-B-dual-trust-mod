@@ -7,6 +7,7 @@
 
 #include "core/input.h"
 #include "game/console.h"
+#include "game/magma.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -167,6 +168,9 @@ X86_FUNC(sub_0004B525) {
     ctx.esp = g.scratch - 0x10;
     bool menu = Menu(g);
     input::SetMenu(menu);
+    uint32_t top = InputPage();
+    input::SetTitleScreen(top && R32(top + 0x14) == game::magma::Id("P_Start"));
+    game::UpdateView(viewport);
     float dx, dy;
     // the axis command stores its value, so each axis gets one summed event per update
     if (!menu && input::TakeMouse(dx, dy)) {
