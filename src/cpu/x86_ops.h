@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 
 #include "x86_context.h"
@@ -167,11 +168,11 @@ inline int32_t sse_cvtt(float v) {
 }
 
 template <typename T>
-inline T sat(int64_t v) {
-    constexpr int64_t lo = std::is_signed_v<T> ? int64_t(T(1) << (sizeof(T) * 8 - 1)) : 0;
-    constexpr int64_t hi = std::is_signed_v<T> ? -(lo + 1) : int64_t((uint64_t(1) << (sizeof(T) * 8)) - 1);
+constexpr T sat(int64_t v) {
+    constexpr int64_t lo = std::numeric_limits<T>::min(), hi = std::numeric_limits<T>::max();
     return T(v < lo ? lo : v > hi ? hi : v);
 }
+static_assert(sat<int16_t>(-300) == -300 && sat<int16_t>(40000) == 32767 && sat<int8_t>(-5) == -5);
 
 // lane wise helpers on 64 bit MMX values
 template <typename T, typename F>
