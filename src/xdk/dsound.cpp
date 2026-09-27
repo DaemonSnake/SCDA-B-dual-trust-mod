@@ -156,7 +156,7 @@ void Render(float* out, uint32_t frames) {
         double step = double(v.freq ? v.freq : v.rate) / audio::kRate;
         for (uint32_t i = 0; i < frames; i++) {
             uint32_t f = uint32_t(v.pos);
-            float a, b;
+            float a, b, a1, b1;  // this frame and the next, interpolated between
             if (v.stream) {
                 while (!v.packets.empty() && f >= FramesOf(v, v.packets.front().size)) {
                     Packet pk = v.packets.front();
@@ -173,6 +173,16 @@ void Render(float* out, uint32_t frames) {
                 Packet& pk = v.packets.front();
                 a = Sample(v, pk.data, f, 0);
                 b = Sample(v, pk.data, f, 1);
+                if (f + 1 < FramesOf(v, pk.size)) {
+                    a1 = Sample(v, pk.data, f + 1, 0);
+                    b1 = Sample(v, pk.data, f + 1, 1);
+                } else if (v.packets.size() > 1) {
+                    a1 = Sample(v, v.packets[1].data, 0, 0);
+                    b1 = Sample(v, v.packets[1].data, 0, 1);
+                } else {
+                    a1 = a;
+                    b1 = b;
+                }
             } else {
                 uint32_t end = v.looping && v.loop_len ? FramesOf(v, v.loop_start + v.loop_len) : FramesOf(v, v.bytes);
                 if (f >= end) {
@@ -188,9 +198,13 @@ void Render(float* out, uint32_t frames) {
                 if (!v.data) break;
                 a = Sample(v, v.data, f, 0);
                 b = Sample(v, v.data, f, 1);
+                uint32_t g = f + 1 < end ? f + 1 : v.looping && end ? (v.loop_len ? FramesOf(v, v.loop_start) : 0) : f;
+                a1 = Sample(v, v.data, g, 0);
+                b1 = Sample(v, v.data, g, 1);
             }
-            out[i * 2] += a * l;
-            out[i * 2 + 1] += b * r;
+            float t = float(v.pos - f);
+            out[i * 2] += (a + (a1 - a) * t) * l;
+            out[i * 2 + 1] += (b + (b1 - b) * t) * r;
             v.pos += step;
         }
     }
