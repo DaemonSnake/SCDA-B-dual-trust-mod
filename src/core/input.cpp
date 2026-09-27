@@ -2,6 +2,8 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <cstdlib>
 #include <iterator>
 #include <mutex>
 #include <vector>
@@ -21,9 +23,25 @@ namespace {
 std::atomic<bool> g_blocked{false}, g_menu{false};
 // keys held while the game had no focus (the focusing click, Escape closing the options) wait for release
 std::atomic<bool> g_settle{false};
+// a click that opened or closed a menu must not reach the game, the mouse buttons wait for release; keys stay held
+// through the change, so a held button that opens a menu (quick inventory) keeps it open
+std::atomic<bool> g_settle_mouse{false};
 HWND g_hwnd = nullptr;
 std::atomic<int> g_dx{0}, g_dy{0};
 std::atomic<uint32_t> g_clicks{0};
+
+// While the keyboard or mouse was used after the pad's last new press, port 0's pad does not rumble. Only new
+// pad presses count, so a drifting stick never takes over from the keyboard.
+std::atomic<uint64_t> g_keyboard_ms{0}, g_pad_ms{0};
+std::atomic<uint32_t> g_keys_held{0}, g_pad_held{0};
+std::atomic<bool> g_rumbling{false};  // port 0's motors were last set running
+
+uint64_t NowMs() {
+    auto since = std::chrono::steady_clock::now().time_since_epoch();
+    return uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(since).count()) + 1;
+}
+
+bool KeyboardLast() { return g_keyboard_ms > g_pad_ms; }
 
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
 // these land the game's axis on 0.2 0.4 0.6 0.8 1.0.
@@ -47,17 +65,18 @@ constexpr Target kActions[] = {
     {{"crouch", "CROUCH", "C"}, 1},
     {{"scope", "SCOPE", "E,MMB"}, 2},
     {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
-    {{"zoom", "ZOOM TOGGLE", "Z"}, 15},
+    {{"zoom", "EEV / ZOOM", "1"}, 15},
     {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
     {{"whistle", "WHISTLE", "V"}, 4},
-    {{"goggles", "GOGGLES", "4"}, 8},
-    {{"next_vision", "NEXT VISION MODE", "3"}, 11},
-    {{"previous_vision", "PREVIOUS VISION MODE", "2"}, 10},
-    {{"switch_camera", "SWITCH CAMERA", "1"}, 9},
-    {{"opsat", "OPSAT", "F1,Tab"}, 13},
+    {{"goggles", "EMF VISION", "4"}, 8},
+    {{"next_vision", "THERMAL VISION", "3"}, 11},
+    {{"previous_vision", "NIGHT VISION", "2"}, 10},
+    {{"switch_camera", "SWITCH CAMERA", ""}, 9},
+    {{"opsat", "OPSAT", "F1"}, 13},
     {{"pause", "PAUSE", "Escape"}, 12},
 };
 constexpr size_t kCount = std::size(kActions);
+static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");
 
 struct Name {
     int vk;
@@ -144,18 +163,27 @@ void Keyboard(Pad& p) {
         if (Down(VK_BACK)) return;
         g_settle = false;
     }
+    if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
+        !Down(VK_XBUTTON2))
+        g_settle_mouse = false;
+    bool no_mouse = menu || g_settle_mouse;
     int move[4] = {};
+    uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
         bool held = false;
         // in a menu the mouse buttons belong to the cursor
-        for (int vk : binds[i]) held |= Down(vk) && !(menu && Mouse(vk));
+        for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
         if (!held) continue;
+        keys |= 1u << i;
         int b = kActions[i].button;
         if (b >= 16) move[b - 16] = 1;
         else if (b < 8) p.analog[b] = 0xFF;
         else p.buttons |= uint16_t(1u << (b - 8));
     }
     if (Down(VK_BACK) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
+    keys |= uint32_t(Down(VK_BACK)) << 31;
+    if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
     float v = kSpeeds[g_speed];
     if (int ax = Down(VK_RIGHT) - Down(VK_LEFT), ay = Down(VK_UP) - Down(VK_DOWN); ax || ay) {
@@ -196,6 +224,7 @@ void OnRawInput(void* handle) {
     if (g_menu) ReleaseCursor();
     else Clip();
     const RAWMOUSE& m = ri.data.mouse;
+    if (m.lLastX || m.lLastY || m.usButtonFlags) g_keyboard_ms = NowMs();
     if (!(m.usFlags & MOUSE_MOVE_ABSOLUTE)) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
@@ -227,7 +256,7 @@ bool TakeMouse(float& dx, float& dy) {
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
         if (menu) ClipCursor(nullptr);
-        g_settle = true;
+        g_settle_mouse = true;
     }
 }
 
@@ -318,12 +347,27 @@ Pad Poll(int port) {
         p.ly = g.sThumbLY;
         p.rx = g.sThumbRX;
         p.ry = g.sThumbRY;
+        if (port == 0) {
+            uint32_t held = p.buttons;
+            for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > 30) << (8 + i);
+            int bit = 16;
+            for (int16_t axis : {p.lx, p.ly, p.rx, p.ry}) held |= uint32_t(std::abs(int(axis)) > 8000) << bit++;
+            if (held & ~g_pad_held.exchange(held)) g_pad_ms = NowMs();
+        }
+    }
+    // a motor the game left running when the keyboard took over, the game may not set it again
+    if (port == 0 && g_rumbling && KeyboardLast()) {
+        XINPUT_VIBRATION off{};
+        XInputSetState(0, &off);
+        g_rumbling = false;
     }
     if (port == 0 && Active()) Keyboard(p);
     return p;
 }
 
 void Rumble(int port, uint16_t left, uint16_t right) {
+    if (port == 0 && KeyboardLast()) left = right = 0;
+    if (port == 0) g_rumbling = left || right;
     XINPUT_VIBRATION v{left, right};
     XInputSetState(DWORD(port), &v);
 }
