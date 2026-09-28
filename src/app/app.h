@@ -23,6 +23,7 @@ struct Settings {
     bool skip_intros = false;        // logos video and rating screen at boot
     uint32_t coop_tick_rate = 0;           // co-op step frequency, Hz; 0 is the game's 22
     uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
+    std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
 

@@ -130,6 +130,26 @@ int OptionRow(const char* label, const char* value) {
     return step;
 }
 
+// label left, a text field where the value sits; true when an edit is done
+bool TextRow(const char* label, char* buf, size_t size) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
+    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
+    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    ImGui::PushID(label);
+    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
+    ImGui::SetNextItemWidth(block_w);
+    ImGui::InputText("##text", buf, size);
+    bool done = ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::PopID();
+    ImGui::SetCursorPos(ImVec2(row_x, row_y));
+    ImGui::Dummy(ImVec2(row_w, row_h));
+    return done;
+}
+
 const char* OnOff(bool on) { return on ? "ON" : "OFF"; }
 
 void Changed(bool display) {
@@ -197,7 +217,7 @@ void DrawRows() {
         s.skip_intros = !s.skip_intros;
         Changed(false);
     }
-    Section("CO-OP (BOTH PLAYERS THE SAME, FROM THE NEXT SESSION)");
+    Section("CO-OP");
     {
         uint32_t rate = kTickRates[NearestIndex(kTickRates, int(std::size(kTickRates)), s.coop_tick_rate)];
         if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);
@@ -211,6 +231,16 @@ void DrawRows() {
         std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (GAME)" : "%u MS", floor);
         if (int step = OptionRow("MIN INPUT DELAY", text)) {
             StepTable(kDelayFloors, s.coop_input_delay_floor, step);
+            Changed(false);
+        }
+    }
+    {
+        static char join[64] = {};
+        static bool loaded = false;
+        if (!loaded) std::snprintf(join, sizeof(join), "%s", s.join_ip.c_str());
+        loaded = true;
+        if (TextRow("JOIN IP", join, sizeof(join))) {
+            s.join_ip = join;
             Changed(false);
         }
     }
