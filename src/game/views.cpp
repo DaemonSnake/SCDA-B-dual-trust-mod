@@ -72,7 +72,8 @@ void UpdateView(uint32_t viewport) {
         view = input::View::Eev;
     } else if (state == unreal::Name("s_ScriptedEvent")) {
         view = input::View::ScriptedEvent;
-    } else if (state == unreal::Name("s_Ledge")) {
+    } else if (state == unreal::Name("s_Ledge") || state == unreal::Name("s_NarrowLadder") ||
+               state == unreal::Name("s_Pipe") || state == unreal::Name("s_PipeSlideDown")) {
         view = input::View::Ledge;
     } else if (state == unreal::Name("s_PickLock")) {
         view = input::View::Lockpick;
