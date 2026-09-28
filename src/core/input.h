@@ -44,6 +44,9 @@ enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
+// keys the game side acts on itself, once per press in play
+enum class KeyEvent { None, Whistle, SidekickCommand };
+bool TakeEvent(KeyEvent event);  // pressed since the last call
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
 void TapButtons(uint16_t buttons);
 

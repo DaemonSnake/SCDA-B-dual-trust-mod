@@ -126,7 +126,9 @@ constexpr Target kActions[] = {
     {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
     {{"zoom", "EEV / ZOOM", "1"}, 15},
     {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
-    {{"whistle", "WHISTLE", "V"}, 4},
+    // the pad's black button brings up a picker between these two; the keys do each at once
+    {{"whistle", "WHISTLE", "V"}, -1, true, KeyEvent::Whistle},
+    {{"sidekick", "SIDEKICK / CO-OP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
     {{"goggles", "EMF VISION", "4"}, 8},
     {{"next_vision", "THERMAL VISION", "3"}, 11},
     {{"previous_vision", "NIGHT VISION", "2"}, 10},
@@ -239,6 +241,11 @@ void Keyboard(Pad& p) {
             continue;
         }
         keys |= 1u << i;
+        if (kActions[i].event != KeyEvent::None) {
+            if (!g_down_as[i]) g_events |= 1u << int(kActions[i].event);
+            g_down_as[i] = 1;
+            continue;
+        }
         int b = g_down_as[i] - 1;
         if (b < 0) {
             int button = kActions[i].button;
@@ -266,7 +273,7 @@ void Keyboard(Pad& p) {
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    float v = camera || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
+    float v = camera || menu || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -386,6 +393,8 @@ void SetView(View view, float zoom_speed) {
 }
 
 int TakeWheel() { return g_wheel.exchange(0); }
+
+bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
 
 void TapButtons(uint16_t buttons) {
     g_tap = buttons;
