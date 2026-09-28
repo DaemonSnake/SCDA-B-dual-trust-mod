@@ -51,6 +51,8 @@ void Load() {
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
+    s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
@@ -68,7 +70,9 @@ void Save() {
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
-                  {"skip_intros", s.skip_intros}};
+                  {"skip_intros", s.skip_intros},
+                  {"coop_tick_rate", int64_t(s.coop_tick_rate)},
+                  {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)}};
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);

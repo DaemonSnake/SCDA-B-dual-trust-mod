@@ -29,6 +29,8 @@ constexpr uint32_t kOpsatPages[] = {
     game::magma::Id("P_PDA"),      game::magma::Id("P_Trust"),     game::magma::Id("P_Videos"),
 };
 
+// engine: UXboxViewport::UpdateInput takes the synced input when +0xC8 and +0xCC or +0xDC are set
+constexpr uint32_t kNetA = 0xC8, kNetB = 0xCC, kNetC = 0xDC;
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;
 constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
 
@@ -189,13 +191,16 @@ X86_FUNC(sub_0004B525) {
     input::SetQuickInventory(page == kQuickInventory);
     input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
     game::UpdateView(viewport);
+    bool net = (R32(engine + kNetA) && R32(engine + kNetB)) || R32(engine + kNetC);
+    input::SetNetSession(net);
     float dx, dy;
-    // the axis command stores its value, so each axis gets one summed event per update
-    if (!menu && input::TakeMouse(dx, dy)) {
+    // in a synced session the mouse is recorded with the pad (coop_mouse.cpp); the axis command stores its value,
+    // so each axis gets one summed event per update
+    if (!net && !menu && input::TakeMouse(dx, dy)) {
         if (dx != 0.0f) Event(g, kMouseX, kAxis, dx);
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
-    game::WhistleKeys(ctx, viewport);
+    if (!net) game::WhistleKeys(ctx, viewport);
     game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

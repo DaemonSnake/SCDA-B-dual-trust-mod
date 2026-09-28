@@ -13,7 +13,7 @@ namespace {
 
 bool g_mission_load = false;  // game thread
 
-// the travel URL, map name first; the main menu's map is Menu and has no loading picture
+// launch data text: "mapname=<map>?<options> playername=... lastscreen=..."
 std::string Url(uint32_t text) {
     std::string url;
     for (uint32_t n = 0; text && n < 260; text += 2, n++) {
@@ -23,6 +23,17 @@ std::string Url(uint32_t text) {
     }
     return url;
 }
+
+std::string MapName(const std::string& url) {
+    size_t at = url.find("mapname=");
+    if (at == std::string::npos) return {};
+    at += 8;
+    return url.substr(at, url.find_first_of("? ", at) - at);
+}
+
+// single player missions only: the main menu (map Menu) has nothing to read, and in co-op (x01_coop_ice_a,
+// every co-op map has _coop_) a player held on the picture would fall behind the other
+bool Waits(const std::string& map) { return !map.empty() && map != "menu" && map.find("_coop_") == std::string::npos; }
 
 }  // namespace
 
@@ -40,10 +51,9 @@ X86_FUNC(sub_0026AB34) {
     if (g_mission_load && R32(ctx.esp + 12)) {
         g_mission_load = false;
         std::string url = Url(R32(ctx.esp + 8));
-        if (url.rfind("menu", 0) != 0) {
-            LOGI("loading: %s, waiting for a key", url.c_str());
-            input::WaitForPress();
-        }
+        bool wait = Waits(MapName(url));
+        LOGI("loading: %s%s", url.c_str(), wait ? ", waiting for a key" : "");
+        if (wait) input::WaitForPress();
     }
     __imp__sub_0026AB34(ctx, base);
 }

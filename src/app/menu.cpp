@@ -38,6 +38,9 @@ constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"GAME DEFAULT", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kFpsCaps[] = {0, 30, 60, 75, 90, 120, 144, 165, 240, 360};
+// co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
+constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
+constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
 
 int StepIndex(int index, int step, int count) {
     if (count <= 0) return 0;
@@ -193,6 +196,23 @@ void DrawRows() {
     if (OptionRow("SKIP INTROS", OnOff(s.skip_intros))) {
         s.skip_intros = !s.skip_intros;
         Changed(false);
+    }
+    Section("CO-OP (BOTH PLAYERS THE SAME, FROM THE NEXT SESSION)");
+    {
+        uint32_t rate = kTickRates[NearestIndex(kTickRates, int(std::size(kTickRates)), s.coop_tick_rate)];
+        if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);
+        if (int step = OptionRow("TICK RATE", rate ? text : "GAME (22 HZ)")) {
+            StepTable(kTickRates, s.coop_tick_rate, step);
+            Changed(false);
+        }
+    }
+    {
+        uint32_t floor = kDelayFloors[NearestIndex(kDelayFloors, int(std::size(kDelayFloors)), s.coop_input_delay_floor)];
+        std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (GAME)" : "%u MS", floor);
+        if (int step = OptionRow("MIN INPUT DELAY", text)) {
+            StepTable(kDelayFloors, s.coop_input_delay_floor, step);
+            Changed(false);
+        }
     }
 }
 

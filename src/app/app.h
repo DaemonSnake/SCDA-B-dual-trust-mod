@@ -21,6 +21,8 @@ struct Settings {
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
+    uint32_t coop_tick_rate = 0;           // co-op step frequency, Hz; 0 is the game's 22
+    uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
 
@@ -36,6 +38,7 @@ Mode Output();
 float RenderScale(uint32_t guest_height);
 
 std::filesystem::path ExeDir();
+int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests
 void* Window();  // HWND
 
 // options menu, drawn by the renderer each frame with the lock held

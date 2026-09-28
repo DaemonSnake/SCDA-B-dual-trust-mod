@@ -50,6 +50,9 @@ int TakeWheel();
 uint32_t StickKeys();
 // keys the game side acts on itself, once per press in play
 enum class KeyEvent { None, Whistle, SidekickCommand };
+// A synced co-op session. Its lockstep carries the pad, not what the game side calls on its own, so there the
+// sidekick key holds the black button (co-op action) and whistle is off.
+void SetNetSession(bool net);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
 void TapButtons(uint16_t buttons);

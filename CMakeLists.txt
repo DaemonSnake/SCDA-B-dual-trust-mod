@@ -58,6 +58,6 @@ target_include_directories(scda PRIVATE src ${GEN})
 target_include_directories(scda SYSTEM PRIVATE ${imgui_SOURCE_DIR})
 target_compile_options(scda PRIVATE -fno-strict-aliasing)
 target_compile_definitions(scda PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
-target_link_libraries(scda PRIVATE tomlplusplus::tomlplusplus d3d12 dxgi dxguid d3dcompiler xaudio2 xinput ole32 dbghelp winmm dwmapi)
+target_link_libraries(scda PRIVATE tomlplusplus::tomlplusplus d3d12 dxgi dxguid d3dcompiler xaudio2 xinput ole32 dbghelp winmm dwmapi ws2_32)
 # lld keeps the recompiled weak functions overridable by the host ones
 target_link_options(scda PRIVATE -fuse-ld=lld -g)

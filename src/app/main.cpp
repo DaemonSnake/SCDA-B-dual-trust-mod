@@ -9,6 +9,7 @@
 #include <dbghelp.h>
 #include <timeapi.h>
 
+#include <algorithm>
 #include <chrono>
 #include <csignal>
 #include <cwchar>
@@ -165,6 +166,14 @@ std::filesystem::path ExeDir() {
     return std::filesystem::path(p).parent_path();
 }
 
+int Instance() {
+    static const int n = [] {
+        const wchar_t* p = std::wcsstr(GetCommandLineW(), L"--instance");
+        return p ? std::max(0, std::min(8, _wtoi(p + 10))) : 0;
+    }();
+    return n;
+}
+
 void* Window() { return g_hwnd; }
 
 std::recursive_mutex& UiLock() {
@@ -229,7 +238,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
 
     input::Init(app::g_hwnd);
     input::LoadBindings();
-    if (!kernel::Boot((game / "default.xbe").string(), game.string(), (app::ExeDir() / "hdd").string())) {
+    std::wstring hdd = app::Instance() > 1 ? L"hdd" + std::to_wstring(app::Instance()) : L"hdd";
+    if (app::Instance()) SetWindowTextW(app::g_hwnd, (L"Tom Clancy's Splinter Cell: Double Agent [" + std::to_wstring(app::Instance()) + L"]").c_str());
+    if (!kernel::Boot((game / "default.xbe").string(), game.string(), (app::ExeDir() / hdd).string())) {
         MessageBoxW(app::g_hwnd, L"The game failed to start, see the log in the logs folder.", L"Splinter Cell Double Agent",
                     MB_ICONERROR);
         return 1;

@@ -19,6 +19,7 @@
 #include <xinput.h>
 
 #include "app/app.h"
+#include "core/log.h"
 
 namespace input {
 
@@ -108,14 +109,6 @@ std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet ta
 
 std::atomic<bool> g_net{false};
 constexpr int kBlack = 4;  // Pad::analog
-// IK_MouseX/Y are bound with Speed=0.001 and PlayerInput adds aMouseX / DeltaTime to aTurn; the right stick
-// (IK_JoyZ, and IK_JoyV negated) adds its value past the dead zone, rescaled to 0..1. So a count is
-// 0.001 / dt of the stick past the dead zone. What goes past the full stick carries into the next updates.
-constexpr float kMouseAxisSpeed = 0.001f;
-constexpr float kMaxCarry = 500.0f;  // counts
-std::atomic<int16_t> g_look_x{0}, g_look_y{0};
-float g_carry_x = 0.0f, g_carry_y = 0.0f;  // game thread
-std::chrono::steady_clock::time_point g_look_time;
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -423,6 +416,10 @@ void SetView(View view, float zoom_speed) {
 int TakeWheel() { return g_wheel.exchange(0); }
 
 uint32_t StickKeys() { return g_stick_keys; }
+
+void SetNetSession(bool net) {
+    if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
+}
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
 
