@@ -101,9 +101,21 @@ std::chrono::steady_clock::time_point g_wiggle_time;
 // these land the game's axis on 0.31 0.48 0.66 0.83 1.0: 0.31 is SCCT PC's slowest (its AxisMod floor), and
 // below 0.3 some states (gun drawn) do not move at all.
 constexpr float kSpeeds[] = {0.517f, 0.638f, 0.759f, 0.879f, 1.0f};
+constexpr float kDeadZone = 0.3f;
 std::atomic<int> g_speed{4};
 
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
+
+std::atomic<bool> g_net{false};
+constexpr int kBlack = 4;  // Pad::analog
+// IK_MouseX/Y are bound with Speed=0.001 and PlayerInput adds aMouseX / DeltaTime to aTurn; the right stick
+// (IK_JoyZ, and IK_JoyV negated) adds its value past the dead zone, rescaled to 0..1. So a count is
+// 0.001 / dt of the stick past the dead zone. What goes past the full stick carries into the next updates.
+constexpr float kMouseAxisSpeed = 0.001f;
+constexpr float kMaxCarry = 500.0f;  // counts
+std::atomic<int16_t> g_look_x{0}, g_look_y{0};
+float g_carry_x = 0.0f, g_carry_y = 0.0f;  // game thread
+std::chrono::steady_clock::time_point g_look_time;
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -242,6 +254,11 @@ void Keyboard(Pad& p) {
             continue;
         }
         keys |= 1u << i;
+        if (kActions[i].event != KeyEvent::None && g_net) {
+            if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
+            g_down_as[i] = 1;
+            continue;
+        }
         if (kActions[i].event != KeyEvent::None) {
             if (!g_down_as[i]) g_events |= 1u << int(kActions[i].event);
             g_down_as[i] = 1;
@@ -274,7 +291,8 @@ void Keyboard(Pad& p) {
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    float v = camera || menu || g_quick || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
+    bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
+    float v = full ? 1.0f : kSpeeds[g_speed];
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -295,6 +313,9 @@ void Keyboard(Pad& p) {
         y = ay;
         v = 1.0f;
     }
+    // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
+    // as fast as one. Not where the full stick is forced: a ledge climb wants aForward past 0.9.
+    if (x && y && !full) v = kDeadZone + (v - kDeadZone) * 0.70710678f;
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
     if (View(g_view.load()) != View::Lockpick || menu) {
