@@ -49,11 +49,11 @@ constexpr Rule kHud[] = {
     {"List_interaction_NPC", Mode::Right}, {"List_interaction_RTN", Mode::Right}, {"A_Goals", Mode::Right},
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
     {"A_Info_teamate", Mode::Left},     {"I_Talking", Mode::Left},       {"A_Communications", Mode::Left},
-    {"A_timer", Mode::Left},            {"Sound_Meter", Mode::Right},
+    {"A_timer", Mode::Centre},          {"Sound_Meter", Mode::Right},
 };
 constexpr Rule kOverlay[] = {
     {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
-    {"A_timer", Mode::Left},    {"A_Communications", Mode::Left},
+    {"A_timer", Mode::Right},   {"A_Communications", Mode::Left},
     {0x478A341D, Mode::Left},  // P_Sniper's instance of the comms area, its name not recovered
 };
 
