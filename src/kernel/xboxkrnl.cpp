@@ -869,6 +869,7 @@ KERNEL_EXPORT(49, HalReturnToFirmware, 1) {
             LOGI("relaunching into %s", path.c_str());
             Relaunch(exe);
         }
+        LOGW("HalReturnToFirmware: %s is no recompiled image", path.c_str());
     }
     LogGuestStack(ctx, 256);
     Shutdown(0);

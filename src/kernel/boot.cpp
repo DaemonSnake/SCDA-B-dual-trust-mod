@@ -112,7 +112,7 @@ const char* ImageExe(std::string xbe_path) {
     for (auto& [xbe, exe] : kImages) {
         size_t n = std::strlen(xbe);
         if (xbe_path.size() >= n && xbe_path.compare(xbe_path.size() - n, n, xbe) == 0 &&
-            (xbe_path.size() == n || xbe_path[xbe_path.size() - n - 1] == '\\'))
+            (xbe_path.size() == n || xbe_path[xbe_path.size() - n - 1] == '\\' || xbe_path[xbe_path.size() - n - 1] == ';'))
             return exe;
     }
     return nullptr;
