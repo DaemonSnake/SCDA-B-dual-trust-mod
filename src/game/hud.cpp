@@ -31,8 +31,9 @@ constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC
 // Centre: 4:3 in the middle; Fill: the same, images touching a page side are stretched out to the screen
 // side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round;
 // Left, Right: 4:3 against that side; Stretch: page width over screen width;
-// Spread: centred, image edges further than kKeep from the middle move out to the screen sides
-enum class Mode { Centre, Fill, Extend, Left, Right, Stretch, Spread };
+// Spread: centred, image edges further than kKeep from the middle move out to the screen sides;
+// Open: not decided here, its children are placed one by one
+enum class Mode { Centre, Fill, Extend, Left, Right, Stretch, Spread, Open };
 
 struct Rule {
     uint32_t id;
@@ -50,11 +51,17 @@ constexpr Rule kHud[] = {
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
     {"A_Info_teamate", Mode::Left},     {"I_Talking", Mode::Left},       {"A_Communications", Mode::Left},
     {"A_timer", Mode::Centre},          {"Sound_Meter", Mode::Right},
+    {0x467FE0A7, Mode::Open},  // scripted event bar: letterbox and subtitle stay, the Skip prompt goes to its side
 };
 constexpr Rule kOverlay[] = {
     {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
     {"A_timer", Mode::Right},   {"A_Communications", Mode::Left},
     {0x478A341D, Mode::Left},  // P_Sniper's instance of the comms area, its name not recovered
+};
+
+// every menu page's button legend (A, B, X, Y), an instance of system.mgm's area, name not recovered
+constexpr Rule kMenu[] = {
+    {0xCF490E0F, Mode::Left},
 };
 
 // half: an unlisted element sitting in one half of the page goes to that side
@@ -215,14 +222,17 @@ X86_FUNC(sub_002BE990) {
     g_page = saved;
 }
 
-// Magma element draw, children come back through here: the first listed or placed element decides
+// Magma element draw, children come back through here: the first listed or placed element decides. On menu
+// pages only the listed elements are placed, the rest stay with the page
 X86_EXTERN_FUNC(__imp__sub_002C64E0);
 X86_FUNC(sub_002C64E0) {
     uint32_t instance = ctx.ecx;
-    if (!g_page || g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
+    if (g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
     uint32_t id = R32(instance + 4);
-    auto rule = std::find_if(g_page->rules.begin(), g_page->rules.end(), [&](const Rule& r) { return r.id == id; });
-    Mode mode = rule != g_page->rules.end() ? rule->mode : g_page->half ? ByHalf(ctx, instance) : g_page->others;
+    std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);
+    auto rule = std::find_if(rules.begin(), rules.end(), [&](const Rule& r) { return r.id == id; });
+    if (rule == rules.end() ? !g_page : rule->mode == Mode::Open) return __imp__sub_002C64E0(ctx, base);
+    Mode mode = rule != rules.end() ? rule->mode : g_page->half ? ByHalf(ctx, instance) : g_page->others;
     g_decided = true;
     Draw(ctx, base, mode, __imp__sub_002C64E0);
     g_decided = false;
