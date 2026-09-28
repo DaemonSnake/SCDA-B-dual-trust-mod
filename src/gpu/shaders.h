@@ -35,8 +35,9 @@ uint64_t Hash(const void* p, size_t n, uint64_t h = 1469598103934665603ull);
 PixelKey MakePixelKey(const State& s, const TexInfo tex[4]);
 
 // vertex program microcode to HLSL, regs is the bit mask of v registers the draw supplies
-std::string VertexProgramHlsl(const std::vector<uint32_t>& program, uint16_t regs);
-std::string FixedVertexHlsl(uint16_t regs, bool pretransformed);
+// decode: VertexDecode per register, 4 bits each, for elements the input assembler hands over raw
+std::string VertexProgramHlsl(const std::vector<uint32_t>& program, uint16_t regs, uint64_t decode = 0);
+std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode = 0);
 std::string PixelHlsl(const PixelKey& k);
 
 // the constant buffer layout both stages share, register b1

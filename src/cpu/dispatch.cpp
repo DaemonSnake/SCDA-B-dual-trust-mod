@@ -129,12 +129,14 @@ uint32_t DataAddress(uint32_t ordinal) { return ordinal < 400 ? g_exports[ordina
 const char* ExportName(uint32_t ordinal) { return ordinal < 400 && g_exports[ordinal].name ? g_exports[ordinal].name : "?"; }
 
 uint32_t CallGuest(X86Context& ctx, uint32_t fn, std::initializer_list<uint32_t> args) {
-    X86Context saved = ctx;
+    // the D3D and DirectSound hooks call this several times a draw: no heap, only the registers put back are kept
+    struct {
+        uint32_t eax, ecx, edx, ebx, esi, edi, ebp;
+    } saved{ctx.eax, ctx.ecx, ctx.edx, ctx.ebx, ctx.esi, ctx.edi, ctx.ebp};
     uint32_t esp = ctx.esp;
-    std::vector<uint32_t> a(args);
-    for (size_t i = a.size(); i-- > 0;) {
+    for (const uint32_t* p = args.end(); p != args.begin();) {
         ctx.esp -= 4;
-        W32(ctx.esp, a[i]);
+        W32(ctx.esp, *--p);
     }
     ctx.esp -= 4;
     W32(ctx.esp, 0xFFFFFFF0u);  // never used as a target, calls return through the host stack

@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cstring>
 
+#include <dxgiformat.h>
+
+#include "core/log.h"
 #include "kernel/kernel.h"
 
 namespace gpu {
@@ -65,6 +68,82 @@ void Convert(uint32_t type, const uint8_t* p, float* o) {
     }
 }
 
+// TEMPORARY A/B: false converts every vertex on the CPU, as before
+constexpr bool kRawVertices = true;
+
+// D3DVSDT type as the input assembler reads it: DXGI format, what the vertex shader does after, bytes the format reads
+struct HostElement {
+    uint8_t format = 0, decode = kDecodeNone, bytes = 0;
+};
+HostElement HostFormat(uint32_t type) {
+    switch (type) {
+        case 0x12: return {DXGI_FORMAT_R32_FLOAT, kDecodeNone, 4};
+        case 0x22: return {DXGI_FORMAT_R32G32_FLOAT, kDecodeNone, 8};
+        case 0x32: return {DXGI_FORMAT_R32G32B32_FLOAT, kDecodeNone, 12};
+        case 0x42: return {DXGI_FORMAT_R32G32B32A32_FLOAT, kDecodeNone, 16};
+        case 0x72: return {DXGI_FORMAT_R32G32B32_FLOAT, kDecodeFloat2H, 12};
+        case 0x40: return {DXGI_FORMAT_B8G8R8A8_UNORM, kDecodeNone, 4};  // D3DCOLOR, bytes B G R A
+        case 0x11: return {DXGI_FORMAT_R16_SNORM, kDecodeNone, 2};
+        case 0x21: return {DXGI_FORMAT_R16G16_SNORM, kDecodeNone, 4};
+        case 0x31: return {DXGI_FORMAT_R16G16B16A16_SNORM, kDecodeW1, 8};
+        case 0x41: return {DXGI_FORMAT_R16G16B16A16_SNORM, kDecodeNone, 8};
+        case 0x14: return {DXGI_FORMAT_R8_UNORM, kDecodeNone, 1};
+        case 0x24: return {DXGI_FORMAT_R8G8_UNORM, kDecodeNone, 2};
+        case 0x34: return {DXGI_FORMAT_R8G8B8A8_UNORM, kDecodeW1, 4};
+        case 0x44: return {DXGI_FORMAT_R8G8B8A8_UNORM, kDecodeNone, 4};
+        case 0x15: return {DXGI_FORMAT_R16_SINT, kDecodeInt, 2};
+        case 0x25: return {DXGI_FORMAT_R16G16_SINT, kDecodeInt, 4};
+        case 0x35: return {DXGI_FORMAT_R16G16B16A16_SINT, kDecodeIntW1, 8};
+        case 0x45: return {DXGI_FORMAT_R16G16B16A16_SINT, kDecodeInt, 8};
+        case 0x16: return {DXGI_FORMAT_R32_UINT, kDecodePacked, 4};
+        default: return {};
+    }
+}
+
+// the index list for a primitive the input assembler has no topology for, or for converted vertices
+template <typename F>
+void ListIndices(uint32_t prim, uint32_t count, F local, std::vector<uint32_t>& ix, Topology& topology) {
+    ix.reserve(size_t(count) * 3);
+    topology = Topology::Triangles;
+    switch (prim) {
+        case 1:  // points
+            topology = Topology::Points;
+            for (uint32_t i = 0; i < count; i++) ix.push_back(local(i));
+            break;
+        case 2:  // line list
+            topology = Topology::Lines;
+            for (uint32_t i = 0; i + 1 < count; i += 2) ix.insert(ix.end(), {local(i), local(i + 1)});
+            break;
+        case 3:  // line loop
+        case 4:  // line strip
+            topology = Topology::Lines;
+            for (uint32_t i = 0; i + 1 < count; i++) ix.insert(ix.end(), {local(i), local(i + 1)});
+            if (prim == 3 && count > 2) ix.insert(ix.end(), {local(count - 1), local(0)});
+            break;
+        case 5:  // triangle list
+            for (uint32_t i = 0; i + 2 < count; i += 3) ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2)});
+            break;
+        case 6:  // triangle strip
+            for (uint32_t i = 0; i + 2 < count; i++) {
+                if (i & 1) ix.insert(ix.end(), {local(i + 1), local(i), local(i + 2)});
+                else ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2)});
+            }
+            break;
+        case 7:   // fan
+        case 10:  // polygon
+            for (uint32_t i = 1; i + 1 < count; i++) ix.insert(ix.end(), {local(0), local(i), local(i + 1)});
+            break;
+        case 8:  // quad list
+            for (uint32_t i = 0; i + 3 < count; i += 4)
+                ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2), local(i), local(i + 2), local(i + 3)});
+            break;
+        case 9:  // quad strip
+            for (uint32_t i = 0; i + 3 < count; i += 2)
+                ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2), local(i + 1), local(i + 3), local(i + 2)});
+            break;
+    }
+}
+
 uint32_t TypeBytes(uint32_t t) {
     if (t == 0x72) return 12;
     uint32_t kind = t & 15, n = (t >> 4) & 15;
@@ -108,12 +187,20 @@ void FvfInputs(uint32_t fvf, VertexShader& vs) {
     vs.stream_stride[0] = off;
 }
 
-bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, uint32_t indices_va, Assembled& out) {
+bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
     using namespace kernel;
     out.vertices.clear();
     out.indices.clear();
     out.regs = 0;
     out.vertex_count = 0;
+    out.topology = Topology::Triangles;
+    out.strip = false;
+    out.decode = 0;
+    out.buffer_count = 0;
+    out.index_src = nullptr;
+    out.index16 = false;
+    out.index_count = out.draw_count = 0;
+    out.base_vertex = 0;
     if (!count || prim < 1 || prim > 10) return false;
 
     VertexShader fvf_layout;
@@ -127,21 +214,28 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, uin
     }
     if (!layout) return false;
 
-    // logical vertex numbers in draw order
-    std::vector<uint32_t> seq(count);
-    if (indices_va) {
-        const uint8_t* ip = static_cast<const uint8_t*>(HostPtr(indices_va));
+    // the vertex range the draw reads
+    uint32_t first = 0, last = count - 1;
+    if (ip) {
+        uint16_t lo16 = 0xFFFF, hi16 = 0;
         for (uint32_t i = 0; i < count; i++) {
             uint16_t v;
             std::memcpy(&v, ip + i * 2, 2);
-            seq[i] = v + s.base_vertex;
+            lo16 = std::min(lo16, v);
+            hi16 = std::max(hi16, v);
         }
-    } else {
-        for (uint32_t i = 0; i < count; i++) seq[i] = start + i;
+        first = lo16;
+        last = hi16;
     }
-    uint32_t lo = *std::min_element(seq.begin(), seq.end()), hi = *std::max_element(seq.begin(), seq.end());
-    bool ranged = uint64_t(hi - lo) + 1 <= uint64_t(count) * 2 + 64;
-    uint32_t n = ranged ? hi - lo + 1 : count;
+    // logical vertex numbers in draw order
+    auto at = [&](uint32_t i) -> uint32_t {
+        if (!ip) return start + i;
+        uint16_t v;
+        std::memcpy(&v, ip + i * 2, 2);
+        return v + s.base_vertex;
+    };
+    uint32_t lo = ip ? first + s.base_vertex : start;
+    uint32_t span = last - first + 1;
 
     int regs[16];
     int nregs = 0;
@@ -154,62 +248,90 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, uin
         out.regs |= uint16_t(1u << r);
     }
     if (!nregs) return false;
+    auto stride_of = [&](const VertexShader::Input& in) {
+        const auto& st = s.streams[size_t(in.stream)];
+        return st.stride ? st.stride : layout->stream_stride[size_t(in.stream)];
+    };
 
+    // the guest's own vertices when the input assembler can read every element of them
+    bool raw = kRawVertices;
+    for (int k = 0; k < nregs && raw; k++) {
+        const auto& in = layout->inputs[size_t(regs[k])];
+        HostElement he = HostFormat(in.type);
+        uint32_t stride = stride_of(in);
+        raw = he.format && stride && stride % 4 == 0 && in.offset < 0x10000 && in.offset % std::min<uint32_t>(he.bytes, 4) == 0;
+        if (!raw) LOG_FIRST(32, "vertex: converted on the CPU: v%d type %02X offset %u stride %u", regs[k], in.type, in.offset, stride);
+    }
+    if (raw) {
+        // sparse indices: the vertices they read, copied in draw order
+        bool dense = uint64_t(span) <= uint64_t(count) * 4 + 1024;
+        int slot[16];
+        std::fill(std::begin(slot), std::end(slot), -1);
+        for (int k = 0; k < nregs; k++) {
+            const auto& in = layout->inputs[size_t(regs[k])];
+            if (slot[in.stream] < 0) {
+                const auto& st = s.streams[size_t(in.stream)];
+                uint32_t stride = stride_of(in);
+                const uint8_t* data = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + 4))));
+                slot[in.stream] = int(out.buffer_count);
+                if (dense) {
+                    out.buffers[out.buffer_count++] = {data + size_t(lo) * stride, span * stride, stride};
+                } else {
+                    auto& g = out.gathered[out.buffer_count];
+                    g.resize(size_t(count) * stride);
+                    for (uint32_t i = 0; i < count; i++) std::memcpy(&g[size_t(i) * stride], data + size_t(at(i)) * stride, stride);
+                    out.buffers[out.buffer_count++] = {g.data(), count * stride, stride};
+                }
+            }
+            HostElement he = HostFormat(in.type);
+            out.elements[size_t(regs[k])] = {he.format, uint8_t(slot[in.stream]), uint16_t(in.offset)};
+            out.decode |= uint64_t(he.decode) << (regs[k] * 4);
+        }
+        out.vertex_count = dense ? span : count;
+        if (prim == 1 || prim == 2 || prim == 4 || prim == 5 || prim == 6) {
+            out.strip = prim == 4 || prim == 6;
+            out.topology = prim == 1 ? Topology::Points : prim <= 4 ? Topology::Lines : Topology::Triangles;
+            if (ip && dense) {
+                out.index_src = ip;
+                out.index16 = true;
+                out.index_count = count;
+                out.base_vertex = -int32_t(first);
+            } else {
+                out.draw_count = count;
+            }
+            return count >= (prim == 1 ? 1u : prim <= 4 ? 2u : 3u);
+        }
+        ListIndices(prim, count, [&](uint32_t i) { return dense ? at(i) - lo : i; }, out.indices, out.topology);
+        out.index_src = out.indices.data();
+        out.index_count = uint32_t(out.indices.size());
+        return out.index_count != 0;
+    }
+
+    // converted on the CPU: each element to a float4, vertices in range order when the indices are dense
+    std::vector<uint32_t> seq(count);
+    for (uint32_t i = 0; i < count; i++) seq[i] = at(i);
+    bool ranged = uint64_t(span) <= uint64_t(count) * 2 + 64;
+    uint32_t n = ranged ? span : count;
     out.vertex_count = n;
     out.vertices.resize(size_t(n) * nregs * 4);
     for (int k = 0; k < nregs; k++) {
         const auto& in = layout->inputs[size_t(regs[k])];
         const auto& st = s.streams[size_t(in.stream)];
         uint32_t data = mem::VirtualFromPhysical(R32(st.vb + 4));
-        uint32_t stride = st.stride ? st.stride : layout->stream_stride[size_t(in.stream)];
+        uint32_t stride = stride_of(in);
         const uint8_t* src = static_cast<const uint8_t*>(HostPtr(data + in.offset));
         for (uint32_t v = 0; v < n; v++) {
             uint32_t id = ranged ? lo + v : seq[v];
             Convert(in.type, src + size_t(id) * stride, &out.vertices[(size_t(v) * nregs + k) * 4]);
         }
+        out.elements[size_t(regs[k])] = {DXGI_FORMAT_R32G32B32A32_FLOAT, 0, uint16_t(k * 16)};
     }
-
-    auto local = [&](uint32_t i) { return ranged ? seq[i] - lo : i; };
-    auto& ix = out.indices;
-    out.topology = Topology::Triangles;
-    switch (prim) {
-        case 1:  // points
-            out.topology = Topology::Points;
-            for (uint32_t i = 0; i < count; i++) ix.push_back(local(i));
-            break;
-        case 2:  // line list
-            out.topology = Topology::Lines;
-            for (uint32_t i = 0; i + 1 < count; i += 2) ix.insert(ix.end(), {local(i), local(i + 1)});
-            break;
-        case 3:  // line loop
-        case 4:  // line strip
-            out.topology = Topology::Lines;
-            for (uint32_t i = 0; i + 1 < count; i++) ix.insert(ix.end(), {local(i), local(i + 1)});
-            if (prim == 3 && count > 2) ix.insert(ix.end(), {local(count - 1), local(0)});
-            break;
-        case 5:  // triangle list
-            for (uint32_t i = 0; i + 2 < count; i += 3) ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2)});
-            break;
-        case 6:  // triangle strip
-            for (uint32_t i = 0; i + 2 < count; i++) {
-                if (i & 1) ix.insert(ix.end(), {local(i + 1), local(i), local(i + 2)});
-                else ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2)});
-            }
-            break;
-        case 7:   // fan
-        case 10:  // polygon
-            for (uint32_t i = 1; i + 1 < count; i++) ix.insert(ix.end(), {local(0), local(i), local(i + 1)});
-            break;
-        case 8:  // quad list
-            for (uint32_t i = 0; i + 3 < count; i += 4)
-                ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2), local(i), local(i + 2), local(i + 3)});
-            break;
-        case 9:  // quad strip
-            for (uint32_t i = 0; i + 3 < count; i += 2)
-                ix.insert(ix.end(), {local(i), local(i + 1), local(i + 2), local(i + 1), local(i + 3), local(i + 2)});
-            break;
-    }
-    return !ix.empty();
+    out.buffer_count = 1;
+    out.buffers[0] = {reinterpret_cast<const uint8_t*>(out.vertices.data()), uint32_t(out.vertices.size() * 4), uint32_t(nregs * 16)};
+    ListIndices(prim, count, [&](uint32_t i) { return ranged ? seq[i] - lo : i; }, out.indices, out.topology);
+    out.index_src = out.indices.data();
+    out.index_count = uint32_t(out.indices.size());
+    return out.index_count != 0;
 }
 
 }  // namespace gpu

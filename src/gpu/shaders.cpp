@@ -1,4 +1,5 @@
 #include "gpu/shaders.h"
+#include "gpu/vertex.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -157,6 +158,36 @@ std::string VsInputStruct(uint16_t regs) {
         if ((regs >> r) & 1) s += F("    float4 v%d : ATTR%d;\n", r, r);
     if (!regs) s += "    uint id : SV_VertexID;\n";
     return s + "};\n";
+}
+
+// the input struct and the head of main: elements read raw are finished into float4 i.vN first
+std::string VsInputs(uint16_t regs, uint64_t decode) {
+    if (!decode) return VsInputStruct(regs) + "VOut main(VIn i) {\n";
+    std::string raw = "struct VRaw {\n", in = "struct VIn {\n", body;
+    bool packed = false;
+    for (int r = 0; r < 16; r++) {
+        if (!((regs >> r) & 1)) continue;
+        uint32_t d = uint32_t(decode >> (r * 4)) & 15;
+        const char* type = d == kDecodeInt || d == kDecodeIntW1 ? "int4" : d == kDecodePacked ? "uint" : "float4";
+        raw += F("    %s v%d : ATTR%d;\n", type, r, r);
+        in += F("    float4 v%d;\n", r);
+        packed |= d == kDecodePacked;
+        switch (d) {
+            case kDecodeW1: body += F("    i.v%d = float4(ri.v%d.xyz, 1);\n", r, r); break;
+            case kDecodeInt: body += F("    i.v%d = float4(ri.v%d);\n", r, r); break;
+            case kDecodeIntW1: body += F("    i.v%d = float4(float3(ri.v%d.xyz), 1);\n", r, r); break;
+            case kDecodePacked: body += F("    i.v%d = UnpackNp3(ri.v%d);\n", r, r); break;
+            case kDecodeFloat2H: body += F("    i.v%d = float4(ri.v%d.xy, 0, ri.v%d.z);\n", r, r, r); break;
+            default: body += F("    i.v%d = ri.v%d;\n", r, r); break;
+        }
+    }
+    std::string s = raw + "};\n" + in + "};\n";
+    if (packed)
+        s += "float4 UnpackNp3(uint u) {\n"
+             "    int3 v = int3(int(u << 21) >> 21, int(u << 10) >> 21, int(u) >> 22);\n"
+             "    return float4(max(float3(v) / float3(1023, 1023, 511), -1), 1);\n"
+             "}\n";
+    return s + "VOut main(VRaw ri) {\n    VIn i;\n" + body;
 }
 
 const char* kVsEpilogue = R"(
@@ -450,12 +481,32 @@ std::string FfOp(uint32_t op, const std::string& a1, const std::string& a2, cons
 bool PixelKey::operator==(const PixelKey& o) const { return std::memcmp(this, &o, sizeof(*this)) == 0; }
 
 uint64_t Hash(const void* p, size_t n, uint64_t h) {
+    // 16 bytes a step through a 64 x 64 -> 128 bit multiply: it runs over textures every frame and keys every draw
+    constexpr uint64_t k0 = 0x9E3779B97F4A7C15ull, k1 = 0xE7037ED1A0B428DBull;
+    auto mix = [](uint64_t a, uint64_t b) {
+        unsigned __int128 r = static_cast<unsigned __int128>(a) * b;
+        return uint64_t(r) ^ uint64_t(r >> 64);
+    };
     const uint8_t* b = static_cast<const uint8_t*>(p);
-    for (size_t i = 0; i < n; i++) {
-        h ^= b[i];
-        h *= 1099511628211ull;
+    uint64_t seed = h ^ k0;
+    size_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        uint64_t x, y;
+        std::memcpy(&x, b + i, 8);
+        std::memcpy(&y, b + i + 8, 8);
+        seed = mix(x ^ k1, y ^ seed);
     }
-    return h;
+    if (size_t r = n - i) {
+        uint64_t x = 0, y = 0;
+        if (r >= 8) {
+            std::memcpy(&x, b + i, 8);
+            std::memcpy(&y, b + n - 8, 8);
+        } else {
+            std::memcpy(&x, b + i, r);
+        }
+        seed = mix(x ^ k1, y ^ seed ^ r);
+    }
+    return mix(seed ^ k0, uint64_t(n) ^ k1);
 }
 
 PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
@@ -504,11 +555,10 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
     return k;
 }
 
-std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs) {
+std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs, uint64_t decode) {
     std::string s = kCommon;
     s += kVsHelpers;
-    s += VsInputStruct(regs);
-    s += "VOut main(VIn i) {\n";
+    s += VsInputs(regs, decode);
     s += kVsPrologue;
     for (size_t n = 0; n + 4 <= prog.size(); n += 4) {
         Tok k{&prog[n]};
@@ -547,11 +597,10 @@ std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs) 
     return s;
 }
 
-std::string FixedVertexHlsl(uint16_t regs, bool pretransformed) {
+std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode) {
     std::string s = kCommon;
     s += kVsHelpers;
-    s += VsInputStruct(regs);
-    s += "VOut main(VIn i) {\n";
+    s += VsInputs(regs, decode);
     s += kVsPrologue;
     auto v = [&](int r, const char* def) { return (regs >> r) & 1 ? F("i.v%d", r) : std::string(def); };
     if (pretransformed) {
