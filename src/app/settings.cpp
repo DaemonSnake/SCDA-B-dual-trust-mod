@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <fstream>
 
 #include <toml++/toml.hpp>
@@ -99,6 +100,19 @@ Mode Output() {
     const Settings& s = Get();
     if (s.width && s.height) return {s.width, s.height};
     return Desktop();
+}
+
+bool Widescreen() {
+    // asked per frame and per HUD quad: the desktop mode lookup only runs when the resolution setting changes
+    static std::atomic<uint64_t> key{~0ull};
+    static std::atomic<bool> wide{true};
+    const Settings& s = Get();
+    uint64_t k = uint64_t(s.width) << 32 | s.height;
+    if (key.exchange(k) != k) {
+        Mode m = Output();
+        wide = m.width * 2 >= m.height * 3;
+    }
+    return wide;
 }
 
 float RenderScale(uint32_t guest_height) {

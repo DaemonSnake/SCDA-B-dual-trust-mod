@@ -1535,11 +1535,12 @@ void D3D12Backend::Present(const Surface& front) {
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     bound_rt_ = bound_ds_ = nullptr;
     if (t) {
-        // 16:9, the console reports a widescreen display
-        float aspect = 16.0f / 9.0f, w = float(bb_w_), h = float(bb_h_);
+        // 16:9 when the console reports a widescreen display, else 4:3
+        bool wide = app::Widescreen();
+        float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
         float vw = std::min(w, h * aspect), vh = vw / aspect;
         float uv[4] = {0, 0, 1, 1};
-        if (g_splash && g_splash_fill) uv[0] = -1.0f / 6, uv[2] = 4.0f / 3;
+        if (g_splash && g_splash_fill && wide) uv[0] = -1.0f / 6, uv[2] = 4.0f / 3;
         else if (g_splash) vw = vh * 4.0f / 3.0f;
         D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
         D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};

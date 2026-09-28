@@ -38,6 +38,8 @@ struct Mode {
 Mode Desktop();
 Mode Output();
 float RenderScale(uint32_t guest_height);
+// the output is 3:2 or wider: the console reports a widescreen TV and the frame is shown 16:9, else 4:3 as on a 4:3 TV
+bool Widescreen();
 
 std::filesystem::path ExeDir();
 int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests

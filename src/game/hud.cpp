@@ -1,5 +1,5 @@
 // 2D is drawn 640x480 and shown 16:9. Canvas flushes get x' = x * 3/4 + offset * width: HUD elements are
-// placed per page and element, menus and loading screens are centred 4:3.
+// placed per page and element, menus and loading screens are centred 4:3. A 4:3 output is shown 4:3: nothing moves.
 #include <algorithm>
 #include <bit>
 #include <cctype>
@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "app/app.h"
 #include "gpu/backend.h"
 #include "xdk/hle.h"
 
@@ -146,7 +147,7 @@ X86_FUNC(sub_0028F090) {
     uint32_t screen = R32(kMagmaScreen);
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
     bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
-    if (!edges || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
+    if (!edges || !app::Widescreen() || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
     uint32_t esp = ctx.esp, util = ctx.ecx, args = esp + 4;
     float w = float(int(R32(util + 0x28))), unit = w / sw, side = w / 6;
     auto x = [&](int i) -> float& { return G<float>(args + i * 0x14); };
@@ -198,7 +199,7 @@ X86_EXTERN_FUNC(__imp__sub_0028EDCC);
 X86_FUNC(sub_0028EDCC) {
     uint32_t util = ctx.ecx;
     int w = int(R32(util + 0x28)), h = int(R32(util + 0x2C));
-    if (g_offset < 0 || w < 640 || h < 448) return __imp__sub_0028EDCC(ctx, base);
+    if (g_offset < 0 || w < 640 || h < 448 || !app::Widescreen()) return __imp__sub_0028EDCC(ctx, base);
     float& scale = G<float>(util + 0x74);
     float& move = G<float>(util + 0xA4);
     float s = scale, m = move;

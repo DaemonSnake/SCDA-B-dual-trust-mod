@@ -4,7 +4,7 @@ using namespace kernel;
 
 namespace {
 
-constexpr bool kUnlockElite = true;
+constexpr bool kUnlockElite = false;
 
 // CNewLoadSaveGame +0x20 the menus interaction; its +0xCC the profile, whose +0x1C3C is set by sub_001BBA56 when
 // the last solo mission is finished
