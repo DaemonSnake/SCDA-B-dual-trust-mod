@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <string>
@@ -37,6 +38,7 @@ struct Rule {
     uint32_t id;
     Mode mode;
     constexpr Rule(std::string_view name, Mode m) : id(Crc32(name)), mode(m) {}
+    constexpr Rule(uint32_t i, Mode m) : id(i), mode(m) {}
 };
 
 // Magma names pages and elements by crc32 of their name. The goggles' vignette, lens ring and frame lines
@@ -52,6 +54,7 @@ constexpr Rule kHud[] = {
 constexpr Rule kOverlay[] = {
     {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
     {"A_timer", Mode::Left},    {"A_Communications", Mode::Left},
+    {0x478A341D, Mode::Left},  // P_Sniper's instance of the comms area, its name not recovered
 };
 
 // half: an unlisted element sitting in one half of the page goes to that side
@@ -64,9 +67,10 @@ struct Page {
         : id(Crc32(name)), rules(r), others(m), half(h) {}
 };
 
-// pages not listed are menus: Fill
+// pages not listed are menus: Fill. The scope's side strips hold the outer ring's left and right arcs, which
+// stretching bulges: Extend repeats their outer edge instead
 constexpr Page kPages[] = {
-    {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay},
+    {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay, Mode::Extend},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
 };
 
@@ -77,6 +81,7 @@ float g_offset = kCentre;
 Mode g_mode = Mode::Centre;
 const Page* g_page = nullptr;
 bool g_hud_seen = false, g_decided = false;
+bool g_sniper_seen = false, g_scope = false;  // P_Sniper drawn this frame, and last frame
 
 // magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil
 void FlushCanvas(X86Context& ctx) {

@@ -34,6 +34,8 @@ void SetTitleScreen(bool title);
 void SetPauseMenu(bool pause);
 // an OPSAT page, which B closes: the pause key and the OPSAT key are B there
 void SetOpsat(bool opsat);
+// the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
+void SetQuickInventory(bool open);
 
 // What the player looks through, set by the game side each input update. In the EEV and the sticky camera
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.

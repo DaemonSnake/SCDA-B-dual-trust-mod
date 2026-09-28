@@ -40,6 +40,8 @@ constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668;
 // list: +0x3C up arrow, +0x50 down arrow, +0x7C up arrow rect, +0x8C down arrow rect, +0x9C selection
 constexpr uint32_t kListType = 10;
 constexpr uint32_t kHudLayer = 100;
+// held open in play and worked with the move keys: the mouse keeps looking around
+constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
 constexpr uint32_t kListHitTest = 0x2C1190, kListSelect = 0x2C2040, kPageSetFocus = 0x2C5370;
 
 struct Game {
@@ -116,6 +118,7 @@ bool Point(uint32_t& point) {
 // true while a menu takes the input
 bool Menu(Game& g) {
     uint32_t top = InputPage();
+    if (top && R32(top + 0x14) == kQuickInventory) return false;
     // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu
     uint32_t layer = top ? R32(top + 0x1C) : 0, focus = top ? R32(top + 0x24) : 0;
     uint32_t page = layer == kHudLayer || !focus ? 0 : top;
@@ -183,6 +186,7 @@ X86_FUNC(sub_0004B525) {
     uint32_t page = top ? R32(top + 0x14) : 0;
     input::SetTitleScreen(page == game::magma::Id("P_Start"));
     input::SetPauseMenu(page == game::magma::Id("P_Pause"));
+    input::SetQuickInventory(page == kQuickInventory);
     input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
     game::UpdateView(viewport);
     float dx, dy;

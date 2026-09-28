@@ -75,7 +75,7 @@ std::array<std::atomic<int>, 32> g_down_as{};
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
-std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false};
+std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false};
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
 template <size_t N>
@@ -273,7 +273,7 @@ void Keyboard(Pad& p) {
     if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    float v = camera || menu || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
+    float v = camera || menu || g_quick || View(g_view.load()) == View::Ledge ? 1.0f : kSpeeds[g_speed];
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -338,7 +338,8 @@ void OnRawInput(void* handle) {
     if (GetRawInputData(static_cast<HRAWINPUT>(handle), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) == UINT(-1) ||
         ri.header.dwType != RIM_TYPEMOUSE || !Active())
         return;
-    if (g_menu) ReleaseCursor();
+    // only the clip: settling would drop a held key that keeps a menu open (quick inventory)
+    if (g_menu) ClipCursor(nullptr);
     else Clip();
     const RAWMOUSE& m = ri.data.mouse;
     if (m.lLastX || m.lLastY || m.usButtonFlags) g_keyboard_ms = NowMs();
@@ -377,6 +378,8 @@ void SetTitleScreen(bool title) { g_title = title; }
 void SetPauseMenu(bool pause) { g_pause_menu = pause; }
 
 void SetOpsat(bool opsat) { g_opsat = opsat; }
+
+void SetQuickInventory(bool open) { g_quick = open; }
 
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
