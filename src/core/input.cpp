@@ -141,6 +141,8 @@ constexpr Target kActions[] = {
     {{"switch_camera", "SWITCH CAMERA", "5"}, 9, true},
     {{"opsat", "OPSAT", "F1"}, 13},
     {{"pause", "PAUSE", "Escape"}, 12},
+    {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
+    {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
 };
 constexpr size_t kCount = std::size(kActions);
 static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");

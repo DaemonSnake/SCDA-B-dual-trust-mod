@@ -16,6 +16,7 @@ using namespace kernel;
 namespace game {
 void UpdateView(uint32_t viewport);               // views.cpp
 void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
+void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
 }
 
 namespace {
@@ -201,6 +202,7 @@ X86_FUNC(sub_0004B525) {
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
     if (!net) game::WhistleKeys(ctx, viewport);
+    game::QuickSaveKeys(ctx, viewport, menu);
     game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

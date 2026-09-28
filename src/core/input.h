@@ -49,7 +49,7 @@ int TakeWheel();
 // the directions the move keys push port 0's stick (up, down, left, right as bits 0-3), whatever the walking speed
 uint32_t StickKeys();
 // keys the game side acts on itself, once per press in play
-enum class KeyEvent { None, Whistle, SidekickCommand };
+enum class KeyEvent { None, Whistle, SidekickCommand, QuickSave, QuickLoad };
 // A synced co-op session. Its lockstep carries the pad, not what the game side calls on its own, so there the
 // sidekick key holds the black button (co-op action) and whistle is off.
 void SetNetSession(bool net);
