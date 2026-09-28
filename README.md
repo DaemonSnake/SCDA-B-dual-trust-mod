@@ -24,8 +24,10 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **FPS Counter** - Shows the frame rate on screen.
 - 
 ### Graphics
-
-
+- **Shader Model** - Chooses between Shader Model 1.1, the console's look, and Shader Model 3.0, which turns on the Chaos Theory PC style features.
+- **HDR Rendering** - 
+- **Tone Mapping** - 
+- **HQ Soft Shadows** - 
 
 ### Mouse and Keyboard
 - **Keyboard Support** - Fully supports keyboard and mouse input.

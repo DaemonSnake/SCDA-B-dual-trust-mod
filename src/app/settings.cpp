@@ -50,6 +50,10 @@ void Load() {
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.shadow_resolution = std::min(t["shadow_resolution"].value_or(s.shadow_resolution), 8192u);
+    s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
+    s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
+    s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);
+    s.hq_soft_shadows = t["hq_soft_shadows"].value_or(s.hq_soft_shadows);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
@@ -72,6 +76,10 @@ void Save() {
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"shadow_resolution", int64_t(s.shadow_resolution)},
+                  {"shader_model", int64_t(s.shader_model)},
+                  {"hdr_rendering", s.hdr_rendering},
+                  {"tone_mapping", s.tone_mapping},
+                  {"hq_soft_shadows", s.hq_soft_shadows},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},

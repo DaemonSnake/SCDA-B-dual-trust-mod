@@ -44,6 +44,8 @@ cbuffer DC : register(b1) {
     float4 bumpmat[4];
     float4 bumplum[4];
     float4x4 wvp;
+    float4 hdr;
+    float4 spread[4];
 };
 )";
 
@@ -346,27 +348,40 @@ std::string TexFetch(const PixelKey& k, int i) {
     uint32_t dm = i == 0 ? 0 : (k.dot_mapping >> ((i - 1) * 4)) & 0xF;
     const char* dotmap[] = {"dot01", "dotd3d", "dotgl", "dotm11", "dot01", "dot01", "dot01", "dot01"};
     std::string norm = (t.rect ? F(" / texsize[%d].xy", i) : "") + F(" + texsize[%d].zw", i);
+    auto tex2d = [&](const std::string& uv) {
+        if (t.flags & kTexWide) return F("spreadtap(tex%d, smp%d, %s, spread[%d], %s)", i, i, uv.c_str(), i, (t.flags & kTexHdr) ? "hdr.y" : "1");
+        return F("tex%d.Sample(smp%d, %s)", i, i, uv.c_str());
+    };
+    // a normalization cube's colour is the direction itself, exact instead of 64 texels a face
+    auto cube = [&](const std::string& dir) {
+        if (t.flags & kTexNormCube)
+            return F("float4(normalize(%s) * 0.5 + 0.5, tex%d.Sample(smp%d, %s).a)", dir.c_str(), i, i, dir.c_str());
+        return F("tex%d.Sample(smp%d, %s)", i, i, dir.c_str());
+    };
     auto sample2 = [&](const std::string& uv) {
-        if (t.kind == kTex2D) return F("tex%d.Sample(smp%d, (%s)%s)", i, i, uv.c_str(), norm.c_str());
-        if (t.kind == kTexCube) return F("tex%d.Sample(smp%d, float3(%s, 1))", i, i, uv.c_str());
+        if (t.kind == kTex2D) return tex2d(F("(%s)%s", uv.c_str(), norm.c_str()));
+        if (t.kind == kTexCube) return cube("float3(" + uv + ", 1)");
         if (t.kind == kTex3D) return F("tex%d.Sample(smp%d, float3(%s, 0))", i, i, uv.c_str());
         return std::string("float4(0,0,0,1)");
     };
     auto sample3 = [&](const std::string& uvw) {
-        if (t.kind == kTex2D) return F("tex%d.Sample(smp%d, (%s).xy%s)", i, i, uvw.c_str(), norm.c_str());
-        if (t.kind == kTex3D || t.kind == kTexCube) return F("tex%d.Sample(smp%d, %s)", i, i, uvw.c_str());
+        if (t.kind == kTex2D) return tex2d(F("(%s).xy%s", uvw.c_str(), norm.c_str()));
+        if (t.kind == kTexCube) return cube(uvw);
+        if (t.kind == kTex3D) return F("tex%d.Sample(smp%d, %s)", i, i, uvw.c_str());
         return std::string("float4(0,0,0,1)");
     };
     std::string s;
     switch (mode) {
         case 0: return F("float4 t%d = float4(0,0,0,1);\n", i);
         case 1:  // project 2d
-            if (t.shadow) return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, 0, %d);\n", i, i, i, i, i, norm.c_str(), t.shadow);
+            if (t.shadow)
+                return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, 0, %d, i.pos.xy, texsize[%d].xy);\n", i, i, i, i, i,
+                         norm.c_str(), t.shadow, i);
             return F("float4 t%d = %s;\n", i, sample2(F("pT%d.xy / pT%d.w", i, i)).c_str());
         case 2:  // project 3d
             if (t.shadow)
-                return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d);\n", i, i, i, i, i,
-                         norm.c_str(), i, i, t.shadow);
+                return F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d, i.pos.xy, texsize[%d].xy);\n", i, i,
+                         i, i, i, norm.c_str(), i, i, t.shadow, i);
             return F("float4 t%d = %s;\n", i, sample3(F("pT%d.xyz / pT%d.w", i, i)).c_str());
         case 3: return F("float4 t%d = %s;\n", i, sample3(F("pT%d.xyz", i)).c_str());
         case 4: return F("float4 t%d = pT%d;\n", i, i);
@@ -417,10 +432,32 @@ float3 dot01(float4 c) { return c.rgb; }
 float3 dotd3d(float4 c) { return float3(sgn1(c.r), sgn1(c.g), sgn1(c.b)); }
 float3 dotgl(float4 c) { return float3(sgn2(c.r), sgn2(c.g), sgn2(c.b)); }
 float3 dotm11(float4 c) { return float3(sgn3(c.r), sgn3(c.g), sgn3(c.b)); }
-// the sampler compares, a linear filter blends the four results like the console does
-float4 shadow(Texture2D<float> t, SamplerComparisonState s, float2 uv, float z, int fmt) {
+// the sampler compares, a linear filter blends the four results like the console does; soft shadows take a Poisson
+// disc turned per pixel, the game's screen blur smooths the grain
+static const float2 kDisc[12] = {
+    float2(-0.326, -0.406), float2(-0.840, -0.074), float2(-0.696, 0.457), float2(-0.203, 0.621),
+    float2(0.962, -0.195),  float2(0.473, -0.480),  float2(0.519, 0.767),  float2(0.185, -0.893),
+    float2(0.507, 0.064),   float2(0.896, 0.412),   float2(-0.322, -0.933), float2(-0.792, -0.598)};
+float4 shadow(Texture2D<float> t, SamplerComparisonState s, float2 uv, float z, int fmt, float2 px, float2 size) {
     float mx = fmt == 2 ? 65535.0 : 16777215.0;
-    return t.SampleCmpLevelZero(s, uv, clamp(z, 0, mx) / mx).xxxx;
+    float r = clamp(z, 0, mx) / mx;
+    if (hdr.z <= 0) return t.SampleCmpLevelZero(s, uv, r).xxxx;
+    float a = 6.2831853 * frac(52.9829189 * frac(dot(px, float2(0.06711056, 0.00583715))));
+    float2 cs = float2(cos(a), sin(a)), st = hdr.z / size;
+    float sum = 0;
+    [unroll] for (int k = 0; k < 12; k++)
+        sum += t.SampleCmpLevelZero(s, uv + float2(kDisc[k].x * cs.x - kDisc[k].y * cs.y, kDisc[k].x * cs.y + kDisc[k].y * cs.x) * st, r);
+    return (sum / 12).xxxx;
+}
+float4 spreadtap(Texture2D t, SamplerState s, float2 uv, float4 w, float m) {
+    float4 c = 0;
+    int n = (int)w.z;
+    for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) {
+            float4 v = t.SampleLevel(s, uv + w.xy * (float2(x, y) - (n - 1) * 0.5), 0);
+            c += float4(saturate(v.rgb * m), v.a);
+        }
+    return c / (n * n);
 }
 void alphatest(float a) {
     int f = (int)misc.y;
@@ -649,7 +686,10 @@ std::string PixelHlsl(const PixelKey& k) {
     s += "    float4 pFog = float4(fogcolor.rgb, saturate(i.fog));\n";
     std::string body;
     if (k.programmable) {
-        for (int i = 0; i < 4; i++) body += TexFetch(k, i);
+        for (int i = 0; i < 4; i++) {
+            body += TexFetch(k, i);
+            if ((k.tex[i].flags & (kTexHdr | kTexWide)) == kTexHdr) body += F("t%d.rgb = saturate(t%d.rgb * hdr.y);\n", i, i);
+        }
         for (int i = 0; i < 4; i++) {
             uint32_t m = (k.tex_modes >> (i * 5)) & 0x1F;
             bool fetch = m && m != 4 && m != 5 && m != 0xA && m != 0x11;
@@ -693,11 +733,16 @@ std::string PixelHlsl(const PixelKey& k) {
             std::string norm = (t.rect ? F(" / texsize[%d].xy", i) : "") + F(" + texsize[%d].zw", i);
             std::string uv = F("pT%d.xy%s", i, norm.c_str());
             if (t.shadow)
-                body += F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d);\n", i, i, i, i, i,
-                          norm.c_str(), i, i, t.shadow);
+                body += F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d, i.pos.xy, texsize[%d].xy);\n", i, i,
+                          i, i, i, norm.c_str(), i, i, t.shadow, i);
+            else if (t.kind == kTex2D && (t.flags & kTexWide))
+                body += F("float4 t%d = spreadtap(tex%d, smp%d, %s, spread[%d], %s);\n", i, i, i, uv.c_str(), i, (t.flags & kTexHdr) ? "hdr.y" : "1");
             else if (t.kind == kTex2D) body += F("float4 t%d = tex%d.Sample(smp%d, %s);\n", i, i, i, uv.c_str());
+            else if (t.kind == kTexCube && (t.flags & kTexNormCube))
+                body += F("float4 t%d = float4(normalize(pT%d.xyz) * 0.5 + 0.5, tex%d.Sample(smp%d, pT%d.xyz).a);\n", i, i, i, i, i);
             else if (t.kind) body += F("float4 t%d = tex%d.Sample(smp%d, pT%d.xyz);\n", i, i, i, i);
             else body += F("float4 t%d = float4(1,1,1,1);\n", i);
+            if ((t.flags & (kTexHdr | kTexWide)) == kTexHdr) body += F("t%d.rgb = saturate(t%d.rgb * hdr.y);\n", i, i);
             if ((k.alphakill >> i) & 1) body += F("if (t%d.a == 0) discard;\n", i);
             const char* dst = f[8] == 5 ? "tmp" : "cur";
             std::string rgb = FfOp(f[0], FfArg(f[1], i, false), FfArg(f[2], i, false), FfArg(f[3], i, false), i, false);
@@ -707,7 +752,8 @@ std::string PixelHlsl(const PixelKey& k) {
         body += "cur.rgb = saturate(cur.rgb + v1.rgb);\n";
         body += "float4 outc = float4(lerp(pFog.rgb, cur.rgb, pFog.a), cur.a);\n";
     }
-    body += "alphatest(outc.a);\nreturn outc;\n}\n";
+    // HDR targets keep colour divided by their headroom, the console's per pass clamp stays
+    body += "alphatest(outc.a);\noutc.rgb = saturate(outc.rgb) * hdr.x;\nreturn outc;\n}\n";
     s += body;
     return s;
 }
