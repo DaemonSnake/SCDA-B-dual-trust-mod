@@ -164,6 +164,10 @@ const char* kVsEpilogue = R"(
     precise float4 p = oPos;
     p.w = awayzero(p.w);
     precise float4 q;
+    // full screen passes drawn half a pixel up-left for the console's integer pixel centers stop half a pixel short
+    // of the far edges on D3D12's, which upscaled leaves the last host columns and rows undrawn
+    if (abs(p.x - (surf.x - 0.5)) < 1e-3) p.x = surf.x;
+    if (abs(p.y - (surf.y - 0.5)) < 1e-3) p.y = surf.y;
     q.x = p.x * 2 / surf.x - 1;
     q.y = 1 - p.y * 2 / surf.y;
     q.z = p.z * surf.z;
