@@ -37,6 +37,7 @@ constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"GAME DEFAULT", "2x", "4x", "8x", "16x"};
+constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kFpsCaps[] = {0, 30, 60, 75, 90, 120, 144, 165, 240, 360};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
@@ -211,6 +212,14 @@ void DrawRows() {
     if (int step = OptionRow("ANISOTROPIC FILTERING", kAnisoNames[NearestIndex(kAnisoValues, 5, s.aniso)])) {
         StepTable(kAnisoValues, s.aniso, step);
         Changed(false);
+    }
+    {
+        uint32_t size = kShadowSizes[NearestIndex(kShadowSizes, int(std::size(kShadowSizes)), s.shadow_resolution)];
+        std::snprintf(text, sizeof(text), size == 512 ? "%u (CONSOLE)" : "%u", size);
+        if (int step = OptionRow("SHADOW RESOLUTION", size ? text : "AUTO")) {
+            StepTable(kShadowSizes, s.shadow_resolution, step);
+            Changed(false);
+        }
     }
     Section("GAME");
     if (OptionRow("SKIP INTROS", OnOff(s.skip_intros))) {

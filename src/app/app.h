@@ -18,6 +18,7 @@ struct Settings {
     bool fps_counter = false;
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
+    uint32_t shadow_resolution = 0;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot

@@ -48,6 +48,7 @@ void Load() {
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
+    s.shadow_resolution = std::min(t["shadow_resolution"].value_or(s.shadow_resolution), 8192u);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
@@ -69,6 +70,7 @@ void Save() {
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
+                  {"shadow_resolution", int64_t(s.shadow_resolution)},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},

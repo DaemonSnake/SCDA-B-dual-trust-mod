@@ -44,6 +44,9 @@ constexpr uint64_t kUploadSize = 64ull << 20;
 constexpr uint32_t kSrvCount = 3 * 32768;
 constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024, kDsvCount = 256;
+constexpr uint32_t kConsoleShadows = 512;  // the shadow resolution setting that keeps the console's look
+constexpr uint64_t kSoftKey = 1ull << 40;    // target key bit of the soft shadow's own copy of the blur chain
+constexpr uint32_t kTexcoordConst = 116;     // c[116 + stage]: the chain passes' texture coordinate scale, offset
 
 const char* kBlitHlsl = R"(
 cbuffer B : register(b1) { float4 uvrect; float4 opts; };
@@ -253,6 +256,7 @@ private:
     bool BindTargets(const State& s);
     ID3D12Resource* BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& srv);
     bool tex_rt_[4] = {};  // stage samples a render target
+    bool tex_soft_[4] = {};  // stage samples the soft shadow's copy of the chain
     uint32_t Samplers(const State& s, const TexInfo info[4]);
     ID3DBlob* Compile(const std::string& src, const char* entry, const char* profile, uint64_t& hash);
     ID3D12PipelineState* Pipeline(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps);
@@ -307,6 +311,18 @@ private:
     Target* bound_ds_ = nullptr;
     uint32_t guest_w_ = 640, guest_h_ = 480, bb_w_ = 0, bb_h_ = 0;
     float scale_ = 1.0f;
+    uint32_t shadow_res_ = 0;  // app::Settings::shadow_resolution the targets were made for
+    // As in Chaos Theory, a shadow map finer than the render scale's own gets a finer soft shadow: its blur chain
+    // runs in copies soft_k_ times the scene's scale, its taps kept in their texels, so the blur narrows. The screen
+    // blur that shares the chain's memory keeps the game's targets.
+    float soft_k_ = 1.0f;       // 1 is off
+    bool soft_ = false;         // the draw being made is a soft shadow chain pass
+    bool soft_pass_ = false;    // the shadow map was sampled: the chain passes follow
+    bool soft_seen_ = false;    // a chain pass was made, the next draw outside it lays the result back
+    std::unordered_set<uint32_t> soft_current_;  // chain memory whose latest pixels are in the copies
+    void SetSoftScale();
+    bool InBlur(uint32_t va) const;
+    bool SoftStep(const State& s);
     uint64_t draws_ = 0;
     bool tearing_ = false;
     uint64_t presents_ = 0;
@@ -433,6 +449,8 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
                         ui_heap_->GetCPUDescriptorHandleForHeapStart(), ui_heap_->GetGPUDescriptorHandleForHeapStart());
 
     scale_ = app::RenderScale(guest_h_);
+    shadow_res_ = app::Get().shadow_resolution;
+    SetSoftScale();
     Begin();
     LOGI("d3d12: %ux%u guest, %ux%u window, render scale %.3f", width, height, bb_w_, bb_h_, scale_);
     return true;
@@ -514,12 +532,19 @@ void D3D12Backend::Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES& cur, D3D
 
 Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
     if (!s.header) return nullptr;
+    // the shadow map's colour surface has no memory and colour writes off: depth alone is bound
+    const ShadowTargets& sh = g_shadow;
+    bool shadow = sh.blur_hi && s.data == (depth ? sh.map : sh.color);
+    if (shadow && !depth) return nullptr;
+    // the edge blur reads the scene: it follows the screen, unless the console's shadows are asked for
+    bool blur = sh.blur_hi && !depth && shadow_res_ != kConsoleShadows && s.data >= sh.blur_lo && s.data < sh.blur_hi;
+    bool soft = blur && soft_;
     uint32_t data = mem::VirtualFromPhysical(s.data);
-    uint64_t key = uint64_t(data) << 1 | (depth ? 1 : 0);
+    uint64_t key = (uint64_t(data) << 1 | (depth ? 1 : 0)) | (soft ? kSoftKey : 0);
     uint32_t gw, gh;
     SurfaceSize(s, gw, gh);
     TextureDesc sd;
-    bool native = !depth && Describe(s.header, sd) && Format(sd.format).swizzled;
+    bool native = !depth && !blur && Describe(s.header, sd) && Format(sd.format).swizzled;
     auto it = targets_.find(key);
     if (it != targets_.end() && it->second.gw == gw && it->second.gh == gh && it->second.native == native) return &it->second;
     if (!create) return nullptr;
@@ -536,9 +561,10 @@ Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
     t.native = native;
     t.gw = gw;
     t.gh = gh;
-    float sc = native ? 1.0f : scale_;
+    float sc = shadow && shadow_res_ ? float(shadow_res_) / gw : native ? 1.0f : soft ? scale_ * soft_k_ : scale_;
     t.w = std::max(1u, uint32_t(std::lround(gw * sc)));
     t.h = std::max(1u, uint32_t(std::lround(gh * sc)));
+    if (shadow) LOGI("d3d12: shadow map %ux%u", t.w, t.h);
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC td{};
     td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -583,6 +609,41 @@ Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
     t.sig = MemSig(data, t.bytes);
     auto& ref = targets_[key] = std::move(t);
     return &ref;
+}
+
+void D3D12Backend::SetSoftScale() {
+    float scene = kConsoleShadows * scale_;  // the map at AUTO
+    soft_k_ = shadow_res_ && shadow_res_ != kConsoleShadows ? std::max(1.0f, float(shadow_res_) / scene) : 1.0f;
+    soft_pass_ = soft_seen_ = false;
+    LOGI("d3d12: soft shadow chain x%.2f", soft_k_);
+}
+
+bool D3D12Backend::InBlur(uint32_t va) const {
+    const ShadowTargets& sh = g_shadow;
+    return sh.blur_hi && va >= mem::VirtualFromPhysical(sh.blur_lo) && va < mem::VirtualFromPhysical(sh.blur_hi);
+}
+
+// the game samples the shadow map for each light, then at once blurs the result down the chain and back up, then
+// lays it back over the screen; that pass is part of it too
+bool D3D12Backend::SoftStep(const State& s) {
+    if (soft_k_ <= 1.0f) return false;
+    uint32_t map = mem::VirtualFromPhysical(g_shadow.map);
+    for (size_t i = 0; i < 4; i++) {
+        TextureDesc d;
+        if (s.textures[i] && Describe(s.textures[i], d) && d.data == map && Format(d.format).depth) {
+            soft_pass_ = true;
+            soft_seen_ = false;
+            return false;
+        }
+    }
+    if (!soft_pass_) return false;
+    if (s.rt.header && InBlur(mem::VirtualFromPhysical(s.rt.data))) {
+        soft_seen_ = true;
+        return true;
+    }
+    // without a chain pass straight after the lights, the blur is off
+    soft_pass_ = false;
+    return soft_seen_;
 }
 
 bool D3D12Backend::BindTargets(const State& s) {
@@ -792,6 +853,7 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
     info = {};
     sv = {};
     tex_rt_[stage] = false;
+    tex_soft_[stage] = false;
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     sv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -803,7 +865,8 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
     info.rect = d.linear;
 
     // rendered by the GPU: sample the target itself; DXT data loaded over a target's memory is not it
-    auto tit = targets_.find(uint64_t(d.data) << 1 | (fi.depth ? 1 : 0));
+    tex_soft_[stage] = !fi.depth && soft_current_.count(d.data);
+    auto tit = targets_.find((uint64_t(d.data) << 1 | (fi.depth ? 1 : 0)) | (tex_soft_[stage] ? kSoftKey : 0));
     if (tit != targets_.end() && !d.cube && d.depth == 1 && !fi.compressed) {
         Target& t = tit->second;
         if (&t == bound_ds_) return nullptr;
@@ -986,9 +1049,18 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     g_splash &= g_in_splash;
     draws_++;
     if (cap_) CapStep(s.rt);
+    struct SoftEnd {
+        bool& soft;
+        ~SoftEnd() { soft = false; }
+    } soft_end{soft_};
+    soft_ = SoftStep(s);
     Assembled a;
     if (!Assemble(s, prim, start, count, indices, a)) return;
     if (!BindTargets(s)) return;
+    if (bound_rt_ && InBlur(bound_rt_->data)) {
+        if (soft_) soft_current_.insert(bound_rt_->data);
+        else soft_current_.erase(bound_rt_->data);
+    }
 
     // shaders
     bool prog = (s.vs_handle & 1) && s.vs;
@@ -1058,10 +1130,11 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             k.szfail = sm(kMStencilZFail);
             k.spass = sm(kMStencilPass);
         }
-        // polygon offset: bias in depth buffer units, the target is always 24 bit
+        // polygon offset: bias in depth buffer units, the target is always 24 bit; the slope is per console pixel,
+        // and an upscaled target's pixels are smaller
         if (a.topology == Topology::Triangles && sm(kMSolidOffsetEnable)) {
             k.zbias = int32_t(std::lround(Bits(sm(kMDepthOffset)) * 16777215.0f / s.zscale));
-            k.zslope = Bits(sm(kMSlopeScale));
+            k.zslope = Bits(sm(kMSlopeScale)) * (bound_ds_ ? float(bound_ds_->w) / bound_ds_->gw : 1.0f);
         }
     }
     uint32_t cull = s.rs[kRsCullMode];
@@ -1075,6 +1148,17 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // constants
     Alloc vc = Upload(sizeof(s.vsc), 256);
     std::memcpy(vc.cpu, s.vsc.data(), sizeof(s.vsc));
+    if (soft_) {
+        // taps are offset in texels of the chain's console size, the copy's texels are soft_k_ times smaller
+        auto* v = reinterpret_cast<float(*)[4]>(vc.cpu);
+        for (int i = 0; i < 4; i++) {
+            if (!tex_soft_[i]) continue;
+            float* t = v[kTexcoordConst + i];
+            float bz = t[0] < 0 ? -t[0] : 0, bw = t[1] < 0 ? -t[1] : 0;
+            t[2] = bz + (t[2] - bz) / soft_k_;
+            t[3] = bw + (t[3] - bw) / soft_k_;
+        }
+    }
     Alloc dc = Upload(sizeof(DrawConstants), 256);
     DrawConstants c{};
     uint32_t gw, gh;
@@ -1107,8 +1191,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             c.texsize[i][1] = float(d.height);
             // the console samples pixels at integer positions, D3D12 half a pixel on: targets are read half a texel back
             if (tex_rt_[i]) {
-                c.texsize[i][2] = -0.5f / float(d.width);
-                c.texsize[i][3] = -0.5f / float(d.height);
+                float k = tex_soft_[i] ? soft_k_ : 1.0f;
+                c.texsize[i][2] = -0.5f / (float(d.width) * k);
+                c.texsize[i][3] = -0.5f / (float(d.height) * k);
             }
         }
         const auto& t = s.tss[size_t(i)];
@@ -1514,11 +1599,15 @@ void D3D12Backend::Present(const Surface& front) {
     app::Pace();
 
     float want = app::RenderScale(guest_h_);
-    if (std::fabs(want - scale_) > 1e-4f) {
+    uint32_t shadows = app::Get().shadow_resolution;
+    if (std::fabs(want - scale_) > 1e-4f || shadows != shadow_res_) {
         Flush();
         for (auto& [key, tg] : targets_) (tg.depth ? free_dsv_ : free_rtv_).push_back(tg.view);
         targets_.clear();
+        soft_current_.clear();
         scale_ = want;
+        shadow_res_ = shadows;
+        SetSoftScale();
         bound_rt_ = bound_ds_ = nullptr;
     }
 }
