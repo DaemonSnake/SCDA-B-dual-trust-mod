@@ -5,13 +5,13 @@
 
 #include "xdk/hle.h"
 
-X86_FUNC(sub_0036872C) {  // _CIacos
+X86_FUNC(GUEST(_CIacos)) {
     (void)base;
     X87_ST(0) = std::acos(X87_ST(0));
     ctx.esp += 4;
 }
 
-X86_FUNC(sub_003687F8) {  // _CIasin
+X86_FUNC(GUEST(_CIasin)) {
     (void)base;
     X87_ST(0) = std::asin(X87_ST(0));
     ctx.esp += 4;

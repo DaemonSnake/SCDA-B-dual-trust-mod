@@ -22,26 +22,6 @@ target_include_directories(xbe_recomp PRIVATE src tools/recomp)
 target_compile_definitions(xbe_recomp PRIVATE _CRT_SECURE_NO_WARNINGS)
 target_link_libraries(xbe_recomp PRIVATE Zydis tomlplusplus::tomlplusplus)
 
-# default.xbe to generated/, the partition count is set in config/scda_v2.toml
-set(GEN ${CMAKE_CURRENT_SOURCE_DIR}/generated)
-set(GEN_SOURCES ${GEN}/x86_func_mapping.cpp)
-foreach(i RANGE 127)
-    list(APPEND GEN_SOURCES ${GEN}/x86_recomp.${i}.cpp)
-endforeach()
-add_custom_command(
-    OUTPUT ${GEN}/codegen.stamp
-    BYPRODUCTS ${GEN_SOURCES} ${GEN}/x86_recomp_shared.h
-    COMMAND xbe_recomp config/scda_v2.toml
-    COMMAND ${CMAKE_COMMAND} -E touch ${GEN}/codegen.stamp
-    DEPENDS xbe_recomp ${CMAKE_CURRENT_SOURCE_DIR}/config/scda_v2.toml ${CMAKE_CURRENT_SOURCE_DIR}/config/xdk_symbols.toml
-            ${CMAKE_CURRENT_SOURCE_DIR}/assets/default.xbe
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Recompiling default.xbe"
-    VERBATIM)
-add_custom_target(recompile_xbe DEPENDS ${GEN}/codegen.stamp)
-set_source_files_properties(${GEN_SOURCES} PROPERTIES GENERATED TRUE
-    COMPILE_OPTIONS "-O2;-fno-strict-aliasing;-Wno-unused-label;-Wno-parentheses-equality;-Wno-unused-variable")
-
 set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -51,13 +31,41 @@ set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/backends/imgui_impl_dx12.cpp)
 
 file(GLOB HOST_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
-add_executable(scda WIN32 ${HOST_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES})
-add_dependencies(scda recompile_xbe)
-set_target_properties(scda PROPERTIES OUTPUT_NAME SCDA)
-target_include_directories(scda PRIVATE src ${GEN})
-target_include_directories(scda SYSTEM PRIVATE ${imgui_SOURCE_DIR})
-target_compile_options(scda PRIVATE -fno-strict-aliasing)
-target_compile_definitions(scda PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
-target_link_libraries(scda PRIVATE tomlplusplus::tomlplusplus d3d12 dxgi dxguid d3dcompiler xaudio2 xinput ole32 dbghelp winmm dwmapi ws2_32)
-# lld keeps the recompiled weak functions overridable by the host ones
-target_link_options(scda PRIVATE -fuse-ld=lld -g)
+list(FILTER HOST_SOURCES EXCLUDE REGEX "/src/(game|versus)/")
+file(GLOB RECOMP_CONFIGS CONFIGURE_DEPENDS config/*.toml)
+
+# One executable per recompiled image: the image's code from its config (partitions as that config sets them),
+# the shared host, and the game hooks only that image has.
+function(scda_image target xbe config partitions game_dir)
+    set(GEN ${CMAKE_CURRENT_SOURCE_DIR}/generated/${game_dir})
+    set(GEN_SOURCES ${GEN}/x86_func_mapping.cpp)
+    math(EXPR last "${partitions} - 1")
+    foreach(i RANGE ${last})
+        list(APPEND GEN_SOURCES ${GEN}/x86_recomp.${i}.cpp)
+    endforeach()
+    add_custom_command(
+        OUTPUT ${GEN}/codegen.stamp
+        BYPRODUCTS ${GEN_SOURCES} ${GEN}/x86_recomp_shared.h ${GEN}/image_symbols.h
+        COMMAND xbe_recomp config/${config}
+        COMMAND ${CMAKE_COMMAND} -E touch ${GEN}/codegen.stamp
+        DEPENDS xbe_recomp ${RECOMP_CONFIGS} ${CMAKE_CURRENT_SOURCE_DIR}/assets/${xbe}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Recompiling ${xbe}"
+        VERBATIM)
+    add_custom_target(recompile_${target} DEPENDS ${GEN}/codegen.stamp)
+    set_source_files_properties(${GEN_SOURCES} PROPERTIES GENERATED TRUE
+        COMPILE_OPTIONS "-O2;-fno-strict-aliasing;-Wno-unused-label;-Wno-parentheses-equality;-Wno-unused-variable")
+    file(GLOB GAME_SOURCES CONFIGURE_DEPENDS src/${game_dir}/*.cpp)
+    add_executable(${target} WIN32 ${HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES})
+    add_dependencies(${target} recompile_${target})
+    target_include_directories(${target} PRIVATE src ${GEN})
+    target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+    target_compile_options(${target} PRIVATE -fno-strict-aliasing)
+    target_compile_definitions(${target} PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
+    target_link_libraries(${target} PRIVATE tomlplusplus::tomlplusplus d3d12 dxgi dxguid d3dcompiler xaudio2 xinput ole32 dbghelp winmm dwmapi ws2_32)
+    # lld keeps the recompiled weak functions overridable by the host ones
+    target_link_options(${target} PRIVATE -fuse-ld=lld -g)
+endfunction()
+
+scda_image(SCDAOffline default.xbe scda_v2.toml 128 game)  # story and co-op
+scda_image(SCDAOnline sc4_adv.xbe sc4_adv.toml 64 versus)   # versus

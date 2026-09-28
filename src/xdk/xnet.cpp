@@ -336,11 +336,11 @@ void Random(uint32_t va, uint32_t n) {
 
 }  // namespace
 
-HLE_STDCALL(00465FE2, XNetStartup, 1) {
+HLE_STDCALL(XNetStartup, 1) {
     Init();
     return 0;
 }
-HLE_STDCALL(00465FF9, WSAStartup, 2) {
+HLE_STDCALL(WSAStartup, 2) {
     Init();
     if (a[1]) {
         std::memset(HostPtr(a[1]), 0, 400);
@@ -348,34 +348,34 @@ HLE_STDCALL(00465FF9, WSAStartup, 2) {
     }
     return 0;
 }
-HLE_STDCALL(00050488, XNetGetEthernetLinkStatus, 0) { return kLinkUp; }
-HLE_STDCALL(00478F54, XOnlineStartup, 1) { return 0; }
-HLE_STDCALL(00479051, XOnlineCleanup, 0) { return 0; }
-HLE_STDCALL(00473143, WSAGetLastError, 0) { return t_error; }
+HLE_STDCALL(XNetGetEthernetLinkStatus, 0) { return kLinkUp; }
+HLE_STDCALL(XOnlineStartup, 1) { return 0; }
+HLE_STDCALL(XOnlineCleanup, 0) { return 0; }
+HLE_STDCALL(WSAGetLastError, 0) { return t_error; }
 
-HLE_STDCALL(00465B8F, XNetRandom, 2) {
+HLE_STDCALL(XNetRandom, 2) {
     Random(a[0], a[1]);
     return 0;
 }
-HLE_STDCALL(00465B9A, XNetCreateKey, 2) {
+HLE_STDCALL(XNetCreateKey, 2) {
     Random(a[0], 8);
     Random(a[1], 16);
     kernel::G<uint8_t>(a[0]) &= 0x0F;
     return 0;
 }
-HLE_STDCALL(00465BA5, XNetRegisterKey, 2) {
+HLE_STDCALL(XNetRegisterKey, 2) {
     std::lock_guard<std::mutex> lock(g_lock);
     std::memcpy(g_kid.data(), HostPtr(a[0]), 8);
     return 0;
 }
-HLE_STDCALL(00465BB0, XNetUnregisterKey, 1) { return 0; }
+HLE_STDCALL(XNetUnregisterKey, 1) { return 0; }
 
-HLE_STDCALL(00465C2A, XNetGetTitleXnAddr, 1) {
+HLE_STDCALL(XNetGetTitleXnAddr, 1) {
     Init();
     OwnXnAddr(static_cast<uint8_t*>(HostPtr(a[0])));
     return kXnAddrEthernet;
 }
-HLE_STDCALL(00465BBB, XNetXnAddrToInAddr, 3) {
+HLE_STDCALL(XNetXnAddrToInAddr, 3) {
     uint32_t ina = R32(a[0]);
     if (!ina) return WSAEINVAL;
     if (ina != g_local && Private(ina) && !g_instance) {
@@ -390,7 +390,7 @@ HLE_STDCALL(00465BBB, XNetXnAddrToInAddr, 3) {
     W32(a[2], ina);
     return 0;
 }
-HLE_STDCALL(00465DAF, XNetInAddrToXnAddr, 3) {
+HLE_STDCALL(XNetInAddrToXnAddr, 3) {
     uint32_t ina = a[0];
     uint8_t x[kXnAddrSize];
     std::lock_guard<std::mutex> lock(g_lock);
@@ -408,7 +408,7 @@ HLE_STDCALL(00465DAF, XNetInAddrToXnAddr, 3) {
     return 0;
 }
 
-HLE_STDCALL(00465BD2, XNetDnsLookup, 3) {
+HLE_STDCALL(XNetDnsLookup, 3) {
     std::string name = kernel::ReadCString(a[0], 256);
     uint32_t dns = mem::AllocSystem(kXnDnsSize);
     std::memset(HostPtr(dns), 0, kXnDnsSize);
@@ -428,19 +428,12 @@ HLE_STDCALL(00465BD2, XNetDnsLookup, 3) {
     Signal(a[1]);
     return 0;
 }
-HLE_STDCALL(00465BE9, XNetDnsRelease, 1) {
+HLE_STDCALL(XNetDnsRelease, 1) {
     if (a[0]) mem::FreeSystem(a[0]);
     return 0;
 }
 
-HLE_STDCALL(00465C35, socket, 3) {
-    Init();
-    uint32_t af = a[0], type = a[1];  // the protocol: UDP, or VDP, which is UDP between two copies of this
-    if (af != AF_INET) return Fail(WSAEAFNOSUPPORT);
-    bool udp = type == SOCK_DGRAM;
-    if (!udp && type != SOCK_STREAM) return Fail(WSAESOCKTNOSUPPORT);
-    SOCKET s = ::socket(AF_INET, int(type), udp ? IPPROTO_UDP : IPPROTO_TCP);
-    if (s == INVALID_SOCKET) return Fail(HostError());
+static uint32_t AddSocket(SOCKET s, bool udp) {
     u_long on = 1;
     ::ioctlsocket(s, FIONBIO, &on);
     if (udp) {
@@ -454,7 +447,18 @@ HLE_STDCALL(00465C35, socket, 3) {
     g_sockets[id] = {s, udp, false, 0};
     return id;
 }
-HLE_STDCALL(00465C40, closesocket, 1) {
+
+HLE_STDCALL(socket, 3) {
+    Init();
+    uint32_t af = a[0], type = a[1];  // the protocol: UDP, or VDP, which is UDP between two copies of this
+    if (af != AF_INET) return Fail(WSAEAFNOSUPPORT);
+    bool udp = type == SOCK_DGRAM;
+    if (!udp && type != SOCK_STREAM) return Fail(WSAESOCKTNOSUPPORT);
+    SOCKET s = ::socket(AF_INET, int(type), udp ? IPPROTO_UDP : IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return Fail(HostError());
+    return AddSocket(s, udp);
+}
+HLE_STDCALL(closesocket, 1) {
     std::lock_guard<std::mutex> lock(g_lock);
     auto it = g_sockets.find(a[0]);
     if (it == g_sockets.end()) return Fail(WSAENOTSOCK);
@@ -468,12 +472,12 @@ HLE_STDCALL(00465C40, closesocket, 1) {
     g_sockets.erase(it);
     return 0;
 }
-HLE_STDCALL(00465C4B, shutdown, 2) {
+HLE_STDCALL(shutdown, 2) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     return ::shutdown(k.s, int(a[1])) == 0 ? 0 : Fail(HostError());
 }
-HLE_STDCALL(00465C56, ioctlsocket, 3) {
+HLE_STDCALL(ioctlsocket, 3) {
     std::lock_guard<std::mutex> lock(g_lock);
     auto it = g_sockets.find(a[0]);
     if (it == g_sockets.end()) return Fail(WSAENOTSOCK);
@@ -486,14 +490,22 @@ HLE_STDCALL(00465C56, ioctlsocket, 3) {
     W32(a[2], uint32_t(v));
     return 0;
 }
-HLE_STDCALL(00465C61, setsockopt, 5) {
+HLE_STDCALL(setsockopt, 5) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     if (::setsockopt(k.s, int(a[1]), int(a[2]), static_cast<const char*>(HostPtr(a[3])), int(a[4])) == 0) return 0;
     LOG_FIRST(10, "xnet: setsockopt %X level %X option %X ignored (%d)", a[0], a[1], a[2], WSAGetLastError());
     return 0;
 }
-HLE_STDCALL(00465C70, getsockname, 3) {
+HLE_STDCALL(getsockopt, 5) {
+    Socket k = Find(a[0]);
+    if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
+    int len = int(R32(a[4]));
+    if (::getsockopt(k.s, int(a[1]), int(a[2]), static_cast<char*>(HostPtr(a[3])), &len) != 0) return Fail(WSAGetLastError());
+    W32(a[4], uint32_t(len));
+    return 0;
+}
+HLE_STDCALL(getsockname, 3) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     sockaddr_in me{};
@@ -503,7 +515,7 @@ HLE_STDCALL(00465C70, getsockname, 3) {
     W32(a[2], sizeof(me));
     return 0;
 }
-HLE_STDCALL(00465C7B, bind, 3) {
+HLE_STDCALL(bind, 3) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     sockaddr_in at = GuestAddr(a[1]);
@@ -521,7 +533,7 @@ HLE_STDCALL(00465C7B, bind, 3) {
     if (auto it = g_sockets.find(a[0]); it != g_sockets.end()) it->second.port = me.sin_port;
     return 0;
 }
-HLE_STDCALL(00465C86, connect, 3) {
+HLE_STDCALL(connect, 3) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     sockaddr_in to = GuestAddr(a[1]);
@@ -533,7 +545,30 @@ HLE_STDCALL(00465C86, connect, 3) {
     ::getsockopt(k.s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
     return err ? Fail(err) : 0;
 }
-HLE_STDCALL(00465C91, select, 5) {
+HLE_STDCALL(listen, 2) {
+    Socket k = Find(a[0]);
+    if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
+    return ::listen(k.s, int(a[1])) == 0 ? 0 : Fail(WSAGetLastError());
+}
+HLE_STDCALL(accept, 3) {
+    for (;;) {
+        Socket k = Find(a[0]);
+        if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
+        sockaddr_in from{};
+        int len = sizeof(from);
+        SOCKET s = ::accept(k.s, reinterpret_cast<sockaddr*>(&from), &len);
+        if (s != INVALID_SOCKET) {
+            if (a[1]) std::memcpy(HostPtr(a[1]), &from, sizeof(from));
+            if (a[2]) W32(a[2], sizeof(from));
+            LOGI("xnet: accept %X from %s", a[0], Addr(from).c_str());
+            return AddSocket(s, false);
+        }
+        int e = WSAGetLastError();
+        if (e != WSAEWOULDBLOCK || k.nonblocking) return Fail(e);
+        Wait(k.s, false, 50);
+    }
+}
+HLE_STDCALL(select, 5) {
     uint32_t guest[3] = {a[1], a[2], a[3]};
     fd_set host[3];
     std::vector<std::pair<uint32_t, SOCKET>> used[3];
@@ -575,7 +610,7 @@ HLE_STDCALL(00465C91, select, 5) {
     return uint32_t(r);
 }
 
-HLE_STDCALL(00465CC9, recvfrom, 6) {
+HLE_STDCALL(recvfrom, 6) {
     std::vector<Span> spans{{a[1], a[2]}};
     for (;;) {
         Socket k = Find(a[0]);
@@ -591,7 +626,30 @@ HLE_STDCALL(00465CC9, recvfrom, 6) {
         Wait(k.s, false, 50);
     }
 }
-HLE_STDCALL(00465CF6, sendto, 6) {
+// stream sockets; a reset connection is an error here, not a stale port unreachable reply
+HLE_STDCALL(recv, 4) {
+    for (;;) {
+        Socket k = Find(a[0]);
+        if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
+        int n = ::recv(k.s, static_cast<char*>(HostPtr(a[1])), int(a[2]), int(a[3]));
+        if (n >= 0) return uint32_t(n);
+        int e = WSAGetLastError();
+        if (e != WSAEWOULDBLOCK || k.nonblocking) return Fail(e);
+        Wait(k.s, false, 50);
+    }
+}
+HLE_STDCALL(send, 4) {
+    for (;;) {
+        Socket k = Find(a[0]);
+        if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
+        int n = ::send(k.s, static_cast<const char*>(HostPtr(a[1])), int(a[2]), int(a[3]));
+        if (n >= 0) return uint32_t(n);
+        int e = WSAGetLastError();
+        if (e != WSAEWOULDBLOCK || k.nonblocking) return Fail(e);
+        Wait(k.s, true, 50);
+    }
+}
+HLE_STDCALL(sendto, 6) {
     Socket k = Find(a[0]);
     if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
     sockaddr_in to{};
@@ -645,12 +703,12 @@ uint32_t RecvOverlapped(uint32_t sock, uint32_t bufs, uint32_t count, uint32_t r
 
 }  // namespace
 
-HLE_STDCALL(00465CD8, WSARecvFrom, 9) { return RecvOverlapped(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
-HLE_STDCALL(00465CBA, WSARecv, 7) { return RecvOverlapped(a[0], a[1], a[2], a[3], a[4], 0, 0, a[5]); }
-HLE_STDCALL(00465D05, WSASendTo, 9) { return SendOverlapped(a[0], a[1], a[2], a[3], a[5], a[7]); }
-HLE_STDCALL(00465CE7, WSASend, 7) { return SendOverlapped(a[0], a[1], a[2], a[3], 0, a[5]); }
+HLE_STDCALL(WSARecvFrom, 9) { return RecvOverlapped(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
+HLE_STDCALL(WSARecv, 7) { return RecvOverlapped(a[0], a[1], a[2], a[3], a[4], 0, 0, a[5]); }
+HLE_STDCALL(WSASendTo, 9) { return SendOverlapped(a[0], a[1], a[2], a[3], a[5], a[7]); }
+HLE_STDCALL(WSASend, 7) { return SendOverlapped(a[0], a[1], a[2], a[3], 0, a[5]); }
 
-HLE_STDCALL(00465CA0, WSAGetOverlappedResult, 5) {
+HLE_STDCALL(WSAGetOverlappedResult, 5) {
     uint32_t ovl = a[1];
     for (;;) {
         {
@@ -679,7 +737,7 @@ HLE_STDCALL(00465CA0, WSAGetOverlappedResult, 5) {
         Sleep(1);
     }
 }
-HLE_STDCALL(00465CAF, WSACancelOverlappedIO, 1) {
+HLE_STDCALL(WSACancelOverlappedIO, 1) {
     std::lock_guard<std::mutex> lock(g_lock);
     for (size_t i = 0; i < g_pending.size();) {
         if (g_pending[i].sock == a[0]) {

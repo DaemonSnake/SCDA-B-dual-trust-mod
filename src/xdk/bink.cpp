@@ -7,29 +7,29 @@
 
 using namespace kernel;
 
-X86_EXTERN_FUNC(__imp__sub_004BABE0);
-X86_FUNC(sub_004BABE0) {
+X86_EXTERN_FUNC(GUEST_ORIG(BinkGetSummary));
+X86_FUNC(GUEST(BinkGetSummary)) {
     uint32_t bink = R32(ctx.esp + 4);
     if (bink) {
         uint64_t scaled = uint64_t(R32(bink + 0x134)) * 1000;
         uint32_t time = R32(bink + 0x13C);
         if (scaled >> 32 > time) W32(bink + 0x13C, uint32_t(scaled >> 32));
     }
-    __imp__sub_004BABE0(ctx, base);
+    GUEST_ORIG(BinkGetSummary)(ctx, base);
 }
 
 // Movies step one frame per game frame, timed by the console's 30 Hz present. Above 30 fps a frame is decoded
 // and advanced only once BinkWait, which follows the movie's own rate and audio, says it is due.
 namespace {
 
-constexpr uint32_t kBinkWait = 0x004BA920;
+constexpr uint32_t kBinkWait = SYM(BinkWait);
 std::mutex g_held_lock;
 std::unordered_set<uint32_t> g_held;  // movies whose frame was not decoded this game frame
 
 }  // namespace
 
-X86_EXTERN_FUNC(__imp__sub_004BB1B0);
-X86_FUNC(sub_004BB1B0) {  // BinkDoFrame
+X86_EXTERN_FUNC(GUEST_ORIG(BinkDoFrame));
+X86_FUNC(GUEST(BinkDoFrame)) {
     uint32_t bink = R32(ctx.esp + 4);
     if (bink && CallGuest(ctx, kBinkWait, {bink})) {
         std::lock_guard<std::mutex> lock(g_held_lock);
@@ -38,11 +38,11 @@ X86_FUNC(sub_004BB1B0) {  // BinkDoFrame
         ctx.esp += 8;
         return;
     }
-    __imp__sub_004BB1B0(ctx, base);
+    GUEST_ORIG(BinkDoFrame)(ctx, base);
 }
 
-X86_EXTERN_FUNC(__imp__sub_004BB790);
-X86_FUNC(sub_004BB790) {  // BinkNextFrame
+X86_EXTERN_FUNC(GUEST_ORIG(BinkNextFrame));
+X86_FUNC(GUEST(BinkNextFrame)) {
     uint32_t bink = R32(ctx.esp + 4);
     {
         std::lock_guard<std::mutex> lock(g_held_lock);
@@ -51,5 +51,5 @@ X86_FUNC(sub_004BB790) {  // BinkNextFrame
             return;
         }
     }
-    __imp__sub_004BB790(ctx, base);
+    GUEST_ORIG(BinkNextFrame)(ctx, base);
 }

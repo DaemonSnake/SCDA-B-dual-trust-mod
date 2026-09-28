@@ -17,6 +17,8 @@ struct Config {
     std::vector<std::string> code_prefixes;
     uint32_t partitions = 128;
     std::map<uint32_t, std::string> functions;  // extra entry points
+    // names the host binds to: functions it replaces and data it reads; 0 = not in this image
+    std::map<std::string, uint32_t> symbols, data;
     std::set<uint32_t> no_gap_fill;             // section starts to skip in gap fill
     std::vector<std::pair<uint32_t, uint32_t>> data_ranges;  // data inside code sections
     bool gap_fill = true;
@@ -56,6 +58,7 @@ public:
     std::set<uint32_t> functions;
     std::unordered_map<uint32_t, JumpTable> jump_tables;  // keyed by jmp address
     std::unordered_map<uint32_t, Insn> insns_;
+    std::set<uint32_t> continuations;  // where C++ catch blocks resume, reached by the CRT's jmp eax
 
     // body of a function: instruction addresses reachable without entering other entries
     std::vector<uint32_t> Body(uint32_t entry) const;
@@ -67,7 +70,10 @@ private:
     bool PlausibleEntry(uint32_t va) const;
     void Adopt(const std::vector<uint32_t>& calls, bool trusted);
     void GapFill();
+    void EhContinuations();
+    void MakeFunction(uint32_t va);
     bool ReadTable(uint32_t jmp_va, const ZydisDecodedOperand& mem, JumpTable& jt);
+    bool SledTable(uint32_t jmp_va, const uint32_t* ring, int nring, JumpTable& jt);
 
     ZydisDecoder dec_;
     std::vector<uint8_t> code_;   // 1 = byte belongs to a code section

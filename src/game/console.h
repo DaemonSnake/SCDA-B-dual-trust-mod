@@ -16,4 +16,11 @@ void RunCommands(X86Context& ctx, uint32_t engine, uint32_t viewport);
 // what the commands printed to their output device since the last call; any thread
 std::vector<std::string> TakeOutput();
 
+// the F10 level select: maps "open" loads, by section
+struct LevelList {
+    const char* title;
+    std::vector<const char*> maps;
+};
+const std::vector<LevelList>& Levels();
+
 }  // namespace game

@@ -83,14 +83,27 @@ std::string CodeGen::EmitFunction(uint32_t entry) {
                 Line(F("\tx86_trap(ctx, 0x%X, \"fell off decoded code\");", next));
         }
     }
+    // a function that registers an SEH frame (mov fs:[0], ...) may be where a C++ catch resumes: the CRT's jump to
+    // the continuation throws X86Resume, caught by the innermost such frame whose stack holds the resume esp
+    bool seh = false;
+    for (uint32_t va : body) {
+        ZydisDecodedInstruction in;
+        ZydisDecodedOperand ops[ZYDIS_MAX_OPERAND_COUNT];
+        if (an_.Decode(va, in, ops) && in.mnemonic == ZYDIS_MNEMONIC_MOV && ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+            ops[0].mem.segment == ZYDIS_REGISTER_FS && ops[0].mem.base == ZYDIS_REGISTER_NONE &&
+            ops[0].mem.index == ZYDIS_REGISTER_NONE && ops[0].mem.disp.value == 0)
+            seh = true;
+    }
     std::string out;
     out += F("X86_FUNC(__imp__%s) {\n", FuncName(entry).c_str());
+    if (seh) out += "\tconst uint32_t x86_frame = ctx.esp;\n\ttry {\n";
     out += "\tX86_LOAD_FLAGS();\n\tuint32_t ca = 0, cb = 0;\n\t(void)ca; (void)cb;\n";
     // code below the entry (a shared tail reached by a jump) is emitted first, so enter by label
     bool entry_first = !body.empty() && body.front() == entry;
     if (!entry_first) out += F("\tgoto loc_%08X;\n", entry);
     if (labels_.count(entry) && entry_first) out += F("loc_%08X:;\n", entry);
     out += body_;
+    if (seh) out += "\t} catch (const X86Resume& r) {\n\t\tif (r.esp >= x86_frame) throw;\n\t\tx86_resume(ctx, base, r);\n\t}\n";
     out += "}\n";
     out += F("X86_WEAK_FUNC(%s, __imp__%s)\n\n", FuncName(entry).c_str(), FuncName(entry).c_str());
     return out;
@@ -100,9 +113,23 @@ bool CodeGen::Run() {
     std::vector<uint32_t> funcs(an_.functions.begin(), an_.functions.end());
     std::sort(funcs.begin(), funcs.end());
 
+    // symbols the host binds to by name; one missing from this image gets a placeholder address whose
+    // recompiled body traps, so the host override still links
+    std::string syms = "#pragma once\n";
+    syms += F("#define IMAGE_XBE \"%s\"\n", fs::path(an_.cfg.xbe_path).filename().string().c_str());
+    std::vector<uint32_t> absent;
+    for (auto& [name, va] : an_.cfg.symbols) {
+        uint32_t a = va ? va : 0xFFFF0000u + uint32_t(absent.size());
+        if (!va) absent.push_back(a);
+        syms += F("#define SYM_%s %08X\n#define HAS_%s %d\n", name.c_str(), a, name.c_str(), va ? 1 : 0);
+    }
+    for (auto& [name, va] : an_.cfg.data) syms += F("#define SYM_%s %08X\n#define HAS_%s %d\n", name.c_str(), va, name.c_str(), va ? 1 : 0);
+    WriteIfChanged(out_ / "image_symbols.h", syms);
+
     // shared declarations
     std::string shared = "#pragma once\n#include \"cpu/x86_ops.h\"\n\n";
     for (uint32_t f : funcs) shared += F("X86_EXTERN_FUNC(%s);\n", FuncName(f).c_str());
+    for (uint32_t f : absent) shared += F("X86_EXTERN_FUNC(%s);\n", FuncName(f).c_str());
     WriteIfChanged(out_ / "x86_recomp_shared.h", shared);
 
     // partition by instruction count so the files compile in similar time
@@ -144,6 +171,13 @@ bool CodeGen::Run() {
     map += "const X86FuncMapping X86FuncMappings[] = {\n";
     for (uint32_t f : funcs) map += F("\t{0x%Xu, %s},\n", f, FuncName(f).c_str());
     map += "\t{0, nullptr},\n};\n";
+    map += "\nconst uint32_t X86Continuations[] = {\n";
+    for (uint32_t c : an_.continuations) map += F("\t0x%Xu,\n", c);
+    map += "\t0,\n};\n";
+    for (uint32_t f : absent) {
+        map += F("\nX86_FUNC(__imp__%s) { x86_trap(ctx, 0x%Xu, \"not in this image\"); }\n", FuncName(f).c_str(), f);
+        map += F("X86_WEAK_FUNC(%s, __imp__%s)\n", FuncName(f).c_str(), FuncName(f).c_str());
+    }
     WriteIfChanged(out_ / "x86_func_mapping.cpp", map);
 
     std::string stats = F("functions %zu\ninstructions %zu\n", funcs.size(), insn_count_);

@@ -43,6 +43,11 @@ static bool LoadConfig(const fs::path& path, Config& cfg) {
                                            uint32_t(r->get(1)->value<int64_t>().value_or(0))});
     if (auto f = t["functions"].as_table())
         for (auto& [k, v] : *f) cfg.functions[ParseAddr(k.str())] = v.value<std::string>().value_or("");
+    for (auto [key, out] : {std::pair{"symbols", &cfg.symbols}, std::pair{"data", &cfg.data}})
+        if (auto f = t[key].as_table())
+            for (auto& [k, v] : *f) (*out)[std::string(k.str())] = uint32_t(v.value<int64_t>().value_or(0));
+    for (auto& [name, va] : cfg.symbols)
+        if (va) cfg.functions.emplace(va, name);
     return true;
 }
 

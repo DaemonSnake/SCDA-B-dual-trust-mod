@@ -19,8 +19,8 @@ extern const xbe::Image* g_image;
 
 namespace {
 
-constexpr uint32_t kStreamVtable = 0x0059583C;  // CDirectSoundStream XMediaObject vtable
-constexpr uint32_t kStreamVtable2 = 0x0059582C;
+constexpr uint32_t kStreamVtable = SYM(DSound_StreamVtable);  // CDirectSoundStream XMediaObject vtable
+constexpr uint32_t kStreamVtable2 = SYM(DSound_StreamVtable2);
 constexpr uint32_t kPacketPending = 0x8000000A, kFlushed = 0x80004004;
 
 struct Packet {
@@ -295,7 +295,7 @@ float F32(uint32_t v) {
 
 // ---------------------------------------------------------------- device
 
-HLE_STDCALL(004D0F12, DirectSoundCreate, 3) {
+HLE_STDCALL(DirectSoundCreate, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     Start();
     if (!g_ds) {
@@ -305,26 +305,27 @@ HLE_STDCALL(004D0F12, DirectSoundCreate, 3) {
     W32(a[1], g_ds);
     return 0;
 }
-HLE_STDCALL(004CDA21, IDirectSound_Release, 1) { return 0; }
-HLE_STDCALL(004CDA52, DirectSoundUseFullHRTF, 0) { return 0; }
-HLE_STDCALL(004CED2C, IDirectSound_GetSpeakerConfig, 2) {
+HLE_STDCALL(IDirectSound_Release, 1) { return 0; }
+HLE_STDCALL(DirectSoundUseFullHRTF, 0) { return 0; }
+HLE_STDCALL(IDirectSound_GetSpeakerConfig, 2) {
     W32(a[1], 2);  // stereo
     return 0;
 }
-HLE_STDCALL(004CED48, IDirectSound_SetEffectData, 6) { return 0; }
-HLE_STDCALL(004CED72, IDirectSound_EnableHeadphones, 2) { return 0; }
-HLE_STDCALL(004CED8E, IDirectSound_SetMixBinHeadroom, 3) { return 0; }
-HLE_STDCALL(004D0793, IDirectSound_CommitDeferredSettings, 1) { return 0; }
-HLE_STDCALL(004D0C50, IDirectSound_SetDopplerFactor, 3) { return 0; }
-HLE_STDCALL(004D0CF3, IDirectSound_SetRolloffFactor, 3) { return 0; }
-HLE_STDCALL(004D0D17, IDirectSound_SetVelocity, 5) { return 0; }
-HLE_STDCALL(004D0D4C, IDirectSound_SetI3DL2Listener, 3) { return 0; }
-HLE_STDCALL(004D0CBE, IDirectSound_SetPosition, 5) {
+HLE_STDCALL(IDirectSound_SetEffectData, 6) { return 0; }
+HLE_STDCALL(IDirectSound_EnableHeadphones, 2) { return 0; }
+HLE_STDCALL(IDirectSound_SetMixBinHeadroom, 3) { return 0; }
+HLE_STDCALL(IDirectSound_CommitDeferredSettings, 1) { return 0; }
+HLE_STDCALL(IDirectSound_SetDopplerFactor, 3) { return 0; }
+HLE_STDCALL(IDirectSound_SetRolloffFactor, 3) { return 0; }
+HLE_STDCALL(IDirectSound_SetDistanceFactor, 3) { return 0; }
+HLE_STDCALL(IDirectSound_SetVelocity, 5) { return 0; }
+HLE_STDCALL(IDirectSound_SetI3DL2Listener, 3) { return 0; }
+HLE_STDCALL(IDirectSound_SetPosition, 5) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (int i = 0; i < 3; i++) g_listener[i] = F32(a[1 + i]);
     return 0;
 }
-HLE_STDCALL(004D0C74, IDirectSound_SetOrientation, 8) {
+HLE_STDCALL(IDirectSound_SetOrientation, 8) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (int i = 0; i < 3; i++) {
         g_front[i] = F32(a[1 + i]);
@@ -332,11 +333,11 @@ HLE_STDCALL(004D0C74, IDirectSound_SetOrientation, 8) {
     }
     return 0;
 }
-HLE_STDCALL(004CEF33, DirectSoundDoWork, 0) { return 0; }
+HLE_STDCALL(DirectSoundDoWork, 0) { return 0; }
 
 // Effects run on the console's DSP and are not reproduced. The descriptor keeps the image's effect list so the
 // title finds its indices, every segment points at zeroed memory.
-HLE_STDCALL(004CEF5C, XAudioDownloadEffectsImage, 4) {
+HLE_STDCALL(XAudioDownloadEffectsImage, 4) {
     std::string name = ReadCString(a[0]);
     std::vector<uint8_t> img;
     if (a[2] & 1) {
@@ -370,63 +371,63 @@ HLE_STDCALL(004CEF5C, XAudioDownloadEffectsImage, 4) {
 
 // ---------------------------------------------------------------- buffers
 
-HLE_STDCALL(004D0F59, DirectSoundCreateBuffer, 2) { return NewBuffer(a[0], a[1]); }
-HLE_STDCALL(004D0C2C, IDirectSound_CreateSoundBuffer, 4) { return NewBuffer(a[1], a[2]); }
+HLE_STDCALL(DirectSoundCreateBuffer, 2) { return NewBuffer(a[0], a[1]); }
+HLE_STDCALL(IDirectSound_CreateSoundBuffer, 4) { return NewBuffer(a[1], a[2]); }
 
-#define BUFFER(addr, name, nargs)                                              \
-    static uint32_t buf_##name(Voice& v, const Args& a);                       \
-    HLE_STDCALL(addr, IDirectSoundBuffer_##name, nargs) {                      \
-        std::lock_guard<std::recursive_mutex> lock(g_lock);                    \
-        Voice* v = Find(a[0]);                                                 \
-        return v ? buf_##name(*v, a) : 0x80004005u;                            \
-    }                                                                          \
+#define BUFFER(name, nargs)                                 \
+    static uint32_t buf_##name(Voice& v, const Args& a);    \
+    HLE_STDCALL(IDirectSoundBuffer_##name, nargs) {         \
+        std::lock_guard<std::recursive_mutex> lock(g_lock); \
+        Voice* v = Find(a[0]);                              \
+        return v ? buf_##name(*v, a) : 0x80004005u;         \
+    }                                                       \
     static uint32_t buf_##name([[maybe_unused]] Voice& v, [[maybe_unused]] const Args& a)
 
-BUFFER(004CDA3C, Release, 1) {
+BUFFER(Release, 1) {
     if (--v.refs > 0) return uint32_t(v.refs);
     uint32_t obj = v.obj;
     g_voices.erase(obj);
     mem::FreeSystem(obj);
     return 0;
 }
-BUFFER(004CDA37, Unlock, 5) { return 0; }
-BUFFER(004D029C, SetBufferData, 3) {
+BUFFER(Unlock, 5) { return 0; }
+BUFFER(SetBufferData, 3) {
     v.data = a[1];
     v.bytes = a[2];
     v.pos = 0;
     v.block = -1;
     return 0;
 }
-BUFFER(004CEE1E, Play, 4) {
+BUFFER(Play, 4) {
     v.playing = true;
     v.looping = a[3] & 1;
     if (a[3] & 2) v.pos = 0;
     return 0;
 }
-BUFFER(004CEE42, Stop, 1) {
+BUFFER(Stop, 1) {
     v.playing = false;
     return 0;
 }
-BUFFER(004CEE5A, SetLoopRegion, 3) {
+BUFFER(SetLoopRegion, 3) {
     v.loop_start = a[1];
     v.loop_len = a[2];
     return 0;
 }
-BUFFER(004CEE7A, GetStatus, 2) {
+BUFFER(GetStatus, 2) {
     W32(a[1], (v.playing ? 1u : 0u) | (v.playing && v.looping ? 4u : 0u));
     return 0;
 }
-BUFFER(004CEE96, GetCurrentPosition, 3) {
+BUFFER(GetCurrentPosition, 3) {
     uint32_t p = BytesOf(v, uint32_t(v.pos));
     if (a[1]) W32(a[1], p);
     if (a[2]) W32(a[2], v.bytes ? (p + BytesOf(v, 65 * 4)) % v.bytes : 0);
     return 0;
 }
-BUFFER(004CEEB6, SetCurrentPosition, 2) {
+BUFFER(SetCurrentPosition, 2) {
     v.pos = FramesOf(v, a[1]);
     return 0;
 }
-BUFFER(004CEED2, Lock, 8) {
+BUFFER(Lock, 8) {
     uint32_t off = a[1], n = a[2];
     if (a[7] & 1) n = v.bytes;  // DSBLOCK_ENTIREBUFFER
     if (!v.bytes) return 0x80004005u;
@@ -438,42 +439,42 @@ BUFFER(004CEED2, Lock, 8) {
     if (a[6]) W32(a[6], n > first ? n - first : 0);
     return 0;
 }
-BUFFER(004CEDAE, SetVolume, 2) {
+BUFFER(SetVolume, 2) {
     v.volume = Db(int32_t(a[1]));
     return 0;
 }
-BUFFER(004CFBC6, SetFrequency, 2) {
+BUFFER(SetFrequency, 2) {
     v.freq = a[1];
     return 0;
 }
-BUFFER(004CEDCA, SetFilter, 2) { return 0; }
-BUFFER(004CEDE6, SetHeadroom, 2) { return 0; }
-BUFFER(004CEE02, SetMixBinVolumes, 2) {
+BUFFER(SetFilter, 2) { return 0; }
+BUFFER(SetHeadroom, 2) { return 0; }
+BUFFER(SetMixBinVolumes, 2) {
     MixBins(v, a[1]);
     return 0;
 }
-BUFFER(004CFBE2, SetMixBins, 2) {
+BUFFER(SetMixBins, 2) {
     MixBins(v, a[1]);
     return 0;
 }
-BUFFER(004CFBFE, SetMaxDistance, 3) {
+BUFFER(SetMaxDistance, 3) {
     v.max_dist = F32(a[1]);
     return 0;
 }
-BUFFER(004CFC22, SetMinDistance, 3) {
+BUFFER(SetMinDistance, 3) {
     v.min_dist = F32(a[1]);
     return 0;
 }
-BUFFER(004CFC46, SetPosition, 5) {
+BUFFER(SetPosition, 5) {
     for (int i = 0; i < 3; i++) v.p[i] = F32(a[1 + i]);
     return 0;
 }
-BUFFER(004CFC7B, SetVelocity, 5) { return 0; }
-BUFFER(004CFCB0, SetI3DL2Source, 3) { return 0; }
+BUFFER(SetVelocity, 5) { return 0; }
+BUFFER(SetI3DL2Source, 3) { return 0; }
 
 // ---------------------------------------------------------------- streams, the object carries the XDK's own vtable
 
-HLE_STDCALL(004D0FB0, DirectSoundCreateStream, 2) {
+HLE_STDCALL(DirectSoundCreateStream, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     Start();
     uint32_t desc = a[0];
@@ -495,13 +496,13 @@ HLE_STDCALL(004D0FB0, DirectSoundCreateStream, 2) {
     return 0;
 }
 
-#define STREAM(addr, name, nargs)                                              \
-    static uint32_t str_##name(Voice& v, const Args& a);                       \
-    HLE_STDCALL(addr, CDirectSoundStream_##name, nargs) {                      \
-        std::lock_guard<std::recursive_mutex> lock(g_lock);                    \
-        Voice* v = Find(a[0]);                                                 \
-        return v ? str_##name(*v, a) : 0x80004005u;                            \
-    }                                                                          \
+#define STREAM(name, nargs)                                 \
+    static uint32_t str_##name(Voice& v, const Args& a);    \
+    HLE_STDCALL(CDirectSoundStream_##name, nargs) {         \
+        std::lock_guard<std::recursive_mutex> lock(g_lock); \
+        Voice* v = Find(a[0]);                              \
+        return v ? str_##name(*v, a) : 0x80004005u;         \
+    }                                                       \
     static uint32_t str_##name([[maybe_unused]] Voice& v, [[maybe_unused]] const Args& a)
 
 static void FlushStream(Voice& v) {
@@ -510,8 +511,13 @@ static void FlushStream(Voice& v) {
     v.pos = 0;
 }
 
-STREAM(004CE440, AddRef, 1) { return uint32_t(++v.refs); }
-STREAM(004CE487, Release, 1) {
+STREAM(AddRef, 1) { return uint32_t(++v.refs); }
+STREAM(SetFormat, 2) {
+    ReadFormat(v, a[1]);
+    v.block = -1;
+    return 0;
+}
+STREAM(Release, 1) {
     if (--v.refs > 0) return uint32_t(v.refs);
     FlushStream(v);
     uint32_t obj = v.obj;
@@ -519,7 +525,7 @@ STREAM(004CE487, Release, 1) {
     mem::FreeSystem(obj);
     return 0;
 }
-STREAM(004CE4D5, GetInfo, 2) {
+STREAM(GetInfo, 2) {
     uint32_t info = a[1];
     W32(info, 0x3);  // fixed sample size, fixed packet alignment
     W32(info + 4, v.tag == 0x69 ? 36u * v.channels : v.align);
@@ -527,11 +533,11 @@ STREAM(004CE4D5, GetInfo, 2) {
     W32(info + 12, 0);
     return 0;
 }
-STREAM(004CE5D4, GetStatus, 2) {
+STREAM(GetStatus, 2) {
     W32(a[1], v.packets.size() < v.max_packets ? 1u : 0u);
     return 0;
 }
-STREAM(004CE625, Process, 3) {
+STREAM(Process, 3) {
     uint32_t in = a[1];
     if (!in) return 0;
     Packet pk{R32(in), R32(in + 4), R32(in + 8), R32(in + 12), R32(in + 16)};
@@ -540,48 +546,48 @@ STREAM(004CE625, Process, 3) {
     v.packets.push_back(pk);
     return 0;
 }
-STREAM(004CE53C, Discontinuity, 1) { return 0; }
-STREAM(004CE589, Flush, 1) {
+STREAM(Discontinuity, 1) { return 0; }
+STREAM(Flush, 1) {
     FlushStream(v);
     return 0;
 }
-STREAM(004CE6ED, FlushEx, 4) {
+STREAM(FlushEx, 4) {
     FlushStream(v);
     return 0;
 }
-STREAM(004CE69C, Pause, 2) {
+STREAM(Pause, 2) {
     v.paused = a[1] == 1;
     return 0;
 }
-STREAM(004CEBE4, SetVolume, 2) {
+STREAM(SetVolume, 2) {
     v.volume = Db(int32_t(a[1]));
     return 0;
 }
-STREAM(004CF942, SetFrequency, 2) {
+STREAM(SetFrequency, 2) {
     v.freq = a[1];
     return 0;
 }
-STREAM(004CEC36, SetFilter, 2) { return 0; }
-STREAM(004CEC88, SetHeadroom, 2) { return 0; }
-STREAM(004CECDA, SetMixBinVolumes, 2) {
+STREAM(SetFilter, 2) { return 0; }
+STREAM(SetHeadroom, 2) { return 0; }
+STREAM(SetMixBinVolumes, 2) {
     MixBins(v, a[1]);
     return 0;
 }
-STREAM(004CF994, SetMixBins, 2) {
+STREAM(SetMixBins, 2) {
     MixBins(v, a[1]);
     return 0;
 }
-STREAM(004CF9E6, SetMaxDistance, 3) {
+STREAM(SetMaxDistance, 3) {
     v.max_dist = F32(a[1]);
     return 0;
 }
-STREAM(004CFA40, SetMinDistance, 3) {
+STREAM(SetMinDistance, 3) {
     v.min_dist = F32(a[1]);
     return 0;
 }
-STREAM(004CFA9A, SetPosition, 5) {
+STREAM(SetPosition, 5) {
     for (int i = 0; i < 3; i++) v.p[i] = F32(a[1 + i]);
     return 0;
 }
-STREAM(004CFB05, SetVelocity, 5) { return 0; }
-STREAM(004CFB70, SetI3DL2Source, 3) { return 0; }
+STREAM(SetVelocity, 5) { return 0; }
+STREAM(SetI3DL2Source, 3) { return 0; }

@@ -1371,7 +1371,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     }
 
     // shaders
-    bool prog = (s.vs_handle & 1) && s.vs;
+    // a shader made from a declaration alone (no program) is the fixed function pipeline on those inputs
+    bool prog = (s.vs_handle & 1) && s.vs && !s.vs->program.empty();
     if (prog && !s.vs->hash) s.vs->hash = Hash(s.vs->program.data(), s.vs->program.size() * 4) | 1;
     uint64_t vkey = Hash(&a.decode, 8, prog ? s.vs->hash ^ a.regs : Hash(&s.vs_handle, 4, a.regs | 0x10000));
     if (!prog && a.pretransformed) vkey ^= 0x5A5A;

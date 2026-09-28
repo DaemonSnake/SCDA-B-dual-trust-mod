@@ -54,6 +54,20 @@ X86_FUNC(sub_000EE9D1) {
 
 namespace game {
 
+const std::vector<LevelList>& Levels() {
+    static const std::vector<LevelList> kLevels = {
+        {"SOLO",
+         {"x01_Iceland_a", "x01_iceland_b", "x02_prison_a", "x02_prison_b", "x04_moneytrain_a", "x04_moneytrain_b",
+          "x05_hq2_r", "x06_cozumel_a", "x06_cozumel_b", "x08_okhotsk_a", "x08_okhotsk_b", "x10_kinshasa_a",
+          "x10_kinshasa_b", "x11_hq5_r", "x12_ny_a", "x12_ny_b", "x12_ny_c"}},
+        {"CO-OP",
+         {"x01_coop_ice_a", "x01_coop_ice_b", "x01_coop_ice_c", "x01_coop_ice_d", "x01_coop_ice_e", "x02_coop_pris_a",
+          "x02_coop_pris_b", "x02_coop_pris_c", "x02_coop_pris_d", "x02_coop_pris_e", "x03_coop_kin_a", "x03_coop_kin_b",
+          "x03_coop_kin_c", "x03_coop_kin_f"}},
+    };
+    return kLevels;
+}
+
 void QueueCommand(std::string command, Route route) {
     std::lock_guard lock(g_lock);
     g_queue.push_back({std::move(command), route});

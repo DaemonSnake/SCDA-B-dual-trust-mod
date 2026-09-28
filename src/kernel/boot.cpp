@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <cstdlib>
 #include <fstream>
 
@@ -16,6 +17,7 @@
 #include <unistd.h>
 #endif
 #include "xbe/xbe.h"
+#include "xdk/hle.h"
 
 namespace dispatch {
 void Init();
@@ -64,7 +66,7 @@ bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::s
         W32(sec_hdr + uint32_t(i) * 56 + 0x18, 1);
     }
     // the engine holds frames to 1/60 s itself, the frame rate cap in the options menu replaces it
-    if (img.title_id == 0x5553005E && R32(0x4F64CC) == 0x3C888723) W32(0x4F64CC, 0);
+    if (HAS_Engine_FrameTimeMin && R32(SYM(Engine_FrameTimeMin)) == 0x3C888723) W32(SYM(Engine_FrameTimeMin), 0);
 
     InitKernelData();
     dispatch::Init();
@@ -104,20 +106,44 @@ bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::s
     return true;
 }
 
-void Relaunch() {
+const char* ImageExe(std::string xbe_path) {
+    for (char& c : xbe_path) c = char(std::tolower(uint8_t(c)));
+    static const std::pair<const char*, const char*> kImages[] = {{"default.xbe", "SCDAOffline"}, {"sc4_adv.xbe", "SCDAOnline"}};
+    for (auto& [xbe, exe] : kImages) {
+        size_t n = std::strlen(xbe);
+        if (xbe_path.size() >= n && xbe_path.compare(xbe_path.size() - n, n, xbe) == 0 &&
+            (xbe_path.size() == n || xbe_path[xbe_path.size() - n - 1] == '\\'))
+            return exe;
+    }
+    return nullptr;
+}
+
+void Relaunch(const char* exe) {
     logx::Flush();
 #ifdef _WIN32
-    wchar_t exe[MAX_PATH];
-    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    wchar_t self[MAX_PATH];
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    std::wstring path = self;
+    path = path.substr(0, path.find_last_of(L'\\') + 1) + std::wstring(exe, exe + std::strlen(exe)) + L".exe";
+    // the command line keeps its arguments (--instance) behind the new executable
+    std::wstring line = GetCommandLineW();
+    size_t args = line[0] == L'"' ? line.find(L'"', 1) + 1 : line.find(L' ');
+    line = L"\"" + path + L"\"" + (args == std::wstring::npos ? L"" : line.substr(args));
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
-    if (CreateProcessW(exe, GetCommandLineW(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    if (CreateProcessW(path.c_str(), line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
         ::CloseHandle(pi.hThread);
         ::CloseHandle(pi.hProcess);
+    } else {
+        LOGE("relaunch: cannot start %s.exe (%lu)", exe, GetLastError());
     }
     std::_Exit(0);
 #else
-    execl("/proc/self/exe", "/proc/self/exe", nullptr);
+    char self[4096] = {};
+    ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+    std::string path = std::string(self, n > 0 ? size_t(n) : 0);
+    path = path.substr(0, path.find_last_of('/') + 1) + exe;
+    execl(path.c_str(), path.c_str(), nullptr);
     std::_Exit(0);
 #endif
 }

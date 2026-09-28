@@ -1,5 +1,4 @@
 // XAPI functions that talk to hardware: controller ports and the hard disk cache partition
-#include <cctype>
 #include <chrono>
 
 #include "core/input.h"
@@ -10,8 +9,8 @@ using namespace kernel;
 namespace {
 
 // XPP device type records: CurrentConnected, ChangeConnected, PreviousConnected
-constexpr uint32_t kGamepadType = 0x004EC4D4;
-constexpr uint32_t kMemoryUnitType = 0x004EC458;
+constexpr uint32_t kGamepadType = SYM(XPP_GamepadType);
+constexpr uint32_t kMemoryUnitType = SYM(XPP_MemoryUnitType);
 
 std::mutex g_ports_lock;
 bool g_poller = false;
@@ -38,12 +37,12 @@ std::unordered_map<uint32_t, Handle> g_handles;
 
 }  // namespace
 
-HLE_STDCALL(000530A7, XMountUtilityDrive, 1) {
+HLE_STDCALL(XMountUtilityDrive, 1) {
     CreateSymbolicLink("\\??\\Z:", "\\Device\\Harddisk0\\Partition5");
     return 1;
 }
 
-HLE_STDCALL(004ECDE8, XInitDevices, 2) {
+HLE_STDCALL(XInitDevices, 2) {
     W32(kGamepadType, 0);
     W32(kGamepadType + 4, 0);
     W32(kGamepadType + 8, 0);
@@ -63,7 +62,7 @@ HLE_STDCALL(004ECDE8, XInitDevices, 2) {
     return 0;
 }
 
-HLE_STDCALL(004EDB24, XInputOpen, 4) {
+HLE_STDCALL(XInputOpen, 4) {
     uint32_t type = a[0], port = a[1];
     if (type != kGamepadType || port > 3) return 0;
     uint32_t h = mem::AllocSystem(16);
@@ -72,14 +71,14 @@ HLE_STDCALL(004EDB24, XInputOpen, 4) {
     return h;
 }
 
-HLE_STDCALL(004EDB7A, XInputClose, 1) {
+HLE_STDCALL(XInputClose, 1) {
     std::lock_guard<std::mutex> lock(g_ports_lock);
     g_handles.erase(a[0]);
     mem::FreeSystem(a[0]);
     return 0;
 }
 
-HLE_STDCALL(004EDB86, XInputGetState, 2) {
+HLE_STDCALL(XInputGetState, 2) {
     uint32_t port;
     {
         std::lock_guard<std::mutex> lock(g_ports_lock);
@@ -104,7 +103,7 @@ HLE_STDCALL(004EDB86, XInputGetState, 2) {
     return 0;
 }
 
-HLE_STDCALL(004EDBF9, XInputSetState, 2) {
+HLE_STDCALL(XInputSetState, 2) {
     uint32_t port;
     {
         std::lock_guard<std::mutex> lock(g_ports_lock);
@@ -121,16 +120,15 @@ HLE_STDCALL(004EDBF9, XInputSetState, 2) {
     return 997;  // ERROR_IO_PENDING, already complete
 }
 
-// Only default.xbe is recompiled: relaunching it goes through the XAPI (then a process restart), any other
-// image (the advert, sc4_adv.xbe) is refused and the title stays in its menu.
-X86_EXTERN_FUNC(__imp__sub_00055666);
-X86_FUNC(sub_00055666) {
+// A recompiled image launches through the XAPI, then a process restart into its executable; any other
+// (the dashboard, updates) is refused and the title stays in its menu.
+X86_EXTERN_FUNC(GUEST_ORIG(XLaunchNewImageA));
+X86_FUNC(GUEST(XLaunchNewImageA)) {
     std::string path = ReadCString(R32(ctx.esp + 4));
-    for (char& c : path) c = char(std::tolower(uint8_t(c)));
-    if (path.size() >= 11 && path.compare(path.size() - 11, 11, "default.xbe") == 0) {
-        __imp__sub_00055666(ctx, base);
+    if (ImageExe(path)) {
+        GUEST_ORIG(XLaunchNewImageA)(ctx, base);
         return;
     }
-    LOGW("xapi: launch of %s refused, only default.xbe is recompiled", path.c_str());
+    LOGW("xapi: launch of %s refused, it is not recompiled", path.c_str());
     Return(ctx, 2, 2);  // ERROR_FILE_NOT_FOUND
 }

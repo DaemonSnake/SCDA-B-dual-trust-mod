@@ -8,10 +8,14 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 2. Clone this repository.
 3. Put the game files in the `assets` folder (see Game Setup).
 4. Run `build.bat`. The first build recompiles the game and takes a while.
-5. Run `out\build\win-amd64-release\SCDA.exe`.
+5. Run `out\build\win-amd64-release\SCDAOffline.exe`.
 
 > [!NOTE]
 > No game data, XEX bytes or generated code are in this repository. You must own the game.
+
+## Game Setup
+
+Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with the `Default`, `Media` and `adv` folders beside them. `default.xbe` becomes `SCDAOffline.exe` (story and co-op), `sc4_adv.xbe` becomes `SCDAOnline.exe` (versus). Picking Versus in the main menu switches to `SCDAOnline.exe` and leaving versus switches back.
 
 ## Features
 
@@ -37,5 +41,6 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Rebinding** - Every action can be rebound from the Mouse and Keyboard page.
 
 ### General
+- **Versus** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
 
 

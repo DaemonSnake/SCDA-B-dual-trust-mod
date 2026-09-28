@@ -19,6 +19,7 @@
 namespace {
 
 std::vector<X86Func*> g_table;  // one slot per code byte
+std::vector<bool> g_continuation;
 uint32_t g_lo = 0, g_hi = 0;
 
 struct Export {
@@ -42,6 +43,9 @@ void Init() {
     size_t n = 0;
     for (const X86FuncMapping* m = X86FuncMappings; m->host; m++, n++)
         if (m->guest >= g_lo && m->guest < g_hi) g_table[m->guest - g_lo] = m->host;
+    g_continuation.assign(g_hi - g_lo, false);
+    for (const uint32_t* c = X86Continuations; *c; c++)
+        if (*c >= g_lo && *c < g_hi) g_continuation[*c - g_lo] = true;
     LOGI("dispatch: %zu functions over %08X..%08X", n, g_lo, g_hi);
 }
 
@@ -69,6 +73,7 @@ uint32_t KernelThunkAddress(uint32_t ordinal) { return kKernelThunkBase + ordina
 
 void x86_icall(X86Context& ctx, uint8_t* base, uint32_t target) {
     ctx.last_icall = target;
+    if (target >= g_lo && target < g_hi && g_continuation[target - g_lo]) throw X86Resume{target, ctx.esp};
     if (X86Func* f = dispatch::Find(target)) {
         f(ctx, base);
         return;
@@ -91,8 +96,13 @@ void x86_icall(X86Context& ctx, uint8_t* base, uint32_t target) {
     }
     uint32_t ret = kernel::R32(ctx.esp);
     LOGE("indirect call to %08X has no recompiled function (return address %08X, esp %08X)", target, ret, ctx.esp);
-    LOGE("add 0x%X to [functions] in config/scda_v2.toml and rebuild", target);
+    LOGE("add 0x%X to [functions] in the image's config/*.toml and rebuild", target);
     x86_trap(ctx, ret, "indirect call to unknown code");
+}
+
+void x86_resume(X86Context& ctx, uint8_t* base, const X86Resume& r) {
+    ctx.esp = r.esp;
+    dispatch::Find(r.target)(ctx, base);
 }
 
 void x86_kernel(X86Context& ctx, uint8_t* base, uint32_t ordinal) {

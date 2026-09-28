@@ -21,19 +21,19 @@ namespace {
 constexpr bool kRenderThread = true;
 
 // D3D globals of this build
-constexpr uint32_t kDevice = 0x004AB670;       // the static CDevice, g_pDevice points at it
-constexpr uint32_t kDevicePtr = 0x004AB668;    // g_pDevice
-constexpr uint32_t kIndexData = 0x004AB1C4;    // index data base the inline draws read
-constexpr uint32_t kDirtyFlags = 0x004AB1C8;
-constexpr uint32_t kTextureState = 0x004AB1D0;  // [4][32]
-constexpr uint32_t kRenderState = 0x004AB3D0;   // [166]
-constexpr uint32_t kStreams = 0x004ADB10;       // [16] stride, offset, buffer
-constexpr uint32_t kSimpleEncode = 0x004F54E8;  // D3DSIMPLERENDERSTATEENCODE in .rdata
+constexpr uint32_t kDevice = SYM(D3D_Device);        // the static CDevice, g_pDevice points at it
+constexpr uint32_t kDevicePtr = SYM(D3D_pDevice);
+constexpr uint32_t kIndexData = SYM(D3D_IndexData);  // index data base the inline draws read
+constexpr uint32_t kDirtyFlags = SYM(D3D_DirtyFlags);
+constexpr uint32_t kTextureState = SYM(D3D_DeferredTextureState);  // [4][32]
+constexpr uint32_t kRenderState = SYM(D3D_RenderState);            // [166]
+constexpr uint32_t kStreams = SYM(D3D_Streams);                    // [16] stride, offset, buffer
+constexpr uint32_t kSimpleEncode = SYM(D3D_SimpleRenderStateEncode);
 
 // recompiled D3D helpers kept as guest code
-constexpr uint32_t kInternalAddRef = 0x0049BD00;
-constexpr uint32_t kInternalRelease = 0x0049BF30;
-constexpr uint32_t kInitDefaultState = 0x004A1A80;
+constexpr uint32_t kInternalAddRef = SYM(D3D_InternalAddRef);
+constexpr uint32_t kInternalRelease = SYM(D3D_InternalRelease);
+constexpr uint32_t kInitDefaultState = SYM(D3D_InitDefaultState);
 
 // CDevice fields mirrored so the recompiled getters and resource code see what the XDK would
 constexpr uint32_t kDevPush = 0x00, kDevThreshold = 0x04, kDevBaseVertex = 0x1C, kDevIndexBuffer = 0x7A0,
@@ -123,7 +123,7 @@ using namespace d3d;
 
 // ---------------------------------------------------------------- device
 
-HLE_STDCALL(0049D210, Direct3D_CreateDevice, 6) {
+HLE_STDCALL(Direct3D_CreateDevice, 6) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t pp = a[4];
     uint32_t w = R32(pp), h = R32(pp + 4), fmt = R32(pp + 8), count = std::max<uint32_t>(R32(pp + 12), 1);
@@ -171,11 +171,11 @@ HLE_STDCALL(0049D210, Direct3D_CreateDevice, 6) {
     return 0;
 }
 
-HLE_STDCALL(0049A5B0, D3DDevice_Release, 0) { return 1; }
+HLE_STDCALL(D3DDevice_Release, 0) { return 1; }
 
 // ---------------------------------------------------------------- synchronisation, the renderer never runs behind
 
-HLE_STDCALL(004A17C0, D3D_BlockOnResource, 1) {
+HLE_STDCALL(D3D_BlockOnResource, 1) {
     uint32_t res = a[0];
     if (res && g_backend) {
         std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -188,7 +188,7 @@ HLE_STDCALL(004A17C0, D3D_BlockOnResource, 1) {
                 uint32_t code[4] = {}, n = 0;
                 for (uint32_t i = 0; i < 32 && n < 4; i++) {
                     uint32_t v = R32(ctx.esp + i * 4);
-                    if (v >= 0x11000 && v < 0x4F5150) code[n++] = v;
+                    if (v >= X86CodeBase && v < X86CodeEnd) code[n++] = v;
                 }
                 LOGI("d3d: BlockOnResource on surface %08X, stack %08X %08X %08X %08X", data, code[0], code[1], code[2], code[3]);
             }
@@ -202,16 +202,16 @@ HLE_STDCALL(004A17C0, D3D_BlockOnResource, 1) {
 }
 // lock(resource, face, level, locked, rect, flags): D3DLOCK_NOOVERWRITE skips the block above, yet the
 // title reads what the GPU drew (eye adaptation average, save image)
-X86_EXTERN_FUNC(__imp__sub_0049DE60);
-X86_FUNC(sub_0049DE60) {
+X86_EXTERN_FUNC(GUEST_ORIG(Lock2DSurface));
+X86_FUNC(GUEST(Lock2DSurface)) {
     uint32_t res = R32(ctx.esp + 4);
     if ((R32(ctx.esp + 24) & 0x20) && res && g_backend) {
         std::lock_guard<std::recursive_mutex> lock(g_lock);
         g_backend->SyncLate(mem::VirtualFromPhysical(R32(res + 4)));
     }
-    __imp__sub_0049DE60(ctx, base);
+    GUEST_ORIG(Lock2DSurface)(ctx, base);
 }
-HLE_STDCALL(0049BF20, D3DResource_BlockUntilNotBusy, 1) {
+HLE_STDCALL(D3DResource_BlockUntilNotBusy, 1) {
     if (a[0] && g_backend) {
         std::lock_guard<std::recursive_mutex> lock(g_lock);
         g_backend->WaitResource(a[0]);
@@ -219,57 +219,57 @@ HLE_STDCALL(0049BF20, D3DResource_BlockUntilNotBusy, 1) {
     gpu::MarkDirty(a[0]);
     return 0;
 }
-HLE_STDCALL(0049BE60, D3DResource_IsBusy, 1) {
+HLE_STDCALL(D3DResource_IsBusy, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     return a[0] && g_backend && g_backend->Busy(a[0]) ? 1 : 0;
 }
-HLE_STDCALL(004A1490, D3D_BlockOnTime, 2) { return 0; }
-HLE_STDCALL(0049A600, D3DDevice_BlockOnFence, 1) {
+HLE_STDCALL(D3D_BlockOnTime, 2) { return 0; }
+HLE_STDCALL(D3DDevice_BlockOnFence, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (g_backend) g_backend->WaitFence(a[0]);
     return 0;
 }
-HLE_STDCALL(0049A700, D3DDevice_InsertFence, 0) {
+HLE_STDCALL(D3DDevice_InsertFence, 0) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     return g_backend ? g_backend->Fence() : 0;
 }
-HLE_STDCALL(004A1290, D3DDevice_IsFencePending, 1) {
+HLE_STDCALL(D3DDevice_IsFencePending, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     return g_backend && g_backend->FencePending(a[0]) ? 1 : 0;
 }
-HLE_STDCALL(004A13D0, D3D_SetFence, 1) {
+HLE_STDCALL(D3D_SetFence, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     return g_backend ? g_backend->Fence() : 0;
 }
-HLE_STDCALL(004A17A0, D3D_KickOffAndWaitForIdle, 0) {
+HLE_STDCALL(D3D_KickOffAndWaitForIdle, 0) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (g_backend) g_backend->Flush();
     return 0;
 }
-HLE_FASTCALL(004A12B0, CDevice_KickOff, 0) { return 0; }
+HLE_FASTCALL(CDevice_KickOff, 0) { return 0; }
 
-HLE_STDCALL(004A1740, D3DDevice_MakeSpace, 0) {
+HLE_STDCALL(D3DDevice_MakeSpace, 0) {
     LOG_FIRST(16, "d3d: MakeSpace from %08X, some caller still pushes hardware commands", R32(ctx.esp));
     SetDev(kDevPush, g_scratch_push);
     return g_scratch_push;
 }
-HLE_STDCALL(004A1600, D3D_MakeRequestedSpace, 2) {
+HLE_STDCALL(D3D_MakeRequestedSpace, 2) {
     LOG_FIRST(16, "d3d: MakeRequestedSpace from %08X", R32(ctx.esp));
     SetDev(kDevPush, g_scratch_push);
     return g_scratch_push;
 }
 
-HLE_STDCALL(0049A610, D3DDevice_BlockUntilVerticalBlank, 0) {
+HLE_STDCALL(D3DDevice_BlockUntilVerticalBlank, 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
     return 0;
 }
-HLE_STDCALL(0049A650, D3DDevice_SetFlickerFilter, 1) { return 0; }
-HLE_STDCALL(0049A6A0, D3DDevice_SetSoftDisplayFilter, 1) { return 0; }
-HLE_STDCALL(0049C100, D3DDevice_EnableOverlay, 1) { return 0; }
-HLE_STDCALL(0049B800, D3DDevice_PersistDisplay, 0) { return 0; }
-HLE_STDCALL(0049B370, D3DDevice_FlushVertexCache, 0) { return 0; }
+HLE_STDCALL(D3DDevice_SetFlickerFilter, 1) { return 0; }
+HLE_STDCALL(D3DDevice_SetSoftDisplayFilter, 1) { return 0; }
+HLE_STDCALL(D3DDevice_EnableOverlay, 1) { return 0; }
+HLE_STDCALL(D3DDevice_PersistDisplay, 0) { return 0; }
+HLE_STDCALL(D3DDevice_FlushVertexCache, 0) { return 0; }
 
-HLE_STDCALL(0049A3D0, D3DDevice_SetGammaRamp, 2) {
+HLE_STDCALL(D3DDevice_SetGammaRamp, 2) {
     uint8_t ramp[768];
     std::memcpy(ramp, HostPtr(a[1]), 768);
     if (g_backend) g_backend->SetGamma(ramp);
@@ -278,7 +278,7 @@ HLE_STDCALL(0049A3D0, D3DDevice_SetGammaRamp, 2) {
 
 // ---------------------------------------------------------------- targets and presentation
 
-HLE_STDCALL(0049A850, D3DDevice_SetRenderTarget, 2) {
+HLE_STDCALL(D3DDevice_SetRenderTarget, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t rt = a[0] ? a[0] : Dev(kDevRenderTarget), zs = a[1];
     AddRef(rt);
@@ -298,26 +298,26 @@ HLE_STDCALL(0049A850, D3DDevice_SetRenderTarget, 2) {
     return 0;
 }
 
-HLE_STDCALL(0049AAD0, D3DDevice_GetBackBuffer2, 1) {
+HLE_STDCALL(D3DDevice_GetBackBuffer2, 1) {
     int32_t i = int32_t(a[0]);
     uint32_t s = i < 0 ? g_buffers[0] : g_buffers[std::min<uint32_t>(uint32_t(i) + 1, g_buffer_count - 1)];
     W32(s, R32(s) + 1);
     return s;
 }
 
-HLE_STDCALL(0049AE50, D3DDevice_GetRenderTarget2, 0) {
+HLE_STDCALL(D3DDevice_GetRenderTarget2, 0) {
     uint32_t s = Dev(kDevRenderTarget);
     if (s) W32(s, R32(s) + 1);
     return s;
 }
 
-HLE_STDCALL(0049AE70, D3DDevice_GetDepthStencilSurface2, 0) {
+HLE_STDCALL(D3DDevice_GetDepthStencilSurface2, 0) {
     uint32_t s = Dev(kDevDepth);
     if (s) W32(s, R32(s) + 1);
     return s;
 }
 
-HLE_STDCALL(0049CC50, D3DDevice_Swap, 1) {
+HLE_STDCALL(D3DDevice_Swap, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t back = g_buffers[1];
     if (g_backend) g_backend->Present(SurfaceOf(back));
@@ -339,20 +339,20 @@ HLE_STDCALL(0049CC50, D3DDevice_Swap, 1) {
     return n;
 }
 
-HLE_STDCALL(0049CE00, D3DDevice_Clear, 6) {
+HLE_STDCALL(D3DDevice_Clear, 6) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     const uint8_t* rects = a[0] && a[1] ? static_cast<const uint8_t*>(HostPtr(a[1])) : nullptr;
     if (g_backend) g_backend->Clear(g_state, a[0], rects, a[2], a[3], ArgF(a, 4), a[5]);
     return 0;
 }
 
-HLE_STDCALL(0049AB20, D3DDevice_CopyRects, 5) {
+HLE_STDCALL(D3DDevice_CopyRects, 5) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (g_backend) g_backend->Copy(SurfaceOf(a[0]), SurfaceOf(a[3]), a[2], a[1], a[4]);
     return 0;
 }
 
-HLE_STDCALL(0049AE90, D3DDevice_SetViewport, 1) {
+HLE_STDCALL(D3DDevice_SetViewport, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t v = a[0];
     g_state.viewport = {R32(v), R32(v + 4), R32(v + 8), R32(v + 12), GF(v + 16), GF(v + 20)};
@@ -361,14 +361,14 @@ HLE_STDCALL(0049AE90, D3DDevice_SetViewport, 1) {
     return 0;
 }
 
-HLE_STDCALL(0049B480, D3DDevice_SetScissors, 3) {
+HLE_STDCALL(D3DDevice_SetScissors, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     g_state.scissor_count = std::min<uint32_t>(a[0], 8);
     for (uint32_t i = 0; i < g_state.scissor_count * 4; i++) g_state.scissors[i] = R32(a[2] + i * 4);
     return 0;
 }
 
-HLE_STDCALL(0049B930, D3DDevice_SetScreenSpaceOffset, 2) {
+HLE_STDCALL(D3DDevice_SetScreenSpaceOffset, 2) {
     g_state.ss_offset_x = ArgF(a, 0);
     g_state.ss_offset_y = ArgF(a, 1);
     UpdateViewportConstants();
@@ -377,13 +377,13 @@ HLE_STDCALL(0049B930, D3DDevice_SetScreenSpaceOffset, 2) {
 
 // ---------------------------------------------------------------- render states
 
-HLE_FASTCALL(0049EFC0, D3DDevice_SetRenderState_Simple, 0) {
+HLE_FASTCALL(D3DDevice_SetRenderState_Simple, 0) {
     uint32_t method = ctx.ecx & 0x1FFC, value = ctx.edx;
     g_state.simple[method >> 2] = value;
     return 0;
 }
 
-HLE_STDCALL(0049EFF0, D3DDevice_SetRenderStateNotInline, 2) {
+HLE_STDCALL(D3DDevice_SetRenderStateNotInline, 2) {
     uint32_t rs = a[0], v = a[1];
     if (rs < gpu::kRsDeferredFirst) {
         uint32_t method = R32(kSimpleEncode + rs * 4) & 0x1FFC;
@@ -394,59 +394,59 @@ HLE_STDCALL(0049EFF0, D3DDevice_SetRenderStateNotInline, 2) {
     return 0;
 }
 
-#define COMPLEX_STATE(addr, name, rs) \
-    HLE_STDCALL(addr, D3DDevice_SetRenderState_##name, 1) { \
-        SetComplex(rs, a[0]);                               \
-        return 0;                                           \
+#define COMPLEX_STATE(name, rs)                       \
+    HLE_STDCALL(D3DDevice_SetRenderState_##name, 1) { \
+        SetComplex(rs, a[0]);                         \
+        return 0;                                     \
     }
-COMPLEX_STATE(0049EF90, PSTextureModes, gpu::kRsPsTextureModes)
-COMPLEX_STATE(0049F7E0, VertexBlend, gpu::kRsVertexBlend)
-COMPLEX_STATE(0049F340, FogColor, gpu::kRsFogColor)
-COMPLEX_STATE(0049F6B0, FillMode, gpu::kRsFillMode)
-COMPLEX_STATE(0049F700, BackFillMode, gpu::kRsBackFillMode)
-COMPLEX_STATE(0049F760, TwoSidedLighting, gpu::kRsTwoSidedLighting)
-COMPLEX_STATE(0049F440, NormalizeNormals, gpu::kRsNormalizeNormals)
-COMPLEX_STATE(004A0210, ZEnable, gpu::kRsZEnable)
-COMPLEX_STATE(004A02A0, StencilEnable, gpu::kRsStencilEnable)
-COMPLEX_STATE(004A0340, StencilFail, gpu::kRsStencilFail)
-COMPLEX_STATE(0049F400, FrontFace, gpu::kRsFrontFace)
-COMPLEX_STATE(0049F390, CullMode, gpu::kRsCullMode)
-COMPLEX_STATE(0049F480, TextureFactor, gpu::kRsTextureFactor)
-COMPLEX_STATE(0049F650, LogicOp, gpu::kRsLogicOp)
-COMPLEX_STATE(0049F2C0, EdgeAntiAlias, gpu::kRsEdgeAntiAlias)
-COMPLEX_STATE(004A0580, MultiSampleAntiAlias, gpu::kRsMultiSampleAntiAlias)
-COMPLEX_STATE(004A0600, MultiSampleMask, gpu::kRsMultiSampleMask)
-COMPLEX_STATE(004A0520, MultiSampleMode, gpu::kRsMultiSampleMode)
-COMPLEX_STATE(004A0550, MultiSampleRenderTargetMode, gpu::kRsMultiSampleRenderTargetMode)
-COMPLEX_STATE(0049F300, ShadowFunc, gpu::kRsShadowFunc)
-COMPLEX_STATE(0049F4E0, LineWidth, gpu::kRsLineWidth)
-COMPLEX_STATE(004A0650, SampleAlpha, gpu::kRsSampleAlpha)
-COMPLEX_STATE(0049F550, Dxt1NoiseEnable, gpu::kRsDxt1NoiseEnable)
-COMPLEX_STATE(004A03B0, YuvEnable, gpu::kRsYuvEnable)
-COMPLEX_STATE(004A03E0, OcclusionCullEnable, gpu::kRsOcclusionCullEnable)
-COMPLEX_STATE(004A0450, StencilCullEnable, gpu::kRsStencilCullEnable)
-COMPLEX_STATE(004A04C0, RopZCmpAlwaysRead, gpu::kRsRopZCmpAlwaysRead)
-COMPLEX_STATE(004A04E0, RopZRead, gpu::kRsRopZRead)
-COMPLEX_STATE(004A0500, DoNotCullUncompressed, gpu::kRsDoNotCullUncompressed)
+COMPLEX_STATE(PSTextureModes, gpu::kRsPsTextureModes)
+COMPLEX_STATE(VertexBlend, gpu::kRsVertexBlend)
+COMPLEX_STATE(FogColor, gpu::kRsFogColor)
+COMPLEX_STATE(FillMode, gpu::kRsFillMode)
+COMPLEX_STATE(BackFillMode, gpu::kRsBackFillMode)
+COMPLEX_STATE(TwoSidedLighting, gpu::kRsTwoSidedLighting)
+COMPLEX_STATE(NormalizeNormals, gpu::kRsNormalizeNormals)
+COMPLEX_STATE(ZEnable, gpu::kRsZEnable)
+COMPLEX_STATE(StencilEnable, gpu::kRsStencilEnable)
+COMPLEX_STATE(StencilFail, gpu::kRsStencilFail)
+COMPLEX_STATE(FrontFace, gpu::kRsFrontFace)
+COMPLEX_STATE(CullMode, gpu::kRsCullMode)
+COMPLEX_STATE(TextureFactor, gpu::kRsTextureFactor)
+COMPLEX_STATE(LogicOp, gpu::kRsLogicOp)
+COMPLEX_STATE(EdgeAntiAlias, gpu::kRsEdgeAntiAlias)
+COMPLEX_STATE(MultiSampleAntiAlias, gpu::kRsMultiSampleAntiAlias)
+COMPLEX_STATE(MultiSampleMask, gpu::kRsMultiSampleMask)
+COMPLEX_STATE(MultiSampleMode, gpu::kRsMultiSampleMode)
+COMPLEX_STATE(MultiSampleRenderTargetMode, gpu::kRsMultiSampleRenderTargetMode)
+COMPLEX_STATE(ShadowFunc, gpu::kRsShadowFunc)
+COMPLEX_STATE(LineWidth, gpu::kRsLineWidth)
+COMPLEX_STATE(SampleAlpha, gpu::kRsSampleAlpha)
+COMPLEX_STATE(Dxt1NoiseEnable, gpu::kRsDxt1NoiseEnable)
+COMPLEX_STATE(YuvEnable, gpu::kRsYuvEnable)
+COMPLEX_STATE(OcclusionCullEnable, gpu::kRsOcclusionCullEnable)
+COMPLEX_STATE(StencilCullEnable, gpu::kRsStencilCullEnable)
+COMPLEX_STATE(RopZCmpAlwaysRead, gpu::kRsRopZCmpAlwaysRead)
+COMPLEX_STATE(RopZRead, gpu::kRsRopZRead)
+COMPLEX_STATE(DoNotCullUncompressed, gpu::kRsDoNotCullUncompressed)
 
-HLE_STDCALL(0049F830, D3DDevice_SetTextureState_TexCoordIndex, 2) {
+HLE_STDCALL(D3DDevice_SetTextureState_TexCoordIndex, 2) {
     g_state.tss[a[0] & 3][gpu::kTssTexCoordIndex] = a[1];
     W32(kTextureState + ((a[0] & 3) * 32 + gpu::kTssTexCoordIndex) * 4, a[1]);
     return 0;
 }
-HLE_STDCALL(0049F940, D3DDevice_SetTextureState_BumpEnv, 3) {
+HLE_STDCALL(D3DDevice_SetTextureState_BumpEnv, 3) {
     if (a[1] >= gpu::kTssBumpEnvMat00 && a[1] <= gpu::kTssBumpEnvLOffset) g_state.tss[a[0] & 3][a[1]] = a[2];
     return 0;
 }
-HLE_STDCALL(0049F9B0, D3DDevice_SetTextureState_BorderColor, 2) {
+HLE_STDCALL(D3DDevice_SetTextureState_BorderColor, 2) {
     g_state.tss[a[0] & 3][gpu::kTssBorderColor] = a[1];
     return 0;
 }
-HLE_STDCALL(0049F9F0, D3DDevice_SetTextureState_ColorKeyColor, 2) {
+HLE_STDCALL(D3DDevice_SetTextureState_ColorKeyColor, 2) {
     g_state.tss[a[0] & 3][gpu::kTssColorKeyColor] = a[1];
     return 0;
 }
-HLE_STDCALL(0049FA30, D3DDevice_SetTextureStageStateNotInline, 3) {
+HLE_STDCALL(D3DDevice_SetTextureStageStateNotInline, 3) {
     uint32_t stage = a[0] & 3, type = a[1], v = a[2];
     if (type < gpu::kTssCount) {
         g_state.tss[stage][type] = v;
@@ -455,20 +455,25 @@ HLE_STDCALL(0049FA30, D3DDevice_SetTextureStageStateNotInline, 3) {
     return 0;
 }
 
-HLE_STDCALL(0049A460, D3DDevice_SetTransform, 2) {
+// the XDK's transform types: view 0, projection 1, texture 2-5, world 6-9; the renderer keeps Direct3D 8's numbers
+// (view 2, projection 3, texture 16, world 256). The device copy at +0xC60 is what GetTransform reads.
+HLE_STDCALL(D3DDevice_SetTransform, 2) {
     uint32_t t = a[0];
-    if (t < g_state.transforms.size()) std::memcpy(g_state.transforms[t].data(), HostPtr(a[1]), 64);
+    if (t >= 10) return 0;
+    std::memcpy(HostPtr(kDevice + 0xC60 + t * 64), HostPtr(a[1]), 64);
+    uint32_t pc = t < 2 ? t + 2 : t < 6 ? t + 14 : t + 250;
+    std::memcpy(g_state.transforms[pc].data(), HostPtr(a[1]), 64);
     return 0;
 }
 
-HLE_STDCALL(0049A580, D3DDevice_SetMaterial, 1) {
+HLE_STDCALL(D3DDevice_SetMaterial, 1) {
     std::memcpy(g_state.material.data(), HostPtr(a[0]), 17 * 4);
     return 0;
 }
 
 // ---------------------------------------------------------------- resources in use
 
-HLE_STDCALL(0049B0C0, D3DDevice_SetTexture, 2) {
+HLE_STDCALL(D3DDevice_SetTexture, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t stage = a[0] & 3, tex = a[1];
     uint32_t old = Dev(kDevTextures + stage * 4);
@@ -480,7 +485,22 @@ HLE_STDCALL(0049B0C0, D3DDevice_SetTexture, 2) {
     return 0;
 }
 
-HLE_STDCALL(0049E9E0, D3DDevice_SetStreamSource, 3) {
+// SwitchTexture(method, data, format), fastcall: a swizzled texture of the bound one's shape replaces it. It is
+// bound through a header of the stage's own holding the bound texture's fields with the new data and format.
+HLE_FASTCALL(D3DDevice_SwitchTexture, 1) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    static uint32_t headers[4];
+    uint32_t stage = (((ctx.ecx & 0x1FFC) - 0x1B00) >> 6) & 3, cur = g_state.textures[stage];
+    uint32_t& h = headers[stage];
+    if (!h) h = mem::AllocSystem(20);
+    if (cur && cur != h) std::memcpy(HostPtr(h), HostPtr(cur), 20);
+    W32(h + 4, ctx.edx);
+    W32(h + 12, a[0]);
+    g_state.textures[stage] = h;
+    return 0;
+}
+
+HLE_STDCALL(D3DDevice_SetStreamSource, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t n = a[0] & 15, vb = a[1], stride = a[2];
     uint32_t old = R32(kStreams + n * 12 + 8);
@@ -492,7 +512,7 @@ HLE_STDCALL(0049E9E0, D3DDevice_SetStreamSource, 3) {
     return 0;
 }
 
-HLE_STDCALL(0049B270, D3DDevice_SetIndices, 2) {
+HLE_STDCALL(D3DDevice_SetIndices, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t ib = a[0];
     uint32_t old = Dev(kDevIndexBuffer);
@@ -509,7 +529,7 @@ HLE_STDCALL(0049B270, D3DDevice_SetIndices, 2) {
 
 // ---------------------------------------------------------------- shaders
 
-HLE_STDCALL(0049E770, D3DDevice_CreateVertexShader, 4) {
+HLE_STDCALL(D3DDevice_CreateVertexShader, 4) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t decl = a[0], func = a[1], out = a[2];
     auto vs = std::make_shared<gpu::VertexShader>();
@@ -536,7 +556,7 @@ HLE_STDCALL(0049E770, D3DDevice_CreateVertexShader, 4) {
     return 0;
 }
 
-HLE_STDCALL(0049ED10, D3DDevice_DeleteVertexShader, 1) {
+HLE_STDCALL(D3DDevice_DeleteVertexShader, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     auto it = g_vs.find(a[0]);
     if (it != g_vs.end()) {
@@ -546,7 +566,7 @@ HLE_STDCALL(0049ED10, D3DDevice_DeleteVertexShader, 1) {
     return 0;
 }
 
-HLE_STDCALL(0049EE20, D3DDevice_SetVertexShader, 1) {
+HLE_STDCALL(D3DDevice_SetVertexShader, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t h = a[0];
     g_state.vs_handle = h;
@@ -565,29 +585,40 @@ HLE_STDCALL(0049EE20, D3DDevice_SetVertexShader, 1) {
     return 0;
 }
 
-HLE_FASTCALL(0049E8B0, D3DDevice_SetVertexShaderConstant1Fast, 0) {
+HLE_FASTCALL(D3DDevice_SetVertexShaderConstant1Fast, 0) {
     uint32_t reg = ctx.ecx;
     if (reg < 192) std::memcpy(g_state.vsc[reg].data(), HostPtr(ctx.edx), 16);
     return 0;
 }
 
-HLE_FASTCALL(0049E900, D3DDevice_SetVertexShaderConstantNotInlineFast, 1) {
+HLE_FASTCALL(D3DDevice_SetVertexShaderConstant1, 0) {
+    uint32_t reg = ctx.ecx;
+    if (reg < 192) std::memcpy(g_state.vsc[reg].data(), HostPtr(ctx.edx), 16);
+    return 0;
+}
+
+HLE_FASTCALL(D3DDevice_SetVertexShaderConstant4, 0) {
+    for (uint32_t i = 0; i < 4 && ctx.ecx + i < 192; i++) std::memcpy(g_state.vsc[ctx.ecx + i].data(), HostPtr(ctx.edx + i * 16), 16);
+    return 0;
+}
+
+HLE_FASTCALL(D3DDevice_SetVertexShaderConstantNotInlineFast, 1) {
     uint32_t reg = ctx.ecx, src = ctx.edx, dwords = a[0];
     for (uint32_t i = 0; i < dwords / 4 && reg + i < 192; i++) std::memcpy(g_state.vsc[reg + i].data(), HostPtr(src + i * 16), 16);
     return 0;
 }
 
-HLE_STDCALL(0049EAB0, D3DDevice_LoadVertexShader, 2) {
+HLE_STDCALL(D3DDevice_LoadVertexShader, 2) {
     LOG_FIRST(4, "d3d: LoadVertexShader %08X at %u is not supported", a[0], a[1]);
     return 0;
 }
-HLE_STDCALL(0049EB10, D3DDevice_SelectVertexShader, 2) {
+HLE_STDCALL(D3DDevice_SelectVertexShader, 2) {
     LOG_FIRST(4, "d3d: SelectVertexShader %08X at %u is not supported", a[0], a[1]);
     return 0;
 }
-HLE_STDCALL(0049EBB0, D3DDevice_SetShaderConstantMode, 1) { return 0; }
+HLE_STDCALL(D3DDevice_SetShaderConstantMode, 1) { return 0; }
 
-HLE_STDCALL(004A5C60, D3DDevice_CreatePixelShader, 2) {
+HLE_STDCALL(D3DDevice_CreatePixelShader, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     auto ps = std::make_shared<gpu::PixelShader>();
     std::memcpy(ps->def, HostPtr(a[0]), sizeof(ps->def));
@@ -598,13 +629,13 @@ HLE_STDCALL(004A5C60, D3DDevice_CreatePixelShader, 2) {
     return 0;
 }
 
-HLE_STDCALL(004A5CB0, D3DDevice_DeletePixelShader, 1) {
+HLE_STDCALL(D3DDevice_DeletePixelShader, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (g_ps.erase(a[0])) mem::FreeSystem(a[0]);
     return 0;
 }
 
-HLE_STDCALL(004A5CD0, D3DDevice_SetPixelShader, 1) {
+HLE_STDCALL(D3DDevice_SetPixelShader, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     g_state.ps = nullptr;
     if (!a[0]) return 0;
@@ -637,7 +668,7 @@ HLE_STDCALL(004A5CD0, D3DDevice_SetPixelShader, 1) {
     return 0;
 }
 
-HLE_STDCALL(004A5ED0, D3DDevice_SetPixelShaderConstant, 3) {
+HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t reg = a[0], src = a[1], n = a[2];
     for (uint32_t i = 0; i < n && reg + i < 16; i++) std::memcpy(g_state.psc[reg + i].data(), HostPtr(src + i * 16), 16);
@@ -647,7 +678,7 @@ HLE_STDCALL(004A5ED0, D3DDevice_SetPixelShaderConstant, 3) {
 
 // ---------------------------------------------------------------- drawing
 
-HLE_STDCALL(004A61A0, D3DDevice_DrawVertices, 3) {
+HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
     gpu::g_splash &= gpu::g_in_splash;
@@ -655,7 +686,7 @@ HLE_STDCALL(004A61A0, D3DDevice_DrawVertices, 3) {
     return 0;
 }
 
-HLE_STDCALL(004A6240, D3DDevice_DrawIndexedVertices, 3) {
+HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
     gpu::g_splash &= gpu::g_in_splash;
@@ -664,8 +695,51 @@ HLE_STDCALL(004A6240, D3DDevice_DrawIndexedVertices, 3) {
     return 0;
 }
 
-HLE_STDCALL(004A64E0, D3DDevice_Begin, 1) {
+// DrawVerticesUP(prim, count, vertices, stride): the vertices are copied to a ring the render thread reads, stream 0
+// points there through a vertex buffer header for the draw. A half of the ring is written again once the draws
+// that read it are done.
+namespace {
+constexpr uint32_t kUpRing = 4u << 20, kUpHalf = kUpRing / 2;
+uint32_t g_up_ring = 0, g_up_pos = 0, g_up_header = 0, g_up_fence[2] = {};
+
+uint32_t UpVertices(uint32_t src, uint32_t bytes) {
+    if (!g_up_ring) {
+        g_up_ring = mem::AllocContiguous(kUpRing, 0, 0xFFFFFFFF, 0x1000);
+        g_up_header = mem::AllocSystem(20);
+        std::memset(HostPtr(g_up_header), 0, 20);
+        W32(g_up_header, 1);
+    }
+    bytes = std::min((bytes + 63) & ~63u, kUpHalf);
+    uint32_t pos = g_up_pos + bytes > kUpRing ? 0 : g_up_pos;
+    uint32_t from = g_up_pos ? (g_up_pos - 1) / kUpHalf : 1, to = (pos + bytes - 1) / kUpHalf;
+    if (to != from) {
+        g_up_fence[from] = g_backend->Fence();
+        g_backend->WaitFence(g_up_fence[to]);
+    }
+    std::memcpy(HostPtr(g_up_ring + pos), HostPtr(src), bytes);
+    g_up_pos = pos + bytes;
+    W32(g_up_header + 4, mem::PhysicalFromVirtual(g_up_ring + pos));
+    return g_up_header;
+}
+}  // namespace
+
+HLE_STDCALL(D3DDevice_DrawVerticesUP, 4) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (!g_backend || !a[1] || !a[3]) return 0;
+    SyncDeferred();
+    gpu::g_splash &= gpu::g_in_splash;
+    auto stream = g_state.streams[0];
+    g_state.streams[0] = {UpVertices(a[2], a[1] * a[3]), a[3]};
+    g_backend->Draw(g_state, a[0], 0, a[1], nullptr);
+    g_state.streams[0] = stream;
+    return 0;
+}
+
+// frame buffer compression tiles are the console's memory controller's business
+HLE_STDCALL(D3DDevice_SetTile, 2) { return 0; }
+
+HLE_STDCALL(D3DDevice_Begin, 1) {
     LOG_FIRST(4, "d3d: Begin/End immediate mode is not supported");
     return 0;
 }
-HLE_STDCALL(004A6520, D3DDevice_End, 0) { return 0; }
+HLE_STDCALL(D3DDevice_End, 0) { return 0; }

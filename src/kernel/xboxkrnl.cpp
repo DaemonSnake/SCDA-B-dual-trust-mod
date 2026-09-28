@@ -733,20 +733,66 @@ KERNEL_EXPORT(301, RtlNtStatusToDosError, 1) {
 
 // ---------------------------------------------------------------- exceptions, debug, shutdown
 
+// Exceptions dispatch like NT on x86: each handler of the fs:[0] chain is called (record, frame, context,
+// dispatcher context) until one returns ExceptionContinueExecution. A C++ catch never returns: the CRT jumps to the
+// continuation, which unwinds the host stack (X86Resume).
+namespace {
+constexpr uint32_t kContextBytes = 0x400, kUnwinding = 2, kExitUnwind = 4, kContinueExecution = 0;
+
+uint32_t CallHandler(X86Context& ctx, uint32_t rec, uint32_t frame, uint32_t scratch) {
+    return CallGuest(ctx, R32(frame + 4), {rec, frame, scratch, scratch + kContextBytes - 8});
+}
+}  // namespace
+
 KERNEL_EXPORT(302, RtlRaiseException, 1) {
     uint32_t rec = a[0];
-    LOGE("RtlRaiseException code %08X flags %X address %08X params %u", R32(rec), R32(rec + 4), R32(rec + 12), R32(rec + 16));
+    std::string text;
+    // a C++ throw of a string (Unreal's appThrowf throws a TCHAR*): the text
+    if (R32(rec) == 0xE06D7363 && R32(rec + 16) >= 2 && mem::IsCommitted(R32(rec + 24))) {
+        for (uint32_t p = R32(R32(rec + 24)), n = 0; mem::IsCommitted(p) && n < 256; n++, p += 2) {
+            uint16_t c = R16(p);
+            if (!c) break;
+            text += c < 0x80 ? char(c) : '?';
+        }
+        LOG_FIRST(64, "c++ throw: %s", text.c_str());
+    }
+    uint32_t esp = ctx.esp;
+    ctx.esp = (ctx.esp - kContextBytes) & ~15u;
+    uint32_t scratch = ctx.esp;
+    std::memset(HostPtr(scratch), 0, kContextBytes);
+    for (uint32_t frame = R32(ctx.fs_base); frame && frame != 0xFFFFFFFF; frame = R32(frame)) {
+        if (CallHandler(ctx, rec, frame, scratch) == kContinueExecution) {
+            ctx.esp = esp;
+            return 0;
+        }
+    }
+    ctx.esp = esp;
+    LOGE("RtlRaiseException code %08X flags %X address %08X params %u, not handled", R32(rec), R32(rec + 4), R32(rec + 12),
+         R32(rec + 16));
     for (uint32_t i = 0; i < std::min<uint32_t>(R32(rec + 16), 4); i++) LOGE("  param %u = %08X", i, R32(rec + 20 + i * 4));
+    if (!text.empty()) LOGE("  thrown: %s", text.c_str());
     x86_trap(ctx, R32(ctx.esp), "guest raised an exception");
 }
 
+// RtlUnwind(target frame, target ip, record, return value): the handlers of the frames above the target run with
+// the unwinding flag (destructors), each frame leaving the chain after its handler
 KERNEL_EXPORT(312, RtlUnwind, 4) {
-    // drop registrations above the target frame; __finally blocks inside them do not run
-    uint32_t target = a[0];
-    uint32_t head = R32(ctx.fs_base);
-    while (head != 0xFFFFFFFF && head && head != target) head = R32(head);
-    W32(ctx.fs_base, target ? target : head);
-    return 0;
+    uint32_t target = a[0], rec = a[2];
+    uint32_t esp = ctx.esp;
+    ctx.esp = (ctx.esp - kContextBytes - 0x60) & ~15u;
+    uint32_t scratch = ctx.esp;
+    std::memset(HostPtr(scratch), 0, kContextBytes + 0x60);
+    if (!rec) {
+        rec = scratch + kContextBytes;
+        W32(rec, 0xC0000027);  // STATUS_UNWIND
+    }
+    W32(rec + 4, R32(rec + 4) | kUnwinding | (target ? 0 : kExitUnwind));
+    for (uint32_t frame = R32(ctx.fs_base); frame && frame != 0xFFFFFFFF && frame != target; frame = R32(ctx.fs_base)) {
+        CallHandler(ctx, rec, frame, scratch);
+        W32(ctx.fs_base, R32(frame));
+    }
+    ctx.esp = esp;
+    return a[3];
 }
 
 static std::string FormatGuest(X86Context& ctx, uint32_t fmt_va, uint32_t args_va) {
@@ -811,18 +857,17 @@ KERNEL_EXPORT(95, KeBugCheck, 1) {
 
 KERNEL_EXPORT(49, HalReturnToFirmware, 1) {
     LOGI("HalReturnToFirmware(%u): the title asked to leave", a[0]);
-    // quick reboot into this same title, the XAPI wrote the launch data page: restart the process with it
+    // quick reboot into a recompiled image, the XAPI wrote the launch data page: restart into its executable with it
     uint32_t page = R32(g_launch_data_page_va);
     if (a[0] == 2 && page) {
         std::string path = ReadCString(page + 8, 520);
-        for (char& c : path) c = char(std::tolower(uint8_t(c)));
-        if (path.size() >= 11 && path.compare(path.size() - 11, 11, "default.xbe") == 0) {
+        if (const char* exe = ImageExe(path)) {
             if (FILE* f = std::fopen(g_launch_file.c_str(), "wb")) {
                 std::fwrite(HostPtr(page), 1, 0x1000, f);
                 std::fclose(f);
             }
             LOGI("relaunching into %s", path.c_str());
-            Relaunch();
+            Relaunch(exe);
         }
     }
     LogGuestStack(ctx, 256);

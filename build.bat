@@ -12,12 +12,8 @@ set "VSINST=%PF86%\Microsoft Visual Studio\Installer"
 set "VSWHERE=%VSINST%\vswhere.exe"
 set "OUT=%CD%\out\build\win-amd64-release"
 
-if not exist assets\default.xbe (
-    echo   Put the full game files in the assets folder first:
-    echo     %CD%\assets
-    echo   It needs default.xbe with the Default and Media folders beside it.
-    goto :fail
-)
+if not exist assets\default.xbe goto :nogame
+if not exist assets\sc4_adv.xbe goto :nogame
 
 rem ---------------------------------------------------------------- toolchain
 echo [1/2] Toolchain
@@ -45,17 +41,18 @@ for /f "tokens=*" %%v in ('clang++ --version ^| findstr /i version') do echo    
 
 rem ---------------------------------------------------------------- game
 echo [2/2] Game code
-echo       first build recompiles default.xbe, expect 30 to 90 minutes ...
+echo       first build recompiles default.xbe and sc4_adv.xbe, expect 30 to 90 minutes ...
 cmake --preset win-amd64-release >nul || goto :fail
 cmake --build out\build\win-amd64-release || goto :fail
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent built.
-echo   out\build\win-amd64-release\SCDA.exe
+echo   out\build\win-amd64-release\SCDAOffline.exe  story and co-op
+echo   out\build\win-amd64-release\SCDAOnline.exe   versus, started from the main menu
 echo.
 if defined CI exit /b 0
 choice /c YN /n /m "  Play now? [Y/N] "
-if not errorlevel 2 (start "" /d "%OUT%" "%OUT%\SCDA.exe") else (pause)
+if not errorlevel 2 (start "" /d "%OUT%" "%OUT%\SCDAOffline.exe") else (pause)
 exit /b 0
 
 rem ---------------------------------------------------------------- helpers
@@ -84,6 +81,12 @@ echo         clang++ / cmake / ninja  -  Visual Studio Installer, Modify, Indivi
 echo                                     components: "C++ Clang tools for Windows"
 echo                                     and "C++ CMake tools for Windows"
 echo         git                      -  https://git-scm.com/download/win
+goto :fail
+
+:nogame
+echo   Put the full game files in the assets folder first:
+echo     %CD%\assets
+echo   It needs default.xbe and sc4_adv.xbe with the Default, Media and adv folders beside them.
 goto :fail
 
 :fail

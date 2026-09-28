@@ -42,6 +42,11 @@ typedef double __attribute__((aligned(1), may_alias)) x86_f64u;
 
 // runtime services, implemented in src/cpu/dispatch.cpp
 void x86_icall(X86Context& ctx, uint8_t* base, uint32_t target);
+// a jump to a C++ catch continuation unwinds the host stack to the frame that resumes there (esp as the CRT set it)
+struct X86Resume {
+    uint32_t target, esp;
+};
+void x86_resume(X86Context& ctx, uint8_t* base, const X86Resume& r);
 void x86_kernel(X86Context& ctx, uint8_t* base, uint32_t ordinal);
 [[noreturn]] void x86_trap(X86Context& ctx, uint32_t va, const char* what);
 void x86_priv(X86Context& ctx, uint32_t va, const char* what);

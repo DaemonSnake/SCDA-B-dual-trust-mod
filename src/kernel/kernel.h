@@ -181,7 +181,9 @@ std::string ResolvePath(const std::string& xbox_path, uint32_t root_handle);  //
 bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::string& data_dir);
 void RunForever();
 [[noreturn]] void Shutdown(int code);
-[[noreturn]] void Relaunch();
+// the executable recompiled from an Xbox image path (D:\\default.xbe), null when there is none
+const char* ImageExe(std::string xbe_path);
+[[noreturn]] void Relaunch(const char* exe);
 extern std::string g_launch_file;
 
 using KernelFn = void (*)(X86Context& ctx, uint8_t* base);

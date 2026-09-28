@@ -135,6 +135,36 @@ bool Analysis::DecodeFlow(uint32_t va, Insn& out, JumpTable* jt) {
     return true;
 }
 
+// "and r, mask; neg r; add r, end; jmp r": a jump back into a run of one byte instructions ending at end, as the
+// MSVC memcpy tail copies its last dwords with a sled of movsd
+bool Analysis::SledTable(uint32_t jmp_va, const uint32_t* ring, int nring, JumpTable& jt) {
+    ZydisDecodedInstruction in;
+    ZydisDecodedOperand ops[ZYDIS_MAX_OPERAND_COUNT];
+    if (!Decode(jmp_va, in, ops) || ops[0].type != ZYDIS_OPERAND_TYPE_REGISTER) return false;
+    ZydisRegister r = ops[0].reg.value;
+    // add right before the jump, then neg and and further back past instructions that leave r alone
+    const ZydisMnemonic want[3] = {ZYDIS_MNEMONIC_ADD, ZYDIS_MNEMONIC_NEG, ZYDIS_MNEMONIC_AND};
+    uint32_t imm[3] = {};
+    int k = 0;
+    for (int back = 2; back <= std::min(nring, 8) && k < 3; back++) {
+        if (!Decode(ring[(nring - back) & 7], in, ops)) return false;
+        bool writes_r = ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                        ZydisRegisterGetLargestEnclosing(ZYDIS_MACHINE_MODE_LEGACY_32, ops[0].reg.value) == r;
+        if (in.mnemonic == want[k] && writes_r && (k == 1 || ops[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE)) {
+            imm[k] = k == 1 ? 0 : uint32_t(ops[1].imm.value.u);
+            k++;
+        } else if (writes_r || k == 0) {
+            return false;
+        }
+    }
+    if (k < 3) return false;
+    if (imm[2] > 255) return false;
+    jt.insn = jmp_va;
+    for (uint32_t i = 0; i <= imm[2]; i++)
+        if (IsCode(imm[0] - i)) jt.targets.push_back(imm[0] - i);
+    return !jt.targets.empty();
+}
+
 bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) {
     struct Pending {
         uint32_t va;
@@ -157,7 +187,7 @@ bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) 
     while (!work.empty()) {
         uint32_t va = work.back();
         work.pop_back();
-        uint32_t ring[4] = {};
+        uint32_t ring[8] = {};
         int nring = 0;
         for (;;) {
             if (insns_.count(va) || seen.count(va)) break;
@@ -165,7 +195,7 @@ bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) 
                 if (trusted) break;
                 return false;
             }
-            if (cover_[va - lo_] != 0) {
+            if (cover_[va - lo_] != 0 && (!trusted || cover_[va - lo_] == 3)) {
                 if (trusted) break;
                 return false;
             }
@@ -180,12 +210,15 @@ bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) 
                 break;
             }
             if (conflict(va, insn.len)) {
-                if (trusted) break;
-                return false;
+                // real control flow wins over a guessed entry decoded across these bytes: both decodes are kept
+                bool data = false;
+                for (uint32_t i = 0; i < insn.len; i++) data |= !IsCode(va + i) || cover_[va + i - lo_] == 3;
+                if (!trusted) return false;
+                if (data) break;
             }
             local.push_back({va, insn});
             seen[va] = 1;
-            ring[nring++ & 3] = va;
+            ring[nring++ & 7] = va;
             if (insn.flow == Flow::Call) {
                 if (insn.target == va + insn.len) {
                     // call $+5 pushes eip only
@@ -202,7 +235,10 @@ bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) 
                 work.push_back(insn.target);
                 break;
             } else if (insn.flow == Flow::JmpIndirect) {
-                if (!jt.targets.empty()) {
+                if (jt.targets.empty() && SledTable(va, ring, nring, jt)) {
+                    for (uint32_t t : jt.targets) work.push_back(t);
+                    tables.push_back(jt);
+                } else if (!jt.targets.empty()) {
                     // bound the table from a preceding "cmp idx, n"
                     ZydisDecodedInstruction ji;
                     ZydisDecodedOperand jo[ZYDIS_MAX_OPERAND_COUNT];
@@ -212,7 +248,7 @@ bool Analysis::Walk(uint32_t entry, bool trusted, std::vector<uint32_t>* calls) 
                     uint32_t byte_table = 0;
                     ZydisRegister byte_idx = ZYDIS_REGISTER_NONE;
                     for (int k = 1; k < 4 && k < nring; k++) {
-                        uint32_t pa = ring[(nring - 1 - k) & 3];
+                        uint32_t pa = ring[(nring - 1 - k) & 7];
                         ZydisDecodedInstruction pi;
                         ZydisDecodedOperand po[ZYDIS_MAX_OPERAND_COUNT];
                         if (!Decode(pa, pi, po)) break;
@@ -472,6 +508,7 @@ void Analysis::Run() {
             }
         }
     }
+    EhContinuations();
     // every direct call from decoded code names a function
     for (bool changed = true; changed;) {
         changed = false;
@@ -497,6 +534,65 @@ void Analysis::Run() {
     std::fprintf(stderr, "overlapping decodes: %zu\n", overlaps);
     std::fprintf(stderr, "total: %zu functions, %zu instructions, %zu code bytes of %u, %zu jump tables, %zu callback entries\n",
                  functions.size(), insns_.size(), bytes, hi_ - lo_, jump_tables.size(), imm);
+}
+
+void Analysis::MakeFunction(uint32_t va) {
+    if (functions.count(va) || !IsCode(va)) return;
+    uint8_t cov = cover_[va - lo_];
+    if (cov == 2 || cov == 3) return;
+    std::vector<uint32_t> calls;
+    if (cov == 0) Walk(va, true, &calls);
+    functions.insert(va);
+}
+
+// MSVC C++ EH: a frame's handler thunk is "mov eax, FuncInfo; jmp __CxxFrameHandler". Its catch blocks and unwind
+// actions are called through pointers, and a catch block returns in eax where its function resumes.
+void Analysis::EhContinuations() {
+    std::vector<uint32_t> thunks(functions.begin(), functions.end());
+    size_t catches = 0;
+    for (uint32_t f : thunks) {
+        ZydisDecodedInstruction in;
+        ZydisDecodedOperand ops[ZYDIS_MAX_OPERAND_COUNT];
+        if (!Decode(f, in, ops) || in.mnemonic != ZYDIS_MNEMONIC_MOV || ops[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
+            ops[0].reg.value != ZYDIS_REGISTER_EAX || ops[1].type != ZYDIS_OPERAND_TYPE_IMMEDIATE)
+            continue;
+        uint32_t info = uint32_t(ops[1].imm.value.u), magic = 0, max_state = 0, unwind = 0, tries = 0, map = 0;
+        if (!Decode(f + in.length, in, ops) || in.mnemonic != ZYDIS_MNEMONIC_JMP) continue;
+        if (!img.Read32(info, magic) || magic < 0x19930520 || magic > 0x19930522) continue;
+        img.Read32(info + 4, max_state);
+        img.Read32(info + 8, unwind);
+        img.Read32(info + 12, tries);
+        img.Read32(info + 16, map);
+        for (uint32_t i = 0; i < max_state && i < 4096; i++) {
+            uint32_t action = 0;
+            if (img.Read32(unwind + i * 8 + 4, action) && action) MakeFunction(action);
+        }
+        for (uint32_t t = 0; t < tries && t < 1024; t++) {
+            uint32_t count = 0, handlers = 0;
+            img.Read32(map + t * 20 + 12, count);
+            img.Read32(map + t * 20 + 16, handlers);
+            for (uint32_t h = 0; h < count && h < 64; h++) {
+                uint32_t block = 0;
+                if (!img.Read32(handlers + h * 16 + 12, block) || !IsCode(block)) continue;
+                MakeFunction(block);
+                // the block's rets are "mov eax, continuation; ret"
+                std::vector<uint32_t> body = Body(block);
+                for (size_t k = 1; k < body.size(); k++) {
+                    const Insn* r = InsnAt(body[k]);
+                    if (!r || r->flow != Flow::Ret || !Decode(body[k - 1], in, ops) || body[k - 1] + in.length != body[k]) continue;
+                    if (in.mnemonic == ZYDIS_MNEMONIC_MOV && ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                        ops[0].reg.value == ZYDIS_REGISTER_EAX && ops[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
+                        IsCode(uint32_t(ops[1].imm.value.u))) {
+                        uint32_t c = uint32_t(ops[1].imm.value.u);
+                        MakeFunction(c);
+                        if (functions.count(c)) continuations.insert(c);
+                    }
+                }
+                catches++;
+            }
+        }
+    }
+    std::fprintf(stderr, "c++ eh: %zu catch blocks, %zu continuations\n", catches, continuations.size());
 }
 
 std::vector<uint32_t> Analysis::Body(uint32_t entry) const {
