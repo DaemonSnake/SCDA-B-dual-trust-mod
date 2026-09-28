@@ -39,9 +39,10 @@ struct Rule {
     constexpr Rule(std::string_view name, Mode m) : id(Crc32(name)), mode(m) {}
 };
 
-// Magma names pages and elements by crc32 of their name
+// Magma names pages and elements by crc32 of their name. The goggles' vignette, lens ring and frame lines
+// are arcs of one circle: only a uniform stretch keeps them on one curve
 constexpr Rule kHud[] = {
-    {"A_Goggles", Mode::Extend},       {"A_HUD", Mode::Right},          {"A_Interact_NPC", Mode::Right},
+    {"A_Goggles", Mode::Stretch},      {"A_HUD", Mode::Right},          {"A_Interact_NPC", Mode::Right},
     {"A_Interact_RTN", Mode::Right},    {"B_interact_NPC", Mode::Right}, {"B_interact_RTN", Mode::Right},
     {"List_interaction_NPC", Mode::Right}, {"List_interaction_RTN", Mode::Right}, {"A_Goals", Mode::Right},
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
@@ -49,7 +50,7 @@ constexpr Rule kHud[] = {
     {"A_timer", Mode::Left},            {"Sound_Meter", Mode::Right},
 };
 constexpr Rule kOverlay[] = {
-    {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Extend}, {"A_Goggles", Mode::Extend},
+    {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
     {"A_timer", Mode::Left},    {"A_Communications", Mode::Left},
 };
 
