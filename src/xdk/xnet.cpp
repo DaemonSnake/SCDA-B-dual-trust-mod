@@ -3,7 +3,9 @@
 // WSANOTINITIALISED on their own, and the XOnline calls with XONLINE_E_NOT_INITIALIZED.
 // Addresses: an XNADDR's ina is the peer's real IPv4, so secure addresses map to IPs one to one.
 // With --instance N the game binds 127.0.0.N and a broadcast goes to the other loopback instances.
-// Join IP (a host past the LAN): the system link search's broadcasts also go to that address, and with one peer
+// Join IP (a host past the LAN): the system link search's broadcasts also go to that address, and the host's
+// broadcasts (LAN discovery answers every search with one, to 255.255.255.255:9100) go to the public addresses
+// that have reached it. With one peer
 // (co-op) a LAN address in an XNADDR, which only means something on its owner's LAN, stands for the peer's public
 // one: the join address on the client, the address its packets come from on the host. Ports a NAT rewrote are
 // answered on the port the peer's packets came from.
@@ -82,6 +84,8 @@ thread_local uint32_t t_error = 0;
 std::atomic<uint32_t> g_remote{0};  // the last public address a packet came from
 std::mutex g_nat_lock;
 std::unordered_map<uint64_t, uint16_t> g_nat;  // (peer address, our port) -> the port its packets come from
+std::vector<uint32_t> g_public;                // public addresses packets came from, the latest last
+constexpr size_t kMaxPublic = 8;
 
 std::string Ip(uint32_t a) {
     char s[32];
@@ -217,10 +221,11 @@ int Recv(uint32_t sock, SOCKET s, const std::vector<Span>& spans, uint32_t from,
     if (peer != g_local && !Private(peer)) {
         if (g_remote.exchange(peer) != peer) LOGI("xnet: peer %s", Addr(src).c_str());
         auto it = g_sockets.find(sock);
-        if (it != g_sockets.end() && it->second.port) {
-            std::lock_guard<std::mutex> lock(g_nat_lock);
-            g_nat[NatKey(peer, it->second.port)] = src.sin_port;
-        }
+        std::lock_guard<std::mutex> lock(g_nat_lock);
+        if (it != g_sockets.end() && it->second.port) g_nat[NatKey(peer, it->second.port)] = src.sin_port;
+        std::erase(g_public, peer);
+        g_public.push_back(peer);
+        if (g_public.size() > kMaxPublic) g_public.erase(g_public.begin());
     }
     if (from) std::memcpy(HostPtr(from), &src, sizeof(src));
     if (fromlen) W32(fromlen, sizeof(src));
@@ -231,11 +236,21 @@ int SendOnce(SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
     if (!to) return ::send(s, reinterpret_cast<const char*>(data), len, 0);
     sockaddr_in d = *to;
     if (d.sin_addr.s_addr == INADDR_BROADCAST) {
+        std::vector<sockaddr_in> also;
         if (uint32_t join = JoinAddress()) {
-            sockaddr_in j = d;
-            j.sin_addr.s_addr = join;
-            ::sendto(s, reinterpret_cast<const char*>(data), len, 0, reinterpret_cast<sockaddr*>(&j), sizeof(j));
+            also.push_back(d);
+            also.back().sin_addr.s_addr = join;
         }
+        {
+            std::lock_guard<std::mutex> lock(g_nat_lock);
+            for (uint32_t peer : g_public) {
+                also.push_back(d);
+                also.back().sin_addr.s_addr = peer;
+                if (auto it = g_nat.find(NatKey(peer, d.sin_port)); it != g_nat.end()) also.back().sin_port = it->second;
+            }
+        }
+        for (const sockaddr_in& a : also)
+            ::sendto(s, reinterpret_cast<const char*>(data), len, 0, reinterpret_cast<const sockaddr*>(&a), sizeof(a));
     } else {
         std::lock_guard<std::mutex> lock(g_nat_lock);
         auto it = g_nat.find(NatKey(d.sin_addr.s_addr, d.sin_port));
