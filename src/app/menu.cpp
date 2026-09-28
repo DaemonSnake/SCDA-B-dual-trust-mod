@@ -158,101 +158,174 @@ void Changed(bool display) {
     Save();
 }
 
-void DrawRows() {
+enum RowId {
+    kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kSensitivity, kInvertMouse
+};
+
+using rows::Kind;
+using rows::Row;
+
+constexpr Row kSettingsRows[] = {
+    {Kind::Heading, -1, "DISPLAY"},
+    {Kind::Value, kDisplayMode, "DISPLAY MODE"},
+    {Kind::Value, kResolution, "RESOLUTION"},
+    {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
+    {Kind::Value, kMaxFps, "MAX FRAME RATE"},
+    {Kind::Value, kVsync, "VSYNC"},
+    {Kind::Value, kFpsCounter, "FPS COUNTER"},
+    {Kind::Heading, -1, "GRAPHICS"},
+    {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
+    {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
+    {Kind::Value, kShaderModel, "SHADER MODEL"},
+    {Kind::Value, kHdr, "HDR RENDERING"},
+    {Kind::Value, kToneMapping, "TONE MAPPING"},
+    {Kind::Value, kHqShadows, "HQ SOFT SHADOWS"},
+    {Kind::Heading, -1, "GAME"},
+    {Kind::Value, kSkipIntros, "SKIP INTROS"},
+    {Kind::Heading, -1, "CO-OP"},
+    {Kind::Value, kTickRate, "TICK RATE"},
+    {Kind::Value, kInputDelay, "MIN INPUT DELAY"},
+    {Kind::Text, kJoinIp, "JOIN IP"},
+};
+
+const std::vector<Row>& InputRows() {
+    static const std::vector<Row> list = [] {
+        std::vector<Row> out = {{Kind::Heading, -1, "MOUSE"},
+                                {Kind::Value, kSensitivity, "MOUSE SENSITIVITY"},
+                                {Kind::Value, kInvertMouse, "INVERT MOUSE"},
+                                {Kind::Heading, -1, "KEYBOARD"}};
+        size_t count = 0;
+        const input::Action* actions = input::Actions(&count);
+        for (size_t i = 0; i < count; i++) out.push_back({Kind::Bind, int(i), actions[i].label});
+        return out;
+    }();
+    return list;
+}
+
+// steps the value first when step is not zero
+std::string RowText(int id, int step) {
     Settings& s = Get();
-    char text[64];
-    Section("DISPLAY");
-    {
-        static const char* const kModes[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
-        int i = int(s.display_mode);
-        if (int step = OptionRow("DISPLAY MODE", kModes[i])) {
-            s.display_mode = DisplayMode(StepIndex(i, step, 3));
-            Changed(true);
+    char text[64] = "";
+    bool display = false;
+    switch (id) {
+        case kDisplayMode: {
+            static const char* const kModes[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
+            if (step) s.display_mode = DisplayMode(StepIndex(int(s.display_mode), step, 3));
+            display = true;
+            std::snprintf(text, sizeof(text), "%s", kModes[std::min(int(s.display_mode), 2)]);
+            break;
         }
-    }
-    {
-        static std::vector<Mode> modes = Modes();
-        int i = 0;
-        for (size_t k = 0; k < modes.size() && !i; k++)
-            if (modes[k].width == s.width && modes[k].height == s.height) i = int(k) + 1;
-        Mode m = i ? modes[size_t(i - 1)] : Desktop();
-        std::snprintf(text, sizeof(text), i ? "%ux%u" : "DESKTOP (%ux%u)", m.width, m.height);
-        if (int step = OptionRow("RESOLUTION", text)) {
-            i = StepIndex(i, step, int(modes.size()) + 1);
-            s.width = i ? modes[size_t(i - 1)].width : 0;
-            s.height = i ? modes[size_t(i - 1)].height : 0;
-            Changed(true);
+        case kResolution: {
+            static const std::vector<Mode> modes = Modes();
+            int i = 0;
+            for (size_t k = 0; k < modes.size() && !i; k++)
+                if (modes[k].width == s.width && modes[k].height == s.height) i = int(k) + 1;
+            if (step) {
+                i = StepIndex(i, step, int(modes.size()) + 1);
+                s.width = i ? modes[size_t(i - 1)].width : 0;
+                s.height = i ? modes[size_t(i - 1)].height : 0;
+            }
+            display = true;
+            Mode m = i ? modes[size_t(i - 1)] : Desktop();
+            std::snprintf(text, sizeof(text), i ? "%ux%u" : "DESKTOP (%ux%u)", m.width, m.height);
+            break;
         }
-    }
-    {
-        Mode out = Output();
-        std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100, out.height * s.render_percent / 100);
-        if (int step = OptionRow("RENDER RESOLUTION", text)) {
-            s.render_percent = uint32_t(std::clamp(int(s.render_percent) + step * 5, 20, 200));
-            Changed(false);
+        case kRenderResolution: {
+            if (step) s.render_percent = uint32_t(std::clamp(int(s.render_percent) + step * 5, 20, 200));
+            Mode out = Output();
+            std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
+                          out.height * s.render_percent / 100);
+            break;
         }
-    }
-    {
-        uint32_t cap = kFpsCaps[NearestIndex(kFpsCaps, int(std::size(kFpsCaps)), s.fps_cap)];
-        if (cap) std::snprintf(text, sizeof(text), "%u", cap);
-        if (int step = OptionRow("MAX FRAME RATE", cap ? text : "UNLIMITED")) {
-            StepTable(kFpsCaps, s.fps_cap, step);
-            Changed(false);
+        case kMaxFps: {
+            uint32_t cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
+            if (cap) std::snprintf(text, sizeof(text), "%u", cap);
+            else std::snprintf(text, sizeof(text), "UNLIMITED");
+            break;
         }
-    }
-    if (OptionRow("VSYNC", OnOff(s.vsync))) {
-        s.vsync = !s.vsync;
-        Changed(false);
-    }
-    if (OptionRow("FPS COUNTER", OnOff(s.fps_counter))) {
-        s.fps_counter = !s.fps_counter;
-        Changed(false);
-    }
-    Section("GRAPHICS");
-    if (int step = OptionRow("ANISOTROPIC FILTERING", kAnisoNames[NearestIndex(kAnisoValues, 5, s.aniso)])) {
-        StepTable(kAnisoValues, s.aniso, step);
-        Changed(false);
-    }
-    {
-        uint32_t size = kShadowSizes[NearestIndex(kShadowSizes, int(std::size(kShadowSizes)), s.shadow_resolution)];
-        std::snprintf(text, sizeof(text), size == 512 ? "%u (CONSOLE)" : "%u", size);
-        if (int step = OptionRow("SHADOW RESOLUTION", size ? text : "AUTO")) {
-            StepTable(kShadowSizes, s.shadow_resolution, step);
-            Changed(false);
+        case kVsync:
+            if (step) s.vsync = !s.vsync;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.vsync));
+            break;
+        case kFpsCounter:
+            if (step) s.fps_counter = !s.fps_counter;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.fps_counter));
+            break;
+        case kAniso:
+            std::snprintf(text, sizeof(text), "%s", kAnisoNames[StepTable(kAnisoValues, s.aniso, step)]);
+            break;
+        case kShadowResolution: {
+            uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];
+            if (size) std::snprintf(text, sizeof(text), size == 512 ? "%u (CONSOLE)" : "%u", size);
+            else std::snprintf(text, sizeof(text), "AUTO");
+            break;
         }
-    }
-    Section("GAME");
-    if (OptionRow("SKIP INTROS", OnOff(s.skip_intros))) {
-        s.skip_intros = !s.skip_intros;
-        Changed(false);
-    }
-    Section("CO-OP");
-    {
-        uint32_t rate = kTickRates[NearestIndex(kTickRates, int(std::size(kTickRates)), s.coop_tick_rate)];
-        if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);
-        if (int step = OptionRow("TICK RATE", rate ? text : "GAME (22 HZ)")) {
-            StepTable(kTickRates, s.coop_tick_rate, step);
-            Changed(false);
+        case kShaderModel:
+            if (step) s.shader_model = s.shader_model >= 3 ? 1 : 3;
+            std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1");
+            break;
+        case kHdr:
+        case kToneMapping:
+        case kHqShadows: {
+            // shader model 3.0 features, off at 1.1
+            bool& on = id == kHdr ? s.hdr_rendering : id == kToneMapping ? s.tone_mapping : s.hq_soft_shadows;
+            if (s.shader_model < 3) return "OFF (SM 1.1)";
+            if (step) on = !on;
+            std::snprintf(text, sizeof(text), "%s", OnOff(on));
+            break;
         }
-    }
-    {
-        uint32_t floor = kDelayFloors[NearestIndex(kDelayFloors, int(std::size(kDelayFloors)), s.coop_input_delay_floor)];
-        std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (GAME)" : "%u MS", floor);
-        if (int step = OptionRow("MIN INPUT DELAY", text)) {
-            StepTable(kDelayFloors, s.coop_input_delay_floor, step);
-            Changed(false);
+        case kSkipIntros:
+            if (step) s.skip_intros = !s.skip_intros;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));
+            break;
+        case kTickRate: {
+            uint32_t rate = kTickRates[StepTable(kTickRates, s.coop_tick_rate, step)];
+            if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);
+            else std::snprintf(text, sizeof(text), "GAME (22 HZ)");
+            break;
         }
-    }
-    {
-        static char join[64] = {};
-        static bool loaded = false;
-        if (!loaded) std::snprintf(join, sizeof(join), "%s", s.join_ip.c_str());
-        loaded = true;
-        if (TextRow("JOIN IP", join, sizeof(join))) {
-            s.join_ip = join;
-            Changed(false);
+        case kInputDelay: {
+            uint32_t floor = kDelayFloors[StepTable(kDelayFloors, s.coop_input_delay_floor, step)];
+            std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (GAME)" : "%u MS", floor);
+            break;
         }
+        case kJoinIp:
+            return s.join_ip;
+        case kSensitivity:
+            if (step)
+                s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);
+            std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
+            break;
+        case kInvertMouse:
+            if (step) s.invert_mouse = !s.invert_mouse;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.invert_mouse));
+            break;
     }
+    if (step) Changed(display);
+    return text;
+}
+
+std::string KeyText(std::string keys) {
+    if (keys.empty()) return "UNBOUND";
+    for (char& c : keys) c = c == ',' ? '/' : char(std::toupper(uint8_t(c)));
+    return keys;
+}
+
+void RestoreDefaults(int page) {
+    if (page == 1) {
+        Settings& s = Get();
+        s.mouse_sensitivity = Settings{}.mouse_sensitivity;
+        s.invert_mouse = false;
+        input::ResetBindings();
+        return;
+    }
+    Settings keep = Get();
+    Get() = Settings{};
+    Get().mouse_sensitivity = keep.mouse_sensitivity;
+    Get().invert_mouse = keep.invert_mouse;
+    Get().keys = keep.keys;
+    Changed(true);
 }
 
 // the row being rebound, -1 when idle; its keys must be released before the next press binds
@@ -260,9 +333,9 @@ std::atomic<int> g_capture{-1};
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = 0;
-const char* const kPages[] = {"SETTINGS", "MOUSE AND KEYBOARD", "LEVEL SELECT"};
+const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "LEVEL SELECT"};
 constexpr int kPageCount = int(std::size(kPages));
-constexpr int kControlsPage = 1, kLevelsPage = 2;
+constexpr int kLevelsPage = 2;
 
 // the DataXb\LMaps folders; Menu is the main menu
 const char* const kSoloLevels[] = {
@@ -289,8 +362,7 @@ bool BindRow(const char* label, const std::string& keys, bool capturing) {
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    std::string value = capturing ? std::string("PRESS A KEY") : keys.empty() ? std::string("UNBOUND") : keys;
-    for (char& c : value) c = c == ',' ? '/' : char(std::toupper(uint8_t(c)));
+    std::string value = capturing ? std::string("PRESS A KEY") : keys;
     float value_x = row_x + row_w - block_w + row_h + style.ItemSpacing.x;
     ImGui::SetCursorPos(ImVec2(value_x + std::max((value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
     ImGui::AlignTextToFramePadding();
@@ -317,28 +389,32 @@ void PollCapture() {
     g_capture_done = ImGui::GetFrameCount();
 }
 
-void DrawControls() {
-    Settings& s = Get();
-    char text[64];
-    Section("MOUSE");
-    std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
-    if (int step = OptionRow("MOUSE SENSITIVITY", text)) {
-        s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);
-        Changed(false);
-    }
-    if (OptionRow("INVERT MOUSE", OnOff(s.invert_mouse))) {
-        s.invert_mouse = !s.invert_mouse;
-        Changed(false);
-    }
-    Section("KEYBOARD");
+void DrawRows(int page) {
     size_t count = 0;
-    const input::Action* actions = input::Actions(&count);
-    for (size_t i = 0; i < count; i++)
-        if (BindRow(actions[i].label, input::Binding(i), g_capture == int(i)) && g_capture < 0 &&
-            ImGui::GetFrameCount() > g_capture_done + 1) {
-            g_capture = int(i);
-            g_capture_armed = false;
+    const Row* list = rows::Page(page, &count);
+    for (size_t i = 0; i < count; i++) {
+        const Row& r = list[i];
+        if (r.kind == Kind::Heading) {
+            Section(r.label);
+        } else if (r.kind == Kind::Value) {
+            if (int step = OptionRow(r.label, RowText(r.id, 0).c_str())) RowText(r.id, step);
+        } else if (r.kind == Kind::Bind) {
+            if (BindRow(r.label, rows::Value(r), g_capture == r.id) && g_capture < 0 &&
+                ImGui::GetFrameCount() > g_capture_done + 1) {
+                g_capture = r.id;
+                g_capture_armed = false;
+            }
+        } else {
+            static char join[64] = {};
+            static bool loaded = false;
+            if (!loaded) std::snprintf(join, sizeof(join), "%s", Get().join_ip.c_str());
+            loaded = true;
+            if (TextRow(r.label, join, sizeof(join))) {
+                Get().join_ip = join;
+                Changed(false);
+            }
         }
+    }
 }
 
 void LevelList(const char* title, const char* const* levels, size_t count) {
@@ -357,20 +433,7 @@ void DrawLevels() {
 
 void Defaults() {
     g_capture = -1;
-    if (g_page == kLevelsPage) return;
-    if (g_page == kControlsPage) {
-        Settings& s = Get();
-        s.mouse_sensitivity = Settings{}.mouse_sensitivity;
-        s.invert_mouse = false;
-        input::ResetBindings();
-        return;
-    }
-    Settings keep = Get();
-    Get() = Settings{};
-    Get().mouse_sensitivity = keep.mouse_sensitivity;
-    Get().invert_mouse = keep.invert_mouse;
-    Get().keys = keep.keys;
-    Changed(true);
+    if (g_page != kLevelsPage) RestoreDefaults(g_page);
 }
 
 void DrawPanel() {
@@ -402,8 +465,7 @@ void DrawPanel() {
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
         if (g_page == kLevelsPage) DrawLevels();
-        else if (g_page == kControlsPage) DrawControls();
-        else DrawRows();
+        else DrawRows(g_page);
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
@@ -412,10 +474,12 @@ void DrawPanel() {
                                                        : "Up and Down select, Left and Right change, Enter rebinds, F10 or Escape closes");
         ImGui::PopStyleColor();
         float bw = em * 8;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 2 - ImGui::GetStyle().ItemSpacing.x, 0.0f));
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2, 0.0f));
         if (ImGui::Button("Back", ImVec2(bw, 0))) ToggleMenu();
         ImGui::SameLine();
         if (ImGui::Button("Defaults", ImVec2(bw, 0))) Defaults();
+        ImGui::SameLine();
+        if (ImGui::Button("Apply", ImVec2(bw, 0))) Changed(true);
     }
     ImGui::End();
     ImGui::PopStyleVar(4);
@@ -458,5 +522,35 @@ void DrawUi(double fps) {
         DrawPanel();
     }
 }
+
+namespace rows {
+
+// the game thread asks too, the F10 panel draws under the same lock
+const Row* Page(int page, size_t* count) {
+    if (page == 1) {
+        *count = InputRows().size();
+        return InputRows().data();
+    }
+    *count = std::size(kSettingsRows);
+    return kSettingsRows;
+}
+
+std::string Value(const Row& row) {
+    std::lock_guard lock(UiLock());
+    if (row.kind == Kind::Bind) return KeyText(input::Binding(size_t(row.id)));
+    return row.kind == Kind::Heading ? std::string() : RowText(row.id, 0);
+}
+
+void Step(const Row& row, int step) {
+    std::lock_guard lock(UiLock());
+    if (row.kind == Kind::Value && step) RowText(row.id, step);
+}
+
+void Defaults(int page) {
+    std::lock_guard lock(UiLock());
+    RestoreDefaults(page);
+}
+
+}  // namespace rows
 
 }  // namespace app

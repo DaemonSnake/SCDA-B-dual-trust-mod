@@ -18,6 +18,8 @@ namespace game {
 void UpdateView(uint32_t viewport);               // views.cpp
 void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
 void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
+void MenuTick(X86Context& ctx);     // options_menu.cpp
+void PromptsTick(X86Context& ctx);  // prompts.cpp
 }
 
 namespace {
@@ -197,6 +199,8 @@ X86_FUNC(sub_0004B525) {
     input::SetQuickInventory(page == kQuickInventory);
     input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
     game::UpdateView(viewport);
+    game::MenuTick(ctx);
+    game::PromptsTick(ctx);
     bool net = (R32(engine + kNetA) && R32(engine + kNetB)) || R32(engine + kNetC);
     input::SetNetSession(net);
     float dx, dy;

@@ -19,6 +19,10 @@ struct Settings {
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
     uint32_t shadow_resolution = 0;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
+    uint32_t shader_model = 3;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
+    bool hdr_rendering = true;
+    bool tone_mapping = true;
+    bool hq_soft_shadows = true;
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
@@ -51,6 +55,20 @@ bool MenuOpen();
 bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
 void DrawUi(double fps);
+
+// option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard
+namespace rows {
+enum class Kind { Heading, Value, Bind, Text };
+struct Row {
+    Kind kind;
+    int id;  // a bind row's input action
+    const char* label;
+};
+const Row* Page(int page, size_t* count);
+std::string Value(const Row& row);
+void Step(const Row& row, int step);
+void Defaults(int page);
+}  // namespace rows
 
 // the console on the backtick key, drawn by DrawUi
 bool ConsoleOpen();

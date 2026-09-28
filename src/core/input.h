@@ -60,6 +60,8 @@ void TapButtons(uint16_t buttons);
 // blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
 void WaitForPress();
 bool InMenu();
+// the keyboard or mouse was used after the pad's last new press
+bool KeyboardActive();
 // the cursor in window client pixels and the client size; false when the game is not taking input
 bool Cursor(int& x, int& y, int& w, int& h);
 uint32_t Clicks();

@@ -410,6 +410,8 @@ void SetMenu(bool menu) {
 
 bool InMenu() { return g_menu; }
 
+bool KeyboardActive() { return g_keyboard_ms >= g_pad_ms; }
+
 void SetView(View view, float zoom_speed) {
     if (g_view.exchange(int(view)) != int(view)) g_wheel = 0;
     g_zoom_speed = zoom_speed;
