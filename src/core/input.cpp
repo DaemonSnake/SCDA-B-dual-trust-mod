@@ -73,7 +73,9 @@ std::array<std::atomic<int>, 32> g_down_as{};
 
 // In a menu pause (Escape) backs out as B, except in the pause menu, which only Start closes.
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
-std::atomic<bool> g_title{false}, g_pause_menu{false};
+// In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
+constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
+std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false};
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
 template <size_t N>
@@ -95,15 +97,20 @@ bool g_wiggle = false;
 std::chrono::steady_clock::time_point g_wiggle_time;
 
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
-// these land the game's axis on 0.2 0.4 0.6 0.8 1.0.
-constexpr float kSpeeds[] = {0.44f, 0.58f, 0.72f, 0.86f, 1.0f};
+// these land the game's axis on 0.31 0.48 0.66 0.83 1.0: 0.31 is SCCT PC's slowest (its AxisMod floor), and
+// below 0.3 some states (gun drawn) do not move at all.
+constexpr float kSpeeds[] = {0.517f, 0.638f, 0.759f, 0.879f, 1.0f};
 std::atomic<int> g_speed{4};
 
-// what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys
+std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
+
+// what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
+// or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
 struct Target {
     Action action;
     int button;
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
+    KeyEvent event = KeyEvent::None;
 };
 constexpr Target kActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
@@ -236,6 +243,7 @@ void Keyboard(Pad& p) {
         if (b < 0) {
             int button = kActions[i].button;
             b = camera                    ? Remapped(kCameraRemap, button)
+                : g_opsat               ? Remapped(kOpsatRemap, button)
                 : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
                                         : button;
             g_down_as[i] = b + 1;
@@ -360,6 +368,8 @@ bool TakeMouse(float& dx, float& dy) {
 void SetTitleScreen(bool title) { g_title = title; }
 
 void SetPauseMenu(bool pause) { g_pause_menu = pause; }
+
+void SetOpsat(bool opsat) { g_opsat = opsat; }
 
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {

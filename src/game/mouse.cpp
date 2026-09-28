@@ -4,6 +4,7 @@
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
 #include <algorithm>
+#include <iterator>
 
 #include "core/input.h"
 #include "game/console.h"
@@ -17,6 +18,15 @@ void UpdateView(uint32_t viewport);               // views.cpp
 }
 
 namespace {
+
+// the pages of opsat.mgm whose names are known, but P_VideoData: its videos skip on pause (Start), which is
+// Escape there
+constexpr uint32_t kOpsatPages[] = {
+    game::magma::Id("P_Opsat"),    game::magma::Id("P_Goals"),     game::magma::Id("P_Goals_details"),
+    game::magma::Id("P_Map"),      game::magma::Id("P_Notes"),     game::magma::Id("P_DataFile"),
+    game::magma::Id("P_Datas"),    game::magma::Id("P_Equipment"), game::magma::Id("P_Communications"),
+    game::magma::Id("P_PDA"),      game::magma::Id("P_Trust"),     game::magma::Id("P_Videos"),
+};
 
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;
 constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
@@ -172,6 +182,7 @@ X86_FUNC(sub_0004B525) {
     uint32_t page = top ? R32(top + 0x14) : 0;
     input::SetTitleScreen(page == game::magma::Id("P_Start"));
     input::SetPauseMenu(page == game::magma::Id("P_Pause"));
+    input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
     game::UpdateView(viewport);
     float dx, dy;
     // the axis command stores its value, so each axis gets one summed event per update

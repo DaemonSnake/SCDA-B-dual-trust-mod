@@ -32,6 +32,8 @@ void SetMenu(bool menu);
 void SetTitleScreen(bool title);
 // the pause menu, which Start closes and B does not: the pause key stays Start there
 void SetPauseMenu(bool pause);
+// an OPSAT page, which B closes: the pause key and the OPSAT key are B there
+void SetOpsat(bool opsat);
 
 // What the player looks through, set by the game side each input update. In the EEV and the sticky camera
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
