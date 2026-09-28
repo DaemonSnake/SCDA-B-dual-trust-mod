@@ -48,7 +48,7 @@ constexpr Rule kHud[] = {
     {"A_Interact_RTN", Mode::Right},    {"B_interact_NPC", Mode::Right}, {"B_interact_RTN", Mode::Right},
     {"List_interaction_NPC", Mode::Right}, {"List_interaction_RTN", Mode::Right}, {"A_Goals", Mode::Right},
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
-    {"A_Info_teamate", Mode::Right},    {"I_Talking", Mode::Right},      {"A_Communications", Mode::Left},
+    {"A_Info_teamate", Mode::Left},     {"I_Talking", Mode::Left},       {"A_Communications", Mode::Left},
     {"A_timer", Mode::Left},            {"Sound_Meter", Mode::Right},
 };
 constexpr Rule kOverlay[] = {
