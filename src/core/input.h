@@ -46,6 +46,8 @@ enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
+// the directions the move keys push port 0's stick (up, down, left, right as bits 0-3), whatever the walking speed
+uint32_t StickKeys();
 // keys the game side acts on itself, once per press in play
 enum class KeyEvent { None, Whistle, SidekickCommand };
 bool TakeEvent(KeyEvent event);  // pressed since the last call

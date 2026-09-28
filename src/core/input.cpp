@@ -76,6 +76,7 @@ constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
 std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false};
+std::atomic<uint32_t> g_stick_keys{0};  // StickKeys
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
 template <size_t N>
@@ -296,7 +297,10 @@ void Keyboard(Pad& p) {
     }
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
-    if (View(g_view.load()) != View::Lockpick || menu) return;
+    if (View(g_view.load()) != View::Lockpick || menu) {
+        g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
+        return;
+    }
     if (g_pick_last < 0 || !move[g_pick_last]) {
         g_pick_last = -1;
         for (int i = 0; i < 4; i++)
@@ -396,6 +400,8 @@ void SetView(View view, float zoom_speed) {
 }
 
 int TakeWheel() { return g_wheel.exchange(0); }
+
+uint32_t StickKeys() { return g_stick_keys; }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
 
@@ -534,6 +540,7 @@ Pad Poll(int port) {
         XInputSetState(0, &off);
         g_rumbling = false;
     }
+    if (port == 0) g_stick_keys = 0;
     if (port == 0 && Active()) Keyboard(p);
     if (port == 0 && NowMs() < g_tap_until) p.buttons |= g_tap;
     return p;
