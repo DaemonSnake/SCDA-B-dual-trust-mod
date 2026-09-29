@@ -49,6 +49,8 @@ bool Widescreen();
 std::filesystem::path ExeDir();
 int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests
 void* Window();  // HWND
+// the game menus' cursor (HCURSOR): cursor.png or cursor.dds beside the exe sized to the frame, else the system arrow
+void* MenuCursor();
 
 // options menu, drawn by the renderer each frame with the lock held
 std::recursive_mutex& UiLock();

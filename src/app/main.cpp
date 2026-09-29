@@ -125,7 +125,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
-                SetCursor(MenuOpen() || ConsoleOpen() || input::InMenu() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
+                SetCursor(MenuOpen() || ConsoleOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512))
+                          : input::InMenu()               ? static_cast<HCURSOR>(MenuCursor())
+                                                          : nullptr);
                 return TRUE;
             }
             break;

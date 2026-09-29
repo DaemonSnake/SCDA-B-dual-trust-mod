@@ -39,6 +39,7 @@ Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with t
 - **Mouse Look Sensitivity** - Adjusts mouse look sensitivity.
 - **Invert Mouse Look** - Inverts the vertical look axis.
 - **Rebinding** - Every action can be rebound from the Mouse and Keyboard page.
+- **Custom Menu Cursor** - Put a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
 
 ### General
 - **Versus** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
