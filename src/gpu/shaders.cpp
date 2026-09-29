@@ -753,6 +753,10 @@ std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode,
     if (pretransformed) return s + kVsEpilogue;
     s += R"(
     VOut o;
+    // like the pretransformed ones, target sized passes end half a console pixel short of the far edges
+    float2 sp = (float2(cp.x, -cp.y) / cp.w + 1) * 0.5 * surf.xy;
+    if (abs(sp.x - (surf.x - 0.5)) < 1e-3) cp.x = cp.w;
+    if (abs(sp.y - (surf.y - 0.5)) < 1e-3) cp.y = -cp.w;
     o.pos = cp;
     o.d0 = saturate(oD0);
     o.d1 = saturate(oD1);

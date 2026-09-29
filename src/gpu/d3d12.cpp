@@ -1179,10 +1179,10 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
             UploadTarget(t, su);
         }
         info.kind = kTex2D;
-        // a pass shrinking it averages each tap over a console texel, else upscaled taps skip texels and ghost
+        // a pass shrinking it averages each tap over a console texel, else upscaled taps skip texels and ghost; soft copies are too big for it
         Target* rt = GetTarget(s.rt, false, false);
         float k = float(t.w) / (t.gw * (tex_soft_[stage] ? soft_k_ : 1.0f));
-        if (!t.depth && k > 1.01f && rt && rt != &t && (t.gw > rt->gw || t.gh > rt->gh)) {
+        if (!t.depth && !soft_ && k > 1.01f && rt && rt != &t && (t.gw > rt->gw || t.gh > rt->gh)) {
             tex_wide_[stage] = k;
             info.flags |= kTexWide;
         }
@@ -1360,8 +1360,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     g_perf.raw += a.vertices.empty();
     if (!assembled) return;
     if (!BindTargets(s)) return;
+    // screen space quads never start it: a loading screen's fade redraws over the last tone mapped picture every frame
     if (bound_rt_ && bound_ds_ && bound_rt_->fmt == kHdrFormat && !bound_rt_->hdr && bound_rt_->hdr_frame != presents_ &&
-        s.rs[kRsZEnable] && s.simple[kMZWriteEnable >> 2]) {
+        !a.pretransformed && s.rs[kRsZEnable] && s.simple[kMZWriteEnable >> 2]) {
         EnterHdr(*bound_rt_);
         if (!BindTargets(s)) return;
     }
