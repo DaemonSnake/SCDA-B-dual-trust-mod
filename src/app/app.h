@@ -49,6 +49,11 @@ bool Widescreen();
 std::filesystem::path ExeDir();
 int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests
 void* Window();  // HWND
+// boot splash: SplinterCell4Logo.bmp or .png beside the exe, up before the game window
+bool OpenSplash();        // window thread, at launch; false without one, and the game window opens at once
+void SplashFirstFrame();  // the game's first Swap: waits out the splash's minimum, then opens the game window
+void CloseSplash();       // window thread
+void OpenGameWindow();    // any thread but the window thread's; returns once the window is up
 // the game menus' cursor (HCURSOR): cursor.png or cursor.dds beside the exe sized to the frame, else the system arrow
 void* MenuCursor();
 

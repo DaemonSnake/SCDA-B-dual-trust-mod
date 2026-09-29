@@ -129,6 +129,7 @@ void Relaunch(const char* exe) {
     std::wstring line = GetCommandLineW();
     size_t args = line[0] == L'"' ? line.find(L'"', 1) + 1 : line.find(L' ');
     line = L"\"" + path + L"\"" + (args == std::wstring::npos ? L"" : line.substr(args));
+    if (line.find(L"--relaunched") == std::wstring::npos) line += L" --relaunched";  // no boot splash again
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
     if (CreateProcessW(path.c_str(), line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {

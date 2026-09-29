@@ -32,7 +32,7 @@ namespace app {
 namespace {
 
 HWND g_hwnd = nullptr;
-constexpr UINT kApplyDisplay = WM_APP + 1;
+constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
 bool g_mode_changed = false;
 
 // crash dump in CrashDumps beside the exe
@@ -134,6 +134,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case kApplyDisplay:
             ApplyNow();
             return 0;
+        case kOpenWindow:
+            CloseSplash();
+            ApplyNow();
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+            return 0;
         case WM_SYSKEYDOWN:
             if (wp == VK_F10) {
                 ToggleMenu();
@@ -185,6 +191,7 @@ std::recursive_mutex& UiLock() {
 }
 
 void ApplyDisplay() { PostMessageW(g_hwnd, kApplyDisplay, 0, 0); }
+void OpenGameWindow() { SendMessageW(g_hwnd, kOpenWindow, 0, 0); }
 
 void Pace() {
     using clock = std::chrono::steady_clock;
@@ -219,6 +226,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         return 1;
     }
 
+    bool splash = app::OpenSplash();
+
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = app::WndProc;
@@ -229,8 +238,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     RegisterClassExW(&wc);
     app::g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"Tom Clancy's Splinter Cell: Double Agent", WS_POPUP, 0, 0, 1280, 720,
                                   nullptr, nullptr, inst, nullptr);
-    app::ApplyNow();
-    ShowWindow(app::g_hwnd, SW_SHOW);
+    // behind a splash the window stays hidden until the game's first frame
+    if (!splash) {
+        app::ApplyNow();
+        ShowWindow(app::g_hwnd, SW_SHOW);
+    }
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

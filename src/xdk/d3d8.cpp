@@ -318,6 +318,7 @@ HLE_STDCALL(D3DDevice_GetDepthStencilSurface2, 0) {
 }
 
 HLE_STDCALL(D3DDevice_Swap, 1) {
+    app::SplashFirstFrame();
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]));
     app::Pace();

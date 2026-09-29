@@ -42,6 +42,7 @@ Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with t
 - **Custom Menu Cursor** - Put a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
 
 ### General
+- **Boot Splash** - Put a `SplinterCell4Logo.png` (or `.bmp`) beside the exe for a splash screen at launch.
 - **Versus** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
 
 
