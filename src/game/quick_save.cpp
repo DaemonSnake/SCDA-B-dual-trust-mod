@@ -57,9 +57,11 @@ void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu) {
         uint32_t list = R32(loadsave + kSlotList);
         if (!list) return;
         LOGI("quicksave: loading");
+        uint32_t mode = R32(loadsave + kMode);
         W32(loadsave + kMode, kModeLoad);
         W16(list + kListSelection, uint16_t(kQuickSlot));
         Call(ctx, kLoad, loadsave, {1});
+        W32(loadsave + kMode, mode);
     }
 }
 
