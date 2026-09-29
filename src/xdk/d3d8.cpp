@@ -697,7 +697,6 @@ HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
-    gpu::g_splash &= gpu::g_in_splash;
     if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
     return 0;
 }
@@ -705,7 +704,6 @@ HLE_STDCALL(D3DDevice_DrawVertices, 3) {
 HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
-    gpu::g_splash &= gpu::g_in_splash;
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
     return 0;
@@ -743,7 +741,6 @@ HLE_STDCALL(D3DDevice_DrawVerticesUP, 4) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (!g_backend || !a[1] || !a[3]) return 0;
     SyncDeferred();
-    gpu::g_splash &= gpu::g_in_splash;
     auto stream = g_state.streams[0];
     g_state.streams[0] = {UpVertices(a[2], a[1] * a[3]), a[3]};
     g_backend->Draw(g_state, a[0], 0, a[1], nullptr);

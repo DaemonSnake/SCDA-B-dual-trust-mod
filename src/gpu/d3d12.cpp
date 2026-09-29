@@ -1933,8 +1933,6 @@ void D3D12Backend::Present(const Surface& front) {
         float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
         float vw = std::min(w, h * aspect), vh = vw / aspect;
         float uv[4] = {0, 0, 1, 1};
-        if (g_splash && g_splash_fill && wide) uv[0] = -1.0f / 6, uv[2] = 4.0f / 3;
-        else if (g_splash) vw = vh * 4.0f / 3.0f;
         D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
         D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
         cl_->RSSetViewports(1, &vp);

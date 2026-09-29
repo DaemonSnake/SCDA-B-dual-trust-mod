@@ -10,7 +10,6 @@
 #include <string_view>
 
 #include "app/app.h"
-#include "gpu/backend.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -235,7 +234,8 @@ X86_FUNC(sub_002CC260) {
 // in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
 // centred 4:3 like the page around it. A quad the full viewport wide (full screen movies, post effects) is left as
-// it is.
+// it is, and so is the loading bar over a loading picture, which is stretched with the frame. The ESRB notice keeps
+// its 4:3 proportions: a sixth of its width more on each side (clamped, so the edge columns reach the screen sides).
 X86_EXTERN_FUNC(__imp__sub_002E3011);
 X86_FUNC(sub_002E3011) {
     uint32_t ri = R32(ctx.esp + 4);
@@ -243,7 +243,13 @@ X86_FUNC(sub_002E3011) {
         float w = float(int(R32(ri + 0x4B84)));
         float& x0 = G<float>(ctx.esp + 8);
         float& x1 = G<float>(ctx.esp + 0x10);
-        if (w > 0 && (std::min(x0, x1) > kSlack || std::max(x0, x1) < w - kSlack)) {
+        float& u0 = G<float>(ctx.esp + 0x18);
+        float& u1 = G<float>(ctx.esp + 0x20);
+        if (g_esrb) {
+            float d = (u1 - u0) / 6;
+            u0 -= d;
+            u1 += d;
+        } else if (!g_loading && w > 0 && (std::min(x0, x1) > kSlack || std::max(x0, x1) < w - kSlack)) {
             x0 = x0 * 0.75f + kCentre * w;
             x1 = x1 * 0.75f + kCentre * w;
         }
@@ -257,6 +263,7 @@ X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == Crc32("P_hud");
+    g_loading = false;
     if (app::Get().hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
         ctx.esp += 4;
         return;
@@ -294,15 +301,20 @@ X86_FUNC(sub_002303E8) {
     g_hud_seen = false;
 }
 
-// render device splash(path, ...): draws a tga over the frame buffer and presents it; the ESRB notice
-// has its side columns carried out to the screen edges
+// render device ShowScreen(path, ...) (thiscall on the render device): reads the picture's index bytes into the
+// device's cached back buffer (+0x4B74), then fades to it from the front buffer through Swaps of its own. The engine
+// refreshes that cache only after its own Swap, so after an earlier ShowScreen it can be the front buffer, and the
+// index bytes land in the picture being faded from. It is pointed at the current back buffer first.
 X86_EXTERN_FUNC(__imp__sub_002E5F95);
 X86_FUNC(sub_002E5F95) {
     std::string path;
-    uint32_t p = R32(ctx.esp + 4), step = p && !G<uint8_t>(p + 1) ? 2 : 1;  // TCHAR or char
+    uint32_t ri = ctx.ecx, p = R32(ctx.esp + 4), step = p && !G<uint8_t>(p + 1) ? 2 : 1;  // TCHAR or char
     for (uint32_t i = 0; p && i < 256 && G<uint8_t>(p + i * step); i++) path += char(std::tolower(G<uint8_t>(p + i * step)));
-    gpu::g_splash_fill = path.find("esrb") != std::string::npos;
-    gpu::g_splash = gpu::g_in_splash = true;
+    uint32_t cached = R32(ri + 0x4B74), back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
+    if (cached) W32(cached, R32(cached) - 1);  // the cache's reference moves to the back buffer
+    W32(ri + 0x4B74, back);
+    g_esrb = path.find("esrb") != std::string::npos;
+    g_loading = p != 0;
     __imp__sub_002E5F95(ctx, base);
-    gpu::g_in_splash = false;
+    g_esrb = false;
 }

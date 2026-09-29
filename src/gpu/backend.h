@@ -58,9 +58,6 @@ inline std::atomic<uint64_t> g_perf_capture_ns{0}, g_perf_wait_ns{0}, g_perf_wai
 inline std::atomic<uint64_t> g_perf_wait_kind_ns[6];  // read-back, resource, fence, flush, copy, next frame
 inline std::atomic<uint64_t> g_perf_sync_late{0}, g_perf_sync_block{0};  // read-backs the title waited for, by cause
 
-// the frame buffer holds a 4:3 splash image until a draw from outside the splash
-inline bool g_splash = false, g_in_splash = false, g_splash_fill = false;
-
 // F3: save the next frame, every draw and target, under claude-outputs
 inline std::atomic<bool> g_capture{false};
 
