@@ -161,8 +161,9 @@ X86_FUNC(sub_0028F090) {
     if (g_mode == Mode::Fill) {
         if (hi - lo >= kMinWidth * unit)
             for (int i = 0; i < 4; i++) {
-                if (left && x(i) == lo) x(i) = -side;
-                if (right && x(i) == hi) x(i) = w + side;
+                // one page unit past the screen side: exactly on it, the last pixel column is left uncovered
+                if (left && x(i) == lo) x(i) = -side - unit;
+                if (right && x(i) == hi) x(i) = w + side + unit;
             }
         return __imp__sub_0028F090(ctx, base);
     }
