@@ -76,6 +76,7 @@ void ApplyNow() {
         g_mode_changed = false;
     }
     Mode out = Output();
+    LONG_PTR visible = IsWindowVisible(g_hwnd) ? WS_VISIBLE : 0;  // a window held back for a splash or handover stays so
     if (s.display_mode == DisplayMode::Fullscreen && s.width && s.height) {
         DEVMODEW dm{};
         dm.dmSize = sizeof(dm);
@@ -90,14 +91,13 @@ void ApplyNow() {
         AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
         int w = r.right - r.left, h = r.bottom - r.top;
         const RECT& a = mi.rcWork;
-        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | visible);
         SetWindowPos(g_hwnd, HWND_NOTOPMOST, a.left + (a.right - a.left - w) / 2, a.top + (a.bottom - a.top - h) / 2, w, h,
                      SWP_FRAMECHANGED);
     } else {
         const RECT& m = mi.rcMonitor;
-        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowPos(g_hwnd, s.display_mode == DisplayMode::Fullscreen ? HWND_TOPMOST : HWND_NOTOPMOST, m.left, m.top,
-                     m.right - m.left, m.bottom - m.top, SWP_FRAMECHANGED);
+        SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_POPUP | visible);
+        SetWindowPos(g_hwnd, HWND_NOTOPMOST, m.left, m.top, m.right - m.left, m.bottom - m.top, SWP_FRAMECHANGED);
     }
 }
 
@@ -117,11 +117,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
             break;
-        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
             input::OnClick();
             break;
         case WM_ACTIVATE:
-            if (LOWORD(wp) == WA_INACTIVE) input::ReleaseCursor();
+            if (LOWORD(wp) == WA_INACTIVE) {
+                input::ReleaseCursor();
+                // a changed display mode steps aside for the desktop, minimized, and comes back on return; not while
+                // handing over to the next instance, which runs in the same mode
+                if (g_mode_changed && !kernel::g_relaunching) {
+                    MONITORINFOEXW mi{};
+                    mi.cbSize = sizeof(mi);
+                    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+                    ChangeDisplaySettingsExW(mi.szDevice, nullptr, nullptr, 0, nullptr);
+                    g_mode_changed = false;
+                    ShowWindow(hwnd, SW_MINIMIZE);
+                }
+            } else if (Get().display_mode == DisplayMode::Fullscreen && Get().width && Get().height && !g_mode_changed &&
+                       IsWindowVisible(hwnd)) {
+                PostMessageW(hwnd, kApplyDisplay, 0, 0);
+            }
             break;
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
@@ -132,11 +147,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             break;
         case kApplyDisplay:
+            if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
             ApplyNow();
             return 0;
         case kOpenWindow:
             CloseSplash();
-            ApplyNow();
+            if (wp) ApplyNow();
             ShowWindow(hwnd, SW_SHOW);
             SetForegroundWindow(hwnd);
             return 0;
