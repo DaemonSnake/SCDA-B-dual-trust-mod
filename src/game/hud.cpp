@@ -57,6 +57,8 @@ constexpr Rule kHud[] = {
 constexpr Rule kOverlay[] = {
     {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
     {"A_timer", Mode::Right},   {"A_Communications", Mode::Left},
+    // the controller prompt pairs (system.mgm legend areas): Spread would move their icons away from their text
+    {0xA2ADD30F, Mode::Centre}, {0x640C6602, Mode::Centre},
     {0x478A341D, Mode::Left},  // P_Sniper's instance of the comms area, its name not recovered
 };
 
