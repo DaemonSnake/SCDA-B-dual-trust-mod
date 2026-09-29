@@ -211,6 +211,26 @@ X86_FUNC(sub_0028EDCC) {
     G<float>(util + 0xA4) = m;
 }
 
+// Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
+// in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
+// sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
+// centred 4:3 like the page around it. A quad the full viewport wide (full screen movies, post effects) is left as
+// it is.
+X86_EXTERN_FUNC(__imp__sub_002E3011);
+X86_FUNC(sub_002E3011) {
+    uint32_t ri = R32(ctx.esp + 4);
+    if (ri && app::Widescreen()) {
+        float w = float(int(R32(ri + 0x4B84)));
+        float& x0 = G<float>(ctx.esp + 8);
+        float& x1 = G<float>(ctx.esp + 0x10);
+        if (w > 0 && (std::min(x0, x1) > kSlack || std::max(x0, x1) < w - kSlack)) {
+            x0 = x0 * 0.75f + kCentre * w;
+            x1 = x1 * 0.75f + kCentre * w;
+        }
+    }
+    __imp__sub_002E3011(ctx, base);
+}
+
 // Magma page draw (thiscall, no arguments); page +0x14 id, +0x1C layer. 100 is the default layer, the HUD's in a
 // level but also the menus' lists, so HIDE HUD only acts while P_hud is up
 X86_EXTERN_FUNC(__imp__sub_002BE990);
