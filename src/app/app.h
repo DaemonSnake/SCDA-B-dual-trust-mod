@@ -53,7 +53,11 @@ void* Window();  // HWND
 bool OpenSplash();        // window thread, at launch; false without one, and the game window opens at once
 void SplashFirstFrame();  // the game's first Swap: waits out the splash's minimum, then opens the game window
 void CloseSplash();       // window thread
-void OpenGameWindow();    // any thread but the window thread's; returns once the window is up
+void OpenGameWindow(bool apply = true);  // any thread but the window thread's; returns once the window is up
+// relaunched: the previous instance keeps its window up until this one has shown its first frames (handover.cpp)
+bool StartHandover();   // window thread, at launch; true: the game window starts hidden
+bool HandingOver();
+void FinishHandover();  // any thread but the window thread's: opens the game window, lets the old instance go
 // the game menus' cursor (HCURSOR): cursor.png or cursor.dds beside the exe sized to the frame, else the system arrow
 void* MenuCursor();
 

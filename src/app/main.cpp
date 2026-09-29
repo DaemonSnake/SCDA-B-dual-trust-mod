@@ -191,7 +191,7 @@ std::recursive_mutex& UiLock() {
 }
 
 void ApplyDisplay() { PostMessageW(g_hwnd, kApplyDisplay, 0, 0); }
-void OpenGameWindow() { SendMessageW(g_hwnd, kOpenWindow, 0, 0); }
+void OpenGameWindow(bool apply) { SendMessageW(g_hwnd, kOpenWindow, apply, 0); }
 
 void Pace() {
     using clock = std::chrono::steady_clock;
@@ -226,7 +226,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         return 1;
     }
 
-    bool splash = app::OpenSplash();
+    bool splash = app::OpenSplash(), handover = app::StartHandover();
 
     WNDCLASSEXW wc{sizeof(wc)};
     wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -238,8 +238,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     RegisterClassExW(&wc);
     app::g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"Tom Clancy's Splinter Cell: Double Agent", WS_POPUP, 0, 0, 1280, 720,
                                   nullptr, nullptr, inst, nullptr);
-    // behind a splash the window stays hidden until the game's first frame
-    if (!splash) {
+    // behind a splash the window stays hidden until the game's first frame; handed over, it is set up hidden
+    if (handover) {
+        app::ApplyNow();
+    } else if (!splash) {
         app::ApplyNow();
         ShowWindow(app::g_hwnd, SW_SHOW);
     }

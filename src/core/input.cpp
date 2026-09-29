@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cstdlib>
 #include <iterator>
@@ -456,28 +457,37 @@ uint64_t Pads() {
 }
 
 // F10, F3 and the console key belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
-// keys and the media keys are no answer to "press a key"
+// keys and the media keys are no answer to "press a key", nor are codes Windows leaves unassigned or reserved: some
+// keyboards' Print Screen comes as 0xFF, and the 0xC1..0xDA block is the pads' own
 bool AnswerKey(int vk) {
     switch (vk) {
         case VK_F10: case VK_F3: case VK_OEM_3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
         case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
         case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
+        case 0x07: case 0x0A: case 0x0B: case 0x0E: case 0x0F: case 0x5E: case 0xE0: case 0xE8: case 0xFF:
             return false;
     }
-    return !(vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) && Down(vk);
+    if ((vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) || (vk >= 0x88 && vk <= 0x9F) ||
+        (vk >= 0xC1 && vk <= 0xDA))
+        return false;
+    return Down(vk);
 }
 
-bool NewPress(PressWatch& w) {
-    bool pressed = false;
-    uint64_t pad = Pads();
-    pressed |= w.started && Active() && (pad & ~w.pad_held);
+// the key (virtual key code) or pad button (0x100 + port * 16 + bit) that went down, 0 for none. Away from the
+// window (Snipping Tool after Print Screen, Alt+Tab) it starts over, so the key or click that brings the game back
+// is not an answer either.
+int NewPress(PressWatch& w) {
+    bool live = w.started && Active();
+    int pressed = 0;
+    uint64_t pad = Pads(), fresh = pad & ~w.pad_held;
+    if (live && fresh) pressed = 0x100 + std::countr_zero(fresh);
     w.pad_held = pad;
     for (int vk = 1; vk < 256; vk++) {
         bool d = AnswerKey(vk);
-        pressed |= w.started && d && !w.held[vk] && Active();
+        if (live && d && !w.held[vk] && !pressed) pressed = vk;
         w.held[vk] = d;
     }
-    w.started = true;
+    w.started = Active();
     return pressed;
 }
 
@@ -489,12 +499,15 @@ void WaitForPress() {
     PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     PressWatch w;
     NewPress(w);
-    while (!NewPress(w)) Sleep(10);
+    int pressed;
+    while (!(pressed = NewPress(w))) Sleep(10);
+    bool pad = pressed >= 0x100;
+    LOGI("input: the wait ended by %s %X", pad ? "pad button" : "key", pad ? pressed - 0x100 : pressed);
 }
 
 bool Pressed() {
     static PressWatch w;
-    return NewPress(w);
+    return NewPress(w) != 0;
 }
 
 bool Cursor(int& x, int& y, int& w, int& h) {

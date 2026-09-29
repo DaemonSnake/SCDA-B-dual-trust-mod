@@ -28,6 +28,54 @@ namespace kernel {
 
 uint8_t* g_base = nullptr;
 std::string g_launch_file;
+
+namespace {
+uint32_t g_saved_data = 0;
+bool g_mark = false, g_kept_marked = false;
+std::string g_picture, g_kept_picture;  // the last picture ShowScreen loaded, raw path string with its terminator
+constexpr uint32_t kPersistMagic = 0x50535044;  // "DPSP"
+
+std::string PersistFile() { return g_launch_file.substr(0, g_launch_file.find_last_of("/\\") + 1) + "display.bin"; }
+
+// surface header (Common, Data, Lock, Format, Size) then the pixels at +0x40, as the XDK lays out its persisted copy
+void LoadPersistedDisplay() {
+    std::ifstream f(PersistFile(), std::ios::binary);
+    uint32_t head[7] = {};
+    if (!f.read(reinterpret_cast<char*>(head), sizeof head) || head[0] != kPersistMagic || !head[4] || head[4] > 0x800000 ||
+        head[6] > 1040)
+        return;
+    uint32_t block = mem::AllocContiguous(0x40 + head[4], 0, 0xFFFFFFFF, 0x1000);
+    if (!block || !f.read(static_cast<char*>(HostPtr(block + 0x40)), head[4])) return;
+    g_kept_picture.resize(head[6]);
+    if (!f.read(g_kept_picture.data(), head[6])) g_kept_picture.clear();
+    W32(block, (head[1] & 0xFFFF0000) | 1);
+    W32(block + 4, mem::PhysicalFromVirtual(block + 0x40));
+    W32(block + 8, 0);
+    W32(block + 0xC, head[2]);
+    W32(block + 0x10, head[3]);
+    g_saved_data = block;
+    g_kept_marked = head[5] != 0;
+    LOGI("boot: display kept from the previous run, %u bytes%s", head[4], g_kept_marked ? ", marked" : "");
+}
+}  // namespace
+
+void SavePersistedDisplay(uint32_t common, uint32_t format, uint32_t size, const void* pixels, uint32_t bytes) {
+    if (FILE* f = std::fopen(PersistFile().c_str(), "wb")) {
+        uint32_t head[7] = {kPersistMagic, common, format, size, bytes, g_mark, uint32_t(g_picture.size())};
+        std::fwrite(head, sizeof head, 1, f);
+        std::fwrite(pixels, 1, bytes, f);
+        std::fwrite(g_picture.data(), 1, g_picture.size(), f);
+        std::fclose(f);
+    }
+}
+
+void MarkPersistedDisplay() { g_mark = true; }
+bool KeptDisplayMarked() { return g_kept_marked; }
+void SetShownPicture(std::string path) { g_picture = std::move(path); }
+const std::string& KeptPicture() { return g_kept_picture; }
+
+uint32_t SavedDataAddress() { return g_saved_data; }
+void SetSavedDataAddress(uint32_t surface) { g_saved_data = surface; }
 const xbe::Image* g_image = nullptr;
 static xbe::Image g_xbe;
 
@@ -97,7 +145,9 @@ bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::s
         std::remove(g_launch_file.c_str());
         W32(g_launch_data_page_va, page);
         LOGI("boot: launch data from the previous run, type %u", R32(page));
+        LoadPersistedDisplay();
     }
+    std::remove(PersistFile().c_str());
 
     uint32_t tls = 0;
     if (img.tls_addr) tls = ((img.tls.data_end - img.tls.data_start + img.tls.zero_fill + 15) & ~15u) + 4;
@@ -132,7 +182,15 @@ void Relaunch(const char* exe) {
     if (line.find(L"--relaunched") == std::wstring::npos) line += L" --relaunched";  // no boot splash again
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
-    if (CreateProcessW(path.c_str(), line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    if (CreateProcessW(path.c_str(), line.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
+        // this window stays up until the new instance shows its first frames (HandoverEvent), so no gap shows
+        HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, HandoverEvent(pi.dwProcessId).c_str());
+        AllowSetForegroundWindow(pi.dwProcessId);
+        g_relaunching = true;
+        ResumeThread(pi.hThread);
+        HANDLE wait[] = {ready, pi.hProcess};
+        if (ready) WaitForMultipleObjects(2, wait, FALSE, 15000);
+        if (ready) ::CloseHandle(ready);
         ::CloseHandle(pi.hThread);
         ::CloseHandle(pi.hProcess);
     } else {

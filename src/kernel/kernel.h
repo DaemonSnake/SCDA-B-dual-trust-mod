@@ -185,6 +185,21 @@ void RunForever();
 const char* ImageExe(std::string xbe_path);
 [[noreturn]] void Relaunch(const char* exe);
 extern std::string g_launch_file;
+// The display a title keeps up through a quick reboot (D3DDevice_PersistDisplay): its front buffer goes to a file
+// beside launch.bin, and the next instance finds it as a surface at AvGetSavedDataAddress.
+void SavePersistedDisplay(uint32_t common, uint32_t format, uint32_t size, const void* pixels, uint32_t bytes);
+uint32_t SavedDataAddress();
+void SetSavedDataAddress(uint32_t surface);
+// one bit of note carried with the kept display to the next instance
+void MarkPersistedDisplay();
+bool KeptDisplayMarked();
+// the path of the picture the last ShowScreen loaded, raw guest string with its terminator, carried along too
+void SetShownPicture(std::string path);
+const std::string& KeptPicture();
+// A relaunch hands over without a gap: the new instance's window opens once it has presented, then it signals this
+// event and the old instance, waiting in Relaunch with its window still up, exits.
+inline std::wstring HandoverEvent(unsigned long process) { return L"Local\\SCDAHandover-" + std::to_wstring(process); }
+inline std::atomic<bool> g_relaunching{false};
 
 using KernelFn = void (*)(X86Context& ctx, uint8_t* base);
 void RegisterExport(uint32_t ordinal, const char* name, KernelFn fn);

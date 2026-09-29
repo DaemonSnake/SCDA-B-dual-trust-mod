@@ -1,11 +1,16 @@
 // Mission loading screen. The front end shows <map>_loading<n>.tga, then relaunches the title into the mission,
 // and the Xbox keeps that picture up (D3DDevice_PersistDisplay) while the new instance loads. On a PC the load is
 // over at once, so the picture waits for a key or button before the relaunch, as SCCT's PC loading screen does.
+#include <algorithm>
 #include <bit>
 #include <cctype>
+#include <cstring>
 #include <string>
+#include <utility>
 
 #include "core/input.h"
+#include "game/loading.h"
+#include "kernel/memory.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -17,7 +22,9 @@ bool g_mission_load = false;  // game thread
 // The next instance draws the load's progress over the same picture: sub_00039566, from the render device at
 // 0x5E3E2C, a solid tile through sub_002E65A4 thiscall(x0, y0, x1, y1, u0, v0, u1, v1, texture, r, g, b), viewport
 // pixels, black at 335,135, 4 high, 240 wide at 100%. Drawn full here, so the picture waiting for a key doesn't read
-// as a load stuck at 0.
+// as a load stuck at 0. Into both buffers: the fade after the wait starts from the back buffer, and the next instance
+// starts from that picture (the display kept through the reboot). The kept display is marked so the next instance's
+// progress thread leaves the full bar alone rather than filling it again over the softer kept picture.
 constexpr uint32_t kRenderDevice = 0x5E3E2C, kDrawTile = 0x2E65A4;
 constexpr float kBarX = 335, kBarY = 135, kBarWidth = 240, kBarHeight = 4;
 
@@ -75,10 +82,56 @@ X86_FUNC(sub_0026AB34) {
         LOGI("loading: %s%s", url.c_str(), wait ? ", waiting for a key" : "");
         if (wait) {
             FullBar(ctx);
+            FullBar(ctx);
+            MarkPersistedDisplay();
             input::WaitForPress();
         }
     }
     __imp__sub_0026AB34(ctx, base);
+}
+
+// A relaunched instance starts from the display the old one kept, a 640x480 copy that reads softer than the same
+// picture drawn at the render scale. Its first picture-less ShowScreen loads the old instance's last picture again
+// instead, without a fade (it was on screen already), and the full bar goes over it when the kept display was marked.
+namespace {
+bool g_reloaded = false, g_bar_after = false;
+uint32_t g_path = 0;  // guest copy of the picture's path
+}  // namespace
+
+void game::loading::BeforeShowScreen(X86Context& ctx) {
+    uint32_t p = R32(ctx.esp + 4);
+    if (p) {
+        bool wide = !G<uint8_t>(p + 1);  // TCHAR or char
+        uint32_t n = 0;
+        while (n < 519 && (wide ? R16(p + n * 2) : G<uint8_t>(p + n))) n++;
+        uint32_t bytes = (n + 1) * (wide ? 2 : 1);
+        SetShownPicture(std::string(static_cast<const char*>(HostPtr(p)), bytes));
+        return;
+    }
+    const std::string& kept = KeptPicture();
+    if (g_reloaded || !SavedDataAddress() || kept.empty()) return;
+    g_reloaded = true;
+    if (!g_path) g_path = mem::AllocSystem(1040);
+    std::memcpy(HostPtr(g_path), kept.data(), std::min<size_t>(kept.size(), 1040));
+    W32(ctx.esp + 4, g_path);
+    W32(ctx.esp + 0xC, 0);
+    g_bar_after = KeptDisplayMarked();
+}
+
+void game::loading::AfterShowScreen(X86Context& ctx) {
+    if (!std::exchange(g_bar_after, false)) return;
+    FullBar(ctx);
+    FullBar(ctx);
+}
+
+// the progress thread's bar (sub_00039566, the call returning at 0x39837), ret 0x30
+X86_EXTERN_FUNC(__imp__sub_002E65A4);
+X86_FUNC(sub_002E65A4) {
+    if (R32(ctx.esp) == 0x39837 && KeptDisplayMarked()) {
+        ctx.esp += 4 + 0x30;
+        return;
+    }
+    __imp__sub_002E65A4(ctx, base);
 }
 
 // The controller layout screen (loading screen vtable +0x34 sub_00038C3F, thiscall) shows controllerN.tga and polls

@@ -918,8 +918,11 @@ KERNEL_EXPORT(24, ExQueryNonVolatileSetting, 5) {
     return kSuccess;
 }
 
-KERNEL_EXPORT(1, AvGetSavedDataAddress, 0) { return 0; }
-KERNEL_EXPORT(4, AvSetSavedDataAddress, 1) { return 0; }
+KERNEL_EXPORT(1, AvGetSavedDataAddress, 0) { return SavedDataAddress(); }
+KERNEL_EXPORT(4, AvSetSavedDataAddress, 1) {
+    SetSavedDataAddress(a[0]);
+    return 0;
+}
 KERNEL_EXPORT(3, AvSetDisplayMode, 6) { return 0; }
 KERNEL_EXPORT(2, AvSendTVEncoderOption, 4) {
     // AV_QUERY_AV_CAPABILITIES: component (HDTV) pack, NTSC-M, 60 Hz

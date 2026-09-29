@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include "app/app.h"
+#include "game/loading.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -312,6 +313,7 @@ X86_FUNC(sub_002303E8) {
 // index bytes land in the picture being faded from. It is pointed at the current back buffer first.
 X86_EXTERN_FUNC(__imp__sub_002E5F95);
 X86_FUNC(sub_002E5F95) {
+    game::loading::BeforeShowScreen(ctx);
     std::string path;
     uint32_t ri = ctx.ecx, p = R32(ctx.esp + 4), step = p && !G<uint8_t>(p + 1) ? 2 : 1;  // TCHAR or char
     for (uint32_t i = 0; p && i < 256 && G<uint8_t>(p + i * step); i++) path += char(std::tolower(G<uint8_t>(p + i * step)));
@@ -319,7 +321,8 @@ X86_FUNC(sub_002E5F95) {
     if (cached) W32(cached, R32(cached) - 1);  // the cache's reference moves to the back buffer
     W32(ri + 0x4B74, back);
     g_esrb = path.find("esrb") != std::string::npos;
-    g_loading = p != 0;
+    g_loading = p != 0 || SavedDataAddress();  // no picture: it fades from the display kept through a reboot
     __imp__sub_002E5F95(ctx, base);
     g_esrb = false;
+    game::loading::AfterShowScreen(ctx);
 }

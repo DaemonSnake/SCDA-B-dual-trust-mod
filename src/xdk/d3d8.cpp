@@ -1,6 +1,7 @@
 // Direct3D 8 (XDK 5849) entry points the title calls, implemented on the host renderer.
 // Resource creation, locking and the XG helpers stay recompiled: they only manage memory.
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <unordered_map>
 #include <unordered_set>
@@ -266,7 +267,18 @@ HLE_STDCALL(D3DDevice_BlockUntilVerticalBlank, 0) {
 HLE_STDCALL(D3DDevice_SetFlickerFilter, 1) { return 0; }
 HLE_STDCALL(D3DDevice_SetSoftDisplayFilter, 1) { return 0; }
 HLE_STDCALL(D3DDevice_EnableOverlay, 1) { return 0; }
-HLE_STDCALL(D3DDevice_PersistDisplay, 0) { return 0; }
+// the front buffer, read back at the guest size, is kept for the next instance after a quick reboot (the mission
+// or menu it loads), which fades from it at its first ShowScreen
+HLE_STDCALL(D3DDevice_PersistDisplay, 0) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    uint32_t front = g_buffers[0], size = R32(front + 0x10);
+    uint32_t pitch = ((size >> 24 & 0xFF) + 1) * 64, height = (size >> 12 & 0xFFF) + 1, bytes = pitch * height;
+    uint32_t data = mem::VirtualFromPhysical(R32(front + 4));
+    if (g_backend) g_backend->Sync(data, bytes);
+    kernel::SavePersistedDisplay(R32(front), R32(front + 0xC), size, HostPtr(data), bytes);
+    LOGI("d3d: PersistDisplay, %u bytes", bytes);
+    return 0;
+}
 HLE_STDCALL(D3DDevice_FlushVertexCache, 0) { return 0; }
 
 HLE_STDCALL(D3DDevice_SetGammaRamp, 2) {
@@ -317,9 +329,25 @@ HLE_STDCALL(D3DDevice_GetDepthStencilSurface2, 0) {
     return s;
 }
 
+namespace {
+std::atomic<uint32_t> g_presents{0};
+}  // namespace
+
 HLE_STDCALL(D3DDevice_Swap, 1) {
     app::SplashFirstFrame();
+    // handed over from the previous instance: the window opens on the second frame, the first ShowScreen's picture
+    // with anything drawn over it right after (the mission picture's bar)
+    if (app::HandingOver() && g_presents >= 2) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(g_lock);
+            if (g_backend) g_backend->Flush();
+        }
+        app::FinishHandover();
+    }
     std::lock_guard<std::recursive_mutex> lock(g_lock);
+    g_presents++;
+    // the kept display is shown until the title presents its own
+    kernel::SetSavedDataAddress(0);
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]));
     app::Pace();
     // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
