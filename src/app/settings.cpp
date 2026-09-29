@@ -60,6 +60,7 @@ void Load() {
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
+    s.hide_hud = t["hide_hud"].value_or(s.hide_hud);
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
@@ -85,7 +86,8 @@ void Save() {
                   {"skip_intros", s.skip_intros},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
-                  {"join_ip", s.join_ip}};
+                  {"join_ip", s.join_ip},
+                  {"hide_hud", s.hide_hud}};
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);

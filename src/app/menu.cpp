@@ -160,7 +160,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kSensitivity, kInvertMouse
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse
 };
 
 using rows::Kind;
@@ -187,6 +187,8 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kTickRate, "TICK RATE"},
     {Kind::Value, kInputDelay, "MIN INPUT DELAY"},
     {Kind::Text, kJoinIp, "JOIN IP"},
+    {Kind::Heading, -1, "DEBUG"},
+    {Kind::Value, kHideHud, "HIDE HUD"},
 };
 
 const std::vector<Row>& InputRows() {
@@ -292,6 +294,10 @@ std::string RowText(int id, int step) {
         }
         case kJoinIp:
             return s.join_ip;
+        case kHideHud:
+            if (step) s.hide_hud = !s.hide_hud;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.hide_hud));
+            break;
         case kSensitivity:
             if (step)
                 s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);

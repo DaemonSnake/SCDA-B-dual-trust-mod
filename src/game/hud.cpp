@@ -89,6 +89,7 @@ float g_offset = kCentre;
 Mode g_mode = Mode::Centre;
 const Page* g_page = nullptr;
 bool g_hud_seen = false, g_decided = false;
+bool g_in_level = false;  // P_hud was drawn last frame
 bool g_sniper_seen = false, g_scope = false;  // P_Sniper drawn this frame, and last frame
 
 // magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil
@@ -210,11 +211,16 @@ X86_FUNC(sub_0028EDCC) {
     G<float>(util + 0xA4) = m;
 }
 
-// Magma page draw
+// Magma page draw (thiscall, no arguments); page +0x14 id, +0x1C layer. 100 is the default layer, the HUD's in a
+// level but also the menus' lists, so HIDE HUD only acts while P_hud is up
 X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == Crc32("P_hud");
+    if (app::Get().hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
+        ctx.esp += 4;
+        return;
+    }
     const Page* saved = g_page;
     g_page = nullptr;
     for (auto& p : kPages)
@@ -244,6 +250,7 @@ X86_EXTERN_FUNC(__imp__sub_002303E8);
 X86_FUNC(sub_002303E8) {
     __imp__sub_002303E8(ctx, base);
     g_offset = g_hud_seen ? kNone : kCentre;
+    g_in_level = g_hud_seen;
     g_hud_seen = false;
 }
 
