@@ -230,6 +230,11 @@ X86_FUNC(sub_002CC260) {
     W16(state + 0xA, uint16_t(int16_t(edges && r >= sw - kSlack ? sw + 1 : narrow(r))));
 }
 
+namespace {
+bool g_esrb = false;     // the ESRB notice is being shown
+bool g_loading = false;  // a loading picture is up, no Magma page drawn since
+}  // namespace
+
 // Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
 // in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the

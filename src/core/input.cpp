@@ -445,8 +445,20 @@ void WaitForPress() {
         }
         return down;
     };
-    // F10 and F3 belong to the host
-    auto key = [](int vk) { return vk != VK_F10 && vk != VK_F3 && Down(vk); };
+    // F10, F3 and the console key belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
+    // keys and the media keys are no answer to "press a key"
+    auto key = [](int vk) {
+        switch (vk) {
+            case VK_F10: case VK_F3: case VK_OEM_3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
+            case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
+            case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
+                return false;
+        }
+        return !(vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) && Down(vk);
+    };
+    // the picture is no menu: the cursor goes, now rather than at the next mouse move
+    SetMenu(false);
+    PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     std::array<bool, 256> held{};
     for (int vk = 1; vk < 256; vk++) held[vk] = key(vk);
     uint64_t pad_held = pads();
