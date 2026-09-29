@@ -212,6 +212,23 @@ X86_FUNC(sub_0028EDCC) {
     G<float>(util + 0xA4) = m;
 }
 
+// Screen state of an element (thiscall(state, element), ret 8; state +8 left, +0xA right, page units). Rect shapes
+// (sub_002BD93C, called back at 0x2BD973) are drawn from it straight to the render interface in clip space, past the
+// canvas flush, so their x is narrowed here the way the flush narrows everything else; on edge-pulling pages a side
+// touching the page's side goes past the screen's, as images do (cinematic letterbox, fades).
+X86_EXTERN_FUNC(__imp__sub_002CC260);
+X86_FUNC(sub_002CC260) {
+    uint32_t ret = R32(ctx.esp), state = R32(ctx.esp + 4), screen = R32(kMagmaScreen);
+    __imp__sub_002CC260(ctx, base);
+    int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
+    if (ret != 0x2BD973 || g_offset < 0 || sw <= 0 || !app::Widescreen()) return;
+    int l = int16_t(R16(state + 8)), r = int16_t(R16(state + 0xA));
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
+    auto narrow = [&](int x) { return int(std::lround(x * 0.75f + g_offset * sw)); };
+    W16(state + 8, uint16_t(int16_t(edges && l <= kSlack ? -1 : narrow(l))));
+    W16(state + 0xA, uint16_t(int16_t(edges && r >= sw - kSlack ? sw + 1 : narrow(r))));
+}
+
 // Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
 // in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
