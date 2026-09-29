@@ -57,3 +57,17 @@ X86_FUNC(sub_0026AB34) {
     }
     __imp__sub_0026AB34(ctx, base);
 }
+
+// level load progress (thiscall(progress), ret 4): draws the bar alone and presents it over whatever the back buffer
+// holds. The saving screen behind it is drawn once, into one of the two buffers, so every other frame showed the
+// bar on the other buffer's older picture. The frame just shown is copied into the back buffer for the next bar.
+X86_EXTERN_FUNC(__imp__sub_001CD157);
+X86_FUNC(sub_001CD157) {
+    __imp__sub_001CD157(ctx, base);
+    if (!ctx.eax) return;
+    uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});
+    uint32_t back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
+    CallGuest(ctx, SYM(D3DDevice_CopyRects), {front, 0, 0, back, 0});
+    W32(front, R32(front) - 1);
+    W32(back, R32(back) - 1);
+}
