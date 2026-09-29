@@ -81,6 +81,26 @@ X86_FUNC(sub_0026AB34) {
     __imp__sub_0026AB34(ctx, base);
 }
 
+// The controller layout screen (loading screen vtable +0x34 sub_00038C3F, thiscall) shows controllerN.tga and polls
+// vtable +0x40 (sub_000367E4 -> sub_0004B46F, A or Start let go on any pad, the movies' skip check) until it answers.
+// It says "press A"; any key, click or pad button answers here, as on the mission picture.
+namespace {
+bool g_controls_screen = false;  // game thread
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_00038C3F);
+X86_FUNC(sub_00038C3F) {
+    g_controls_screen = true;
+    __imp__sub_00038C3F(ctx, base);
+    g_controls_screen = false;
+}
+
+X86_EXTERN_FUNC(__imp__sub_000367E4);
+X86_FUNC(sub_000367E4) {
+    __imp__sub_000367E4(ctx, base);
+    if (!ctx.eax && g_controls_screen && input::Pressed()) ctx.eax = 1;
+}
+
 // level load progress (thiscall(progress), ret 4): draws the bar alone and presents it over whatever the back buffer
 // holds. The saving screen behind it is drawn once, into one of the two buffers, so every other frame showed the
 // bar on the other buffer's older picture. The frame just shown is copied into the back buffer for the next bar.

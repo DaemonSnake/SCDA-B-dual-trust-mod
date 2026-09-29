@@ -432,47 +432,69 @@ void TapButtons(uint16_t buttons) {
     g_tap_until = NowMs() + kTapMs;
 }
 
+namespace {
+
+// "press a key": a key, mouse button or pad button (any port) going down in the game window; those held when the
+// watch starts must come up first
+struct PressWatch {
+    std::array<bool, 256> held{};
+    uint64_t pad_held = 0;
+    bool started = false;
+};
+
+uint64_t Pads() {
+    uint64_t down = 0;
+    for (DWORD port = 0; port < 4; port++) {
+        XINPUT_STATE s{};
+        if (XInputGetState(port, &s) != ERROR_SUCCESS) continue;
+        // the triggers take the two bits XInput leaves unused
+        uint32_t bits = s.Gamepad.wButtons | uint32_t(s.Gamepad.bLeftTrigger > 30) << 10 |
+                        uint32_t(s.Gamepad.bRightTrigger > 30) << 11;
+        down |= uint64_t(bits) << (port * 16);
+    }
+    return down;
+}
+
+// F10, F3 and the console key belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
+// keys and the media keys are no answer to "press a key"
+bool AnswerKey(int vk) {
+    switch (vk) {
+        case VK_F10: case VK_F3: case VK_OEM_3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
+        case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
+        case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
+            return false;
+    }
+    return !(vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) && Down(vk);
+}
+
+bool NewPress(PressWatch& w) {
+    bool pressed = false;
+    uint64_t pad = Pads();
+    pressed |= w.started && Active() && (pad & ~w.pad_held);
+    w.pad_held = pad;
+    for (int vk = 1; vk < 256; vk++) {
+        bool d = AnswerKey(vk);
+        pressed |= w.started && d && !w.held[vk] && Active();
+        w.held[vk] = d;
+    }
+    w.started = true;
+    return pressed;
+}
+
+}  // namespace
+
 void WaitForPress() {
-    auto pads = [] {
-        uint64_t down = 0;
-        for (DWORD port = 0; port < 4; port++) {
-            XINPUT_STATE s{};
-            if (XInputGetState(port, &s) != ERROR_SUCCESS) continue;
-            // the triggers take the two bits XInput leaves unused
-            uint32_t bits = s.Gamepad.wButtons | uint32_t(s.Gamepad.bLeftTrigger > 30) << 10 |
-                            uint32_t(s.Gamepad.bRightTrigger > 30) << 11;
-            down |= uint64_t(bits) << (port * 16);
-        }
-        return down;
-    };
-    // F10, F3 and the console key belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
-    // keys and the media keys are no answer to "press a key"
-    auto key = [](int vk) {
-        switch (vk) {
-            case VK_F10: case VK_F3: case VK_OEM_3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
-            case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
-            case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
-                return false;
-        }
-        return !(vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) && Down(vk);
-    };
     // the picture is no menu: the cursor goes, now rather than at the next mouse move
     SetMenu(false);
     PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
-    std::array<bool, 256> held{};
-    for (int vk = 1; vk < 256; vk++) held[vk] = key(vk);
-    uint64_t pad_held = pads();
-    for (;;) {
-        Sleep(10);
-        uint64_t pad = pads();
-        if (Active() && (pad & ~pad_held)) return;
-        pad_held = pad;
-        for (int vk = 1; vk < 256; vk++) {
-            bool d = key(vk);
-            if (d && !held[vk] && Active()) return;
-            held[vk] = d;
-        }
-    }
+    PressWatch w;
+    NewPress(w);
+    while (!NewPress(w)) Sleep(10);
+}
+
+bool Pressed() {
+    static PressWatch w;
+    return NewPress(w);
 }
 
 bool Cursor(int& x, int& y, int& w, int& h) {

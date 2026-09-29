@@ -59,6 +59,8 @@ void TapButtons(uint16_t buttons);
 
 // blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
 void WaitForPress();
+// the same press, polled: one went down since the last call (the first call only notes what is held)
+bool Pressed();
 bool InMenu();
 // the keyboard or mouse was used after the pad's last new press
 bool KeyboardActive();
