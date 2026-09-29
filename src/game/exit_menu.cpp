@@ -1,5 +1,6 @@
 // Exit on the game mode menu (P_OnlineOffline), as SCCT's PC version has: a fifth list item after Solo, Coop, Versus
-// and Credits. Picking it opens the game's own OK / Cancel box, and OK closes the window.
+// and Credits. Picking it opens the game's own OK / Cancel box, and OK closes the window. Back (B, Escape) on that
+// page opens the same box instead of returning to the title screen; Cancel leaves the selection where it was.
 #include <string_view>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -25,6 +26,8 @@ constexpr uint32_t kIsElement = 0x1A6090;  // cdecl (element, const char* name)
 constexpr uint32_t kAddItem = 0x2C5160;    // thiscall list (const TCHAR* text, 0)
 constexpr uint32_t kItemCount = 0x183DF9;  // thiscall list +0x5C, returns a short
 constexpr uint32_t kListName = 0x541C28;   // "Lst_OfflineOnline"
+constexpr uint32_t kIsPage = 0x28FA86;     // thiscall menu (const char* page name): the page is up
+constexpr uint32_t kGameModeName = 0x541A98;  // "P_OnlineOffline"
 constexpr uint32_t kListItems = 0x5C, kListSelection = 0x9C;  // items, selected index (short)
 // message box (thiscall menu): id, FString* title, FString* text, 4, 1, listener, FString*, FString*, 0, 0, 0,
 // FString*; the empty strings give the OK / Cancel buttons. A listener's vtable +0 is OnAccept(id), +4 OnCancel(id).
@@ -42,6 +45,7 @@ uint32_t g_block = 0;
 uint32_t g_listener = 0, g_title = 0, g_text = 0, g_empty = 0, g_item = 0;
 uint32_t g_list = 0;   // the list the item went into
 int g_exit_index = -1;
+bool g_asking = false;  // the box is up: back reaches the page handler under it too
 
 uint32_t Wide(uint32_t& at, std::wstring_view text) {
     uint32_t start = at;
@@ -77,6 +81,20 @@ bool Setup() {
     return true;
 }
 
+void Ask(X86Context& ctx, uint32_t menu) {
+    LOGI("exit: asking");
+    g_asking = true;
+    ctx.ecx = menu;
+    if (uint32_t player = CallGuest(ctx, kSoundPlayer, {})) {
+        uint32_t owner = CallGuest(ctx, kSoundOwner, {});
+        ctx.ecx = player;
+        CallGuest(ctx, R32(R32(player) + kPlay),
+                  {R32(owner + kSelectSound), R32(R32(menu + kMenuPlayer) + kPlayerSlot), 3, 0, 0, 0, 0});
+        ctx.ecx = menu;
+    }
+    CallGuest(ctx, kMessageBox, {kExitId, g_title, g_text, 4, 1, g_listener, g_empty, g_empty, 0, 0, 0, g_empty});
+}
+
 }  // namespace
 
 // title menu page setup: fills the game mode list
@@ -106,16 +124,7 @@ X86_FUNC(sub_0018697A) {
     uint32_t list = page ? CallGuest(ctx, kFindList, {page, kListName}) : 0;
     if (list && list == g_list && int16_t(R16(list + kListSelection)) == g_exit_index &&
         CallGuest(ctx, kIsElement, {R32(ctx.esp + 4), kListName})) {
-        LOGI("exit: asking");
-        ctx.ecx = menu;
-        if (uint32_t player = CallGuest(ctx, kSoundPlayer, {})) {
-            uint32_t owner = CallGuest(ctx, kSoundOwner, {});
-            ctx.ecx = player;
-            CallGuest(ctx, R32(R32(player) + kPlay),
-                      {R32(owner + kSelectSound), R32(R32(menu + kMenuPlayer) + kPlayerSlot), 3, 0, 0, 0, 0});
-            ctx.ecx = menu;
-        }
-        CallGuest(ctx, kMessageBox, {kExitId, g_title, g_text, 4, 1, g_listener, g_empty, g_empty, 0, 0, 0, g_empty});
+        Ask(ctx, menu);
         ctx.eax = 1;
         ctx.esp += 8;  // ret 4
         return;
@@ -123,14 +132,39 @@ X86_FUNC(sub_0018697A) {
     __imp__sub_0018697A(ctx, base);
 }
 
+// title menu back handler (thiscall on its base at +0x2758, one argument, ret 4, returns 0 when a page took it): on
+// P_OnlineOffline it goes back to the title screen (sub_00183983)
+X86_EXTERN_FUNC(__imp__sub_00186B5D);
+X86_FUNC(sub_00186B5D) {
+    uint32_t menu = ctx.ecx - kPressBase;
+    ctx.ecx = menu;
+    bool game_mode = g_block && CallGuest(ctx, kIsPage, {kGameModeName}) & 0xFF;
+    ctx.ecx = menu + kPressBase;
+    if (!game_mode) return __imp__sub_00186B5D(ctx, base);
+    if (!g_asking) Ask(ctx, menu);
+    ctx.eax = 0;
+    ctx.esp += 8;  // ret 4
+}
+
 // OnAccept of the profile menu's listener, which the exit box borrows
 X86_EXTERN_FUNC(__imp__sub_001ACEAB);
 X86_FUNC(sub_001ACEAB) {
     if (g_listener && ctx.ecx == g_listener && R32(ctx.esp + 4) == kExitId) {
         LOGI("exit: closing the window");
+        g_asking = false;
         PostMessageW(static_cast<HWND>(app::Window()), WM_CLOSE, 0, 0);
         ctx.esp += 8;  // ret 4
         return;
     }
     __imp__sub_001ACEAB(ctx, base);
+}
+
+// OnCancel of the same listener
+X86_EXTERN_FUNC(__imp__sub_001AD175);
+X86_FUNC(sub_001AD175) {
+    if (g_listener && ctx.ecx == g_listener && R32(ctx.esp + 4) == kExitId) {
+        LOGI("exit: cancelled");
+        g_asking = false;
+    }
+    __imp__sub_001AD175(ctx, base);
 }
