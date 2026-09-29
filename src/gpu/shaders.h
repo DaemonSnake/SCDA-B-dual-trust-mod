@@ -32,6 +32,7 @@ struct PixelKey {
     TexInfo tex[4];
     uint32_t alphakill = 0;  // bit per stage
     uint32_t flat = 0, two_sided = 0;
+    uint32_t proj = 0;       // fixed function: bit per stage sampled at coordinates divided by w
     bool operator==(const PixelKey& o) const;
 };
 
@@ -42,7 +43,15 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]);
 // vertex program microcode to HLSL, regs is the bit mask of v registers the draw supplies
 // decode: VertexDecode per register, 4 bits each, for elements the input assembler hands over raw
 std::string VertexProgramHlsl(const std::vector<uint32_t>& program, uint16_t regs, uint64_t decode = 0);
-std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode = 0);
+// fixed function vertex state a shader is built for
+struct FixedKey {
+    uint32_t light = 0;    // bit 0 lighting, 1 specular, 2 local viewer, 3 normalize, then D3DMCS 2 bits each from bit 8:
+                           // diffuse, specular, ambient, emissive (material when the vertex lacks that colour)
+    uint32_t types = 0;    // D3DLIGHTTYPE per light, 2 bits each, 0 off
+    uint32_t tex[4] = {};  // per stage: coordinate set, texgen at bit 4, D3DTTFF count at bit 8, projected bit 11, set size at bit 12
+};
+FixedKey MakeFixedKey(const State& s);
+std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode = 0, const FixedKey& f = {});
 std::string PixelHlsl(const PixelKey& k);
 
 // the constant buffer layout both stages share, register b1
@@ -59,6 +68,13 @@ struct DrawConstants {
     float wvp[16];      // fixed function
     float hdr[4];       // colour out scale, HDR target read scale, soft shadow radius in shadow map texels, 0
     float spread[4][4]; // kTexWide: tap step in uv, taps per axis
+    // fixed function, lit in view space
+    float wv[16];
+    float wvn[16];       // normals: inverse transpose of wv
+    float tm[4][16];     // texture transforms
+    float mat[5][4];     // material diffuse, ambient, specular, emissive, power
+    float amb[4];        // D3DRS_AMBIENT
+    float lt[8][7][4];   // per light: diffuse, specular, ambient, position range, direction falloff, attenuation, cos theta/2 phi/2
 };
 
 }  // namespace gpu

@@ -1376,6 +1376,11 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     if (prog && !s.vs->hash) s.vs->hash = Hash(s.vs->program.data(), s.vs->program.size() * 4) | 1;
     uint64_t vkey = Hash(&a.decode, 8, prog ? s.vs->hash ^ a.regs : Hash(&s.vs_handle, 4, a.regs | 0x10000));
     if (!prog && a.pretransformed) vkey ^= 0x5A5A;
+    FixedKey fk;
+    if (!prog) {
+        fk = MakeFixedKey(s);
+        vkey = Hash(&fk, sizeof(fk), vkey);
+    }
     uint64_t vh;
     ID3DBlob* vs;
     auto vit = vs_src_.find(vkey);
@@ -1383,7 +1388,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         vh = vit->second;
         vs = blobs_[vh].Get();
     } else {
-        std::string src = prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode);
+        std::string src = prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk);
         vs = Compile(src, "main", "vs_5_0", vh);
         vs_src_[vkey] = vh;
     }
@@ -1551,8 +1556,51 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         float full[16];
         mul(wvp, vpm, full);
         // HLSL mul(row vector, matrix) with column major packing wants the transpose
-        for (int r = 0; r < 4; r++)
-            for (int col = 0; col < 4; col++) c.wvp[col * 4 + r] = full[r * 4 + col];
+        auto put = [](const float* m, float* o) {
+            for (int r = 0; r < 4; r++)
+                for (int col = 0; col < 4; col++) o[col * 4 + r] = m[r * 4 + col];
+        };
+        put(full, c.wvp);
+        put(wv, c.wv);
+        // normals take the inverse transpose of the upper 3x3
+        float n[16] = {};
+        float det = wv[0] * (wv[5] * wv[10] - wv[6] * wv[9]) - wv[1] * (wv[4] * wv[10] - wv[6] * wv[8]) + wv[2] * (wv[4] * wv[9] - wv[5] * wv[8]);
+        float id = det != 0 ? 1.0f / det : 0.0f;
+        for (int r = 0; r < 3; r++)
+            for (int col = 0; col < 3; col++) {
+                int r1 = (r + 1) % 3, r2 = (r + 2) % 3, c1 = (col + 1) % 3, c2 = (col + 2) % 3;
+                n[r * 4 + col] = (wv[r1 * 4 + c1] * wv[r2 * 4 + c2] - wv[r1 * 4 + c2] * wv[r2 * 4 + c1]) * id;
+            }
+        put(n, c.wvn);
+        for (int t = 0; t < 4; t++) put(s.transforms[size_t(16 + t)].data(), c.tm[t]);
+        std::memcpy(c.mat, s.material.data(), sizeof(float) * 16);
+        c.mat[4][0] = s.material[16];
+        Color(s.rs[kRsAmbient], c.amb);
+        // lights to view space
+        const float* vm = s.transforms[2].data();
+        for (int i = 0; i < 8; i++) {
+            if (!((fk.types >> (i * 2)) & 3)) continue;
+            const auto& l = s.lights[size_t(i)];
+            float f[26];
+            std::memcpy(f, l.data(), sizeof(f));
+            auto& o = c.lt[i];
+            for (int j = 0; j < 4; j++) {
+                o[0][j] = f[1 + j];
+                o[1][j] = f[5 + j];
+                o[2][j] = f[9 + j];
+            }
+            for (int j = 0; j < 3; j++) {
+                o[3][j] = f[13] * vm[j] + f[14] * vm[4 + j] + f[15] * vm[8 + j] + vm[12 + j];
+                o[4][j] = f[16] * vm[j] + f[17] * vm[4 + j] + f[18] * vm[8 + j];
+            }
+            o[3][3] = f[19];
+            o[4][3] = f[20];
+            o[5][0] = f[21];
+            o[5][1] = f[22];
+            o[5][2] = f[23];
+            o[6][0] = std::cos(f[24] * 0.5f);
+            o[6][1] = std::cos(f[25] * 0.5f);
+        }
     }
     std::memcpy(dc.cpu, &c, sizeof(c));
     cl_->SetGraphicsRootConstantBufferView(0, vc.gpu);
@@ -1597,7 +1645,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             }
             fprintf(cap_, "     %s\n", name);
         };
-        dump("vs", vkey, prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode));
+        dump("vs", vkey, prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk));
         dump("ps", pkh, PixelHlsl(pk));
     }
 

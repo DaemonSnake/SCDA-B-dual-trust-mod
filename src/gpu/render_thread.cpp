@@ -60,7 +60,7 @@ struct Batch {
 };
 
 // the plain data in State, around its shader pointers and the resource headers (sent as copies); of the transforms only
-// view, projection and world are drawn with
+// view, projection, texture and world are drawn with
 struct Range {
     size_t off, len;
 };
@@ -73,6 +73,7 @@ std::vector<Range> StateRanges() {
         {At(s, &s.vsc), At(s, &s.rt) - At(s, &s.vsc)},
         {At(s, &s.scissor_count), At(s, &s.transforms) - At(s, &s.scissor_count)},
         {At(s, &s.transforms[2]), 2 * sizeof(s.transforms[0])},
+        {At(s, &s.transforms[16]), 4 * sizeof(s.transforms[0])},
         {At(s, &s.transforms[256]), sizeof(s.transforms[0])},
         {At(s, &s.material), sizeof(State) - At(s, &s.material)},
     };

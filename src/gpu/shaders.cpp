@@ -46,6 +46,12 @@ cbuffer DC : register(b1) {
     float4x4 wvp;
     float4 hdr;
     float4 spread[4];
+    float4x4 wv;
+    float4x4 wvn;
+    float4x4 tm[4];
+    float4 mat[5];
+    float4 amb;
+    float4 lt[56];
 };
 )";
 
@@ -587,6 +593,7 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
         uint32_t v[9] = {t[kTssColorOp], t[kTssColorArg1], t[kTssColorArg2], t[kTssColorArg0], t[kTssAlphaOp],
                          t[kTssAlphaArg1],  t[kTssAlphaArg2], t[kTssAlphaArg0], t[kTssResultArg]};
         std::memcpy(k.ff[i], v, sizeof(v));
+        if (t[kTssTextureTransformFlags] & 0x100) k.proj |= 1u << i;
         if (t[kTssColorOp] <= 1) break;
     }
     return k;
@@ -634,23 +641,114 @@ std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs, 
     return s;
 }
 
-std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode) {
+FixedKey MakeFixedKey(const State& s) {
+    FixedKey f;
+    if (s.rs[kRsLighting]) {
+        f.light = 1 | (s.rs[kRsSpecularEnable] ? 2 : 0) | (s.rs[kRsLocalViewer] ? 4 : 0) | (s.rs[kRsNormalizeNormals] ? 8 : 0);
+        if (s.rs[kRsColorVertex])
+            f.light |= (s.rs[kRsDiffuseMaterialSource] & 3) << 8 | (s.rs[kRsSpecularMaterialSource] & 3) << 10 |
+                       (s.rs[kRsAmbientMaterialSource] & 3) << 12 | (s.rs[kRsEmissiveMaterialSource] & 3) << 14;
+        for (int i = 0; i < 8; i++)
+            if ((s.light_enable >> i) & 1) f.types |= (s.lights[size_t(i)][0] & 3) << (i * 2);
+    }
+    for (int t = 0; t < 4; t++) {
+        uint32_t tci = s.tss[size_t(t)][kTssTexCoordIndex], ttf = s.tss[size_t(t)][kTssTextureTransformFlags];
+        uint32_t set = tci & 3, size = 2;
+        if (s.vs && (s.vs_handle & 1)) {
+            uint32_t ty = s.vs->inputs[9 + set].type;
+            size = ty == 0x16 ? 3 : std::min<uint32_t>(ty >> 4, 4);
+            if (ty >> 4 > 4) size = 3;
+            if (!size) size = 2;
+        } else {
+            uint32_t code = (s.vs_handle >> (16 + set * 2)) & 3;
+            size = code == 0 ? 2 : code == 1 ? 3 : code == 2 ? 4 : 1;
+        }
+        f.tex[t] = set | ((tci >> 16) & 7) << 4 | (ttf & 7) << 8 | (ttf & 0x100 ? 0x800 : 0) | size << 12;
+    }
+    return f;
+}
+
+// D3D's fixed function vertex pipeline: transform, lighting in view space, texture coordinate generation and transforms
+std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode, const FixedKey& f) {
     std::string s = kCommon;
     s += kVsHelpers;
     s += VsInputs(regs, decode);
     s += kVsPrologue;
     auto v = [&](int r, const char* def) { return (regs >> r) & 1 ? F("i.v%d", r) : std::string(def); };
+    bool lit = !pretransformed && (f.light & 1);
     if (pretransformed) {
-        s += "    float4 q = " + v(0, "float4(0,0,0,1)") + ";\n";
-        s += "    float w = q.w == 0 ? 1 : 1 / q.w;\n";
-        s += "    oPos = float4(q.xy, q.z / surf.z, w);\n";
+        s += "    float4 rhw = " + v(0, "float4(0,0,0,1)") + ";\n";
+        s += "    float w = rhw.w == 0 ? 1 : 1 / rhw.w;\n";
+        s += "    oPos = float4(rhw.xy, rhw.z / surf.z, w);\n";
     } else {
-        s += "    float4 cp = mul(float4(" + v(0, "float4(0,0,0,1)") + ".xyz, 1), wvp);\n";
+        s += "    float4 ip = float4(" + v(0, "float4(0,0,0,1)") + ".xyz, 1);\n";
+        s += "    float4 cp = mul(ip, wvp);\n";
+        s += "    float3 vp = mul(ip, wv).xyz;\n";
+        s += "    float3 vn = mul(float4(" + v(2, "float4(0,0,0,0)") + ".xyz, 0), wvn).xyz;\n";
+        if (f.light & 8) s += "    vn = dot(vn, vn) > 0 ? normalize(vn) : vn;\n";
     }
-    s += "    oD0 = " + v(3, "float4(1,1,1,1)") + ";\n";
-    s += "    oD1 = " + v(4, "float4(0,0,0,0)") + ";\n";
+    if (lit) {
+        // D3DMCS: 1 the vertex diffuse, 2 its specular, else the material
+        auto src = [&](int field, const char* mat) {
+            uint32_t m = (f.light >> (8 + field * 2)) & 3;
+            if (m == 1 && ((regs >> 3) & 1)) return std::string("i.v3");
+            if (m == 2 && ((regs >> 4) & 1)) return std::string("i.v4");
+            return std::string(mat);
+        };
+        s += "    float4 md = " + src(0, "mat[0]") + ", ms = " + src(1, "mat[2]") + ", ma = " + src(2, "mat[1]") +
+             ", me = " + src(3, "mat[3]") + ";\n";
+        s += "    float3 la = 0, ld = 0, ls = 0;\n";
+        s += (f.light & 4) ? "    float3 eye = -normalize(vp);\n" : "    float3 eye = float3(0, 0, 1);\n";
+        for (int n = 0; n < 8; n++) {
+            uint32_t type = (f.types >> (n * 2)) & 3;
+            if (!type) continue;
+            int b = n * 7;
+            s += "    {\n        float3 l;\n        float att = 1;\n";
+            if (type == 3) {
+                s += F("        l = -normalize(lt[%d].xyz);\n", b + 4);
+            } else {
+                s += F("        float3 d = lt[%d].xyz - vp;\n        float dist = length(d);\n        l = d / max(dist, 1e-6);\n", b + 3);
+                s += F("        att = dist > lt[%d].w ? 0 : 1 / max(lt[%d].x + lt[%d].y * dist + lt[%d].z * dist * dist, 1e-6);\n", b + 3, b + 5,
+                       b + 5, b + 5);
+                if (type == 2) {
+                    s += F("        float rho = dot(-l, normalize(lt[%d].xyz));\n", b + 4);
+                    s += F("        att *= rho > lt[%d].x ? 1 : rho <= lt[%d].y ? 0 : pow(saturate((rho - lt[%d].y) / (lt[%d].x - lt[%d].y)), lt[%d].w);\n",
+                           b + 6, b + 6, b + 6, b + 6, b + 6, b + 4);
+                }
+            }
+            s += F("        la += att * lt[%d].rgb;\n", b + 2);
+            s += "        float nl = dot(vn, l);\n";
+            s += F("        ld += att * lt[%d].rgb * max(nl, 0);\n", b);
+            if (f.light & 2) s += F("        if (nl > 0) ls += att * lt[%d].rgb * pow(max(dot(vn, normalize(l + eye)), 0), mat[4].x);\n", b + 1);
+            s += "    }\n";
+        }
+        s += "    oD0 = float4(me.rgb + ma.rgb * (amb.rgb + la) + md.rgb * ld, md.a);\n";
+        s += (f.light & 2) ? "    oD1 = float4(ms.rgb * ls, ms.a);\n" : "    oD1 = float4(0,0,0,0);\n";
+    } else {
+        s += "    oD0 = " + v(3, "float4(1,1,1,1)") + ";\n";
+        s += "    oD1 = " + v(4, "float4(0,0,0,0)") + ";\n";
+    }
     s += "    oB0 = oD0;\n    oB1 = oD1;\n";
-    for (int t = 0; t < 4; t++) s += F("    oT%d = %s;\n", t, v(9 + t, "float4(0,0,0,1)").c_str());
+    for (int t = 0; t < 4; t++) {
+        uint32_t u = f.tex[t], set = u & 3, gen = (u >> 4) & 7, count = (u >> 8) & 7, size = (u >> 12) & 7;
+        std::string in = v(9 + int(set), "float4(0,0,0,1)");
+        if (pretransformed || (!gen && !count)) {
+            s += F("    oT%d = %s;\n", t, in.c_str());
+            continue;
+        }
+        // generated coordinates are view space; a transform takes the set with 1 after its last element
+        std::string c = gen == 1 ? "float4(vn, 1)" : gen == 2 ? "float4(vp, 1)" : gen == 3 ? "float4(reflect(normalize(vp), vn), 1)"
+                        : size == 1 ? F("float4(%s.x, 1, 0, 0)", in.c_str()) : size == 2 ? F("float4(%s.xy, 1, 0)", in.c_str())
+                        : size == 3 ? F("float4(%s.xyz, 1)", in.c_str()) : in;
+        if (!count) {
+            s += F("    oT%d = %s;\n", t, c.c_str());
+            continue;
+        }
+        s += F("    {\n        float4 tc = mul(%s, tm[%d]);\n", c.c_str(), t);
+        if (u & 0x800) s += F("        oT%d = float4(tc.xy, tc.z, tc[%u]);\n", t, std::min<uint32_t>(count, 4) - 1);
+        else s += F("        oT%d = float4(tc.xy, %s, 1);\n", t, count >= 3 ? "tc.z" : "0");
+        s += "    }\n";
+    }
     s += "    oFog = " + v(5, "float4(0,0,0,0)") + ";\n";
     if (pretransformed) return s + kVsEpilogue;
     s += R"(
@@ -731,7 +829,7 @@ std::string PixelHlsl(const PixelKey& k) {
             if (f[0] <= 1) break;
             const TexInfo& t = k.tex[i];
             std::string norm = (t.rect ? F(" / texsize[%d].xy", i) : "") + F(" + texsize[%d].zw", i);
-            std::string uv = F("pT%d.xy%s", i, norm.c_str());
+            std::string uv = (k.proj >> i) & 1 ? F("(pT%d.xy / pT%d.w)%s", i, i, norm.c_str()) : F("pT%d.xy%s", i, norm.c_str());
             if (t.shadow)
                 body += F("float4 t%d = shadow(tex%d, smp%d, (pT%d.xy / pT%d.w)%s, pT%d.z / pT%d.w, %d, i.pos.xy, texsize[%d].xy);\n", i, i,
                           i, i, i, norm.c_str(), i, i, t.shadow, i);

@@ -319,21 +319,17 @@ HLE_STDCALL(D3DDevice_GetDepthStencilSurface2, 0) {
 
 HLE_STDCALL(D3DDevice_Swap, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
-    uint32_t back = g_buffers[1];
-    if (g_backend) g_backend->Present(SurfaceOf(back));
+    if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]));
     app::Pace();
-    // rotate: the presented buffer becomes the front one
-    uint32_t front = g_buffers[0];
-    for (uint32_t i = 0; i + 1 < g_buffer_count; i++) g_buffers[i] = g_buffers[i + 1];
-    g_buffers[g_buffer_count - 1] = front;
-    if (Dev(kDevRenderTarget) == back) {
-        Release(back);
-        AddRef(g_buffers[1]);
-        SetDev(kDevRenderTarget, g_buffers[1]);
-        g_state.rt = SurfaceOf(g_buffers[1]);
+    // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
+    uint32_t last = g_buffers[g_buffer_count - 1], data = R32(last + 4), lk = R32(last + 8);
+    for (uint32_t i = g_buffer_count - 1; i > 0; i--) {
+        W32(g_buffers[i] + 4, R32(g_buffers[i - 1] + 4));
+        W32(g_buffers[i] + 8, R32(g_buffers[i - 1] + 8));
     }
-    SetDev(kDevFrameBuffer, g_buffers[1]);
-    SetDev(kDevFrameBufferSize, g_buffers[1]);
+    W32(g_buffers[0] + 4, data);
+    W32(g_buffers[0] + 8, lk);
+    g_state.rt = SurfaceOf(Dev(kDevRenderTarget));
     uint32_t n = Dev(kDevSwapCount) + 1;
     SetDev(kDevSwapCount, n);
     return n;
@@ -469,6 +465,26 @@ HLE_STDCALL(D3DDevice_SetTransform, 2) {
 HLE_STDCALL(D3DDevice_SetMaterial, 1) {
     std::memcpy(g_state.material.data(), HostPtr(a[0]), 17 * 4);
     return 0;
+}
+
+// the XDK keeps its own light lists, the renderer gets a copy
+X86_EXTERN_FUNC(GUEST_ORIG(D3DDevice_SetLight));
+X86_FUNC(GUEST(D3DDevice_SetLight)) {
+    uint32_t i = R32(ctx.esp + 4), l = R32(ctx.esp + 8);
+    if (i < 8 && l) {
+        std::lock_guard<std::recursive_mutex> lock(g_lock);
+        std::memcpy(g_state.lights[i].data(), HostPtr(l), 26 * 4);
+    }
+    GUEST_ORIG(D3DDevice_SetLight)(ctx, base);
+}
+X86_EXTERN_FUNC(GUEST_ORIG(D3DDevice_LightEnable));
+X86_FUNC(GUEST(D3DDevice_LightEnable)) {
+    uint32_t i = R32(ctx.esp + 4), on = R32(ctx.esp + 8);
+    if (i < 8) {
+        std::lock_guard<std::recursive_mutex> lock(g_lock);
+        g_state.light_enable = on ? g_state.light_enable | 1u << i : g_state.light_enable & ~(1u << i);
+    }
+    GUEST_ORIG(D3DDevice_LightEnable)(ctx, base);
 }
 
 // ---------------------------------------------------------------- resources in use

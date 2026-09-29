@@ -176,6 +176,8 @@ struct State {
     // fixed function
     std::array<std::array<float, 16>, 512> transforms{};  // by D3DTRANSFORMSTATETYPE
     std::array<float, 17> material{};
+    std::array<std::array<uint32_t, 26>, 8> lights{};  // D3DLIGHT8
+    uint32_t light_enable = 0;                         // bit per light
     float ss_offset_x = 0, ss_offset_y = 0;
     float zscale = 16777215.0f;  // depth buffer units per 1.0
 };
