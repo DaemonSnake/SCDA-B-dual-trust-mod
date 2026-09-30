@@ -37,9 +37,9 @@ constexpr ImVec4 kHeading{0.82f, 0.28f, 0.22f, 1.0f};
 constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
-const char* const kAnisoNames[] = {"GAME DEFAULT", "2x", "4x", "8x", "16x"};
-constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
-constexpr uint32_t kFpsCaps[] = {0, 30, 60, 75, 90, 120, 144, 165, 240, 360};
+const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
+constexpr uint32_t kShadowSizes[] = {512, 1024, 2048, 4096, 8192};
+constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
@@ -48,8 +48,16 @@ constexpr Port kPlayer1Choices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3
                                     {false, 0}, {false, 1}, {false, 2}, {false, 3}};
 constexpr Port kPlayer2Choices[] = {{false, -1}, {true, -1}, {false, 0}, {false, 1}, {false, 2}, {false, 3}};
 
+// rows::Choices reads a row's values by picking each index in turn; -1 steps as usual
+int g_pick = -1, g_picks = 0, g_picked = 0;
+
 int StepIndex(int index, int step, int count) {
     if (count <= 0) return 0;
+    if (g_pick >= 0) {
+        g_picks = count;
+        g_picked = index;
+        return std::min(g_pick, count - 1);
+    }
     index = (index + step) % count;
     return index < 0 ? index + count : index;
 }
@@ -158,6 +166,11 @@ bool TextRow(const char* label, char* buf, size_t size) {
 
 const char* OnOff(bool on) { return on ? "ON" : "OFF"; }
 
+// through StepIndex so the game's list has OFF then ON
+void Flip(bool& on, int step) {
+    if (step) on = StepIndex(on, step, 2) != 0;
+}
+
 std::string PortText(const Port& p) {
     if (p.keyboard && p.pad >= 0) return "KEYBOARD + CONTROLLER " + std::to_string(p.pad + 1);
     if (p.keyboard) return "KEYBOARD";
@@ -221,22 +234,21 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kVsync, "VSYNC"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
     {Kind::Heading, -1, "GRAPHICS"},
-    {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
-    {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
     {Kind::Value, kShaderModel, "SHADER MODEL"},
     {Kind::Value, kHdr, "HDR RENDERING"},
     {Kind::Value, kToneMapping, "TONE MAPPING"},
-    {Kind::Value, kHqShadows, "HQ SOFT SHADOWS"},
+    {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
+    {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
+    {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
     {Kind::Value, kAsyncShaders, "ASYNC SHADERS"},
-    {Kind::Heading, -1, "GAME"},
+    {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
+    {Kind::Value, kTickRate, "COOP TICK RATE"},
+    {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
+    {Kind::Text, kJoinIp, "COOP JOIN IP"},
     {Kind::Heading, -1, "CONTROLLERS"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
-    {Kind::Heading, -1, "CO-OP"},
-    {Kind::Value, kTickRate, "TICK RATE"},
-    {Kind::Value, kInputDelay, "MIN INPUT DELAY"},
-    {Kind::Text, kJoinIp, "JOIN IP"},
     {Kind::Heading, -1, "DEBUG"},
     {Kind::Value, kHideHud, "HIDE HUD"},
 };
@@ -255,14 +267,13 @@ const std::vector<Row>& InputRows() {
     return list;
 }
 
-// steps the value first when step is not zero
-std::string RowText(int id, int step) {
-    Settings& s = Get();
+// steps the value first when step is not zero; a copy of the settings only reads what a step gives
+std::string RowText(int id, int step, Settings& s = Get()) {
     char text[64] = "";
     bool display = false;
     switch (id) {
         case kDisplayMode: {
-            static const char* const kModes[] = {"FULLSCREEN", "BORDERLESS", "WINDOWED"};
+            static const char* const kModes[] = {"FULLSCREEN", "WINDOWED", "BORDERLESS"};
             if (step) s.display_mode = DisplayMode(StepIndex(int(s.display_mode), step, 3));
             display = true;
             std::snprintf(text, sizeof(text), "%s", kModes[std::min(int(s.display_mode), 2)]);
@@ -270,21 +281,24 @@ std::string RowText(int id, int step) {
         }
         case kResolution: {
             static const std::vector<Mode> modes = Modes();
+            Mode desktop = Desktop(), m = s.width && s.height ? Mode{s.width, s.height} : desktop;
             int i = 0;
-            for (size_t k = 0; k < modes.size() && !i; k++)
-                if (modes[k].width == s.width && modes[k].height == s.height) i = int(k) + 1;
-            if (step) {
-                i = StepIndex(i, step, int(modes.size()) + 1);
-                s.width = i ? modes[size_t(i - 1)].width : 0;
-                s.height = i ? modes[size_t(i - 1)].height : 0;
+            for (size_t k = 0; k < modes.size(); k++)
+                if (modes[k].width == m.width && modes[k].height == m.height) i = int(k);
+            if (step && !modes.empty()) {
+                m = modes[size_t(StepIndex(i, step, int(modes.size())))];
+                // the desktop's own mode is kept as 0, which follows the desktop
+                bool native = m.width == desktop.width && m.height == desktop.height;
+                s.width = native ? 0 : m.width;
+                s.height = native ? 0 : m.height;
             }
             display = true;
-            Mode m = i ? modes[size_t(i - 1)] : Desktop();
-            std::snprintf(text, sizeof(text), i ? "%ux%u" : "DESKTOP (%ux%u)", m.width, m.height);
+            std::snprintf(text, sizeof(text), "%ux%u", m.width, m.height);
             break;
         }
         case kRenderResolution: {
-            if (step) s.render_percent = uint32_t(std::clamp(int(s.render_percent) + step * 5, 20, 200));
+            // 20% to 200% in steps of 5
+            if (step) s.render_percent = 20 + 5 * uint32_t(StepIndex((std::clamp(int(s.render_percent), 20, 200) - 20) / 5, step, 37));
             Mode out = Output();
             std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
                           out.height * s.render_percent / 100);
@@ -297,11 +311,11 @@ std::string RowText(int id, int step) {
             break;
         }
         case kVsync:
-            if (step) s.vsync = !s.vsync;
+            Flip(s.vsync, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.vsync));
             break;
         case kFpsCounter:
-            if (step) s.fps_counter = !s.fps_counter;
+            Flip(s.fps_counter, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.fps_counter));
             break;
         case kAniso:
@@ -309,12 +323,11 @@ std::string RowText(int id, int step) {
             break;
         case kShadowResolution: {
             uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];
-            if (size) std::snprintf(text, sizeof(text), size == 512 ? "%u (CONSOLE)" : "%u", size);
-            else std::snprintf(text, sizeof(text), "AUTO");
+            std::snprintf(text, sizeof(text), "%u", size);
             break;
         }
         case kShaderModel:
-            if (step) s.shader_model = s.shader_model >= 3 ? 1 : 3;
+            if (step) s.shader_model = StepIndex(s.shader_model >= 3, step, 2) ? 3 : 1;
             std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1");
             break;
         case kHdr:
@@ -322,17 +335,17 @@ std::string RowText(int id, int step) {
         case kHqShadows: {
             // shader model 3.0 features, off at 1.1
             bool& on = id == kHdr ? s.hdr_rendering : id == kToneMapping ? s.tone_mapping : s.hq_soft_shadows;
-            if (s.shader_model < 3) return "OFF (SM 1.1)";
-            if (step) on = !on;
+            if (s.shader_model < 3) return "OFF";
+            Flip(on, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(on));
             break;
         }
         case kAsyncShaders:
-            if (step) s.async_shaders = !s.async_shaders;
+            Flip(s.async_shaders, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.async_shaders));
             break;
         case kSkipIntros:
-            if (step) s.skip_intros = !s.skip_intros;
+            Flip(s.skip_intros, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));
             break;
         case kTickRate: {
@@ -356,20 +369,23 @@ std::string RowText(int id, int step) {
             break;
         }
         case kHideHud:
-            if (step) s.hide_hud = !s.hide_hud;
+            Flip(s.hide_hud, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.hide_hud));
             break;
         case kSensitivity:
-            if (step)
-                s.mouse_sensitivity = std::clamp(std::round((s.mouse_sensitivity + step * 0.1f) * 10.0f) / 10.0f, 0.1f, 5.0f);
+            // 0.1 to 5.0 in steps of 0.1
+            if (step) {
+                int i = std::clamp(int(std::lround(s.mouse_sensitivity * 10.0f)), 1, 50) - 1;
+                s.mouse_sensitivity = float(StepIndex(i, step, 50) + 1) / 10.0f;
+            }
             std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
             break;
         case kInvertMouse:
-            if (step) s.invert_mouse = !s.invert_mouse;
+            Flip(s.invert_mouse, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.invert_mouse));
             break;
     }
-    if (step) Changed(display);
+    if (step && &s == &Get()) Changed(display);
     return text;
 }
 
@@ -446,6 +462,24 @@ void PollCapture() {
     g_capture_done = ImGui::GetFrameCount();
 }
 
+// an unplugged controller is left out, unless the player has it now
+std::vector<Port> PlayerList(const Settings& s, int player) {
+    std::vector<Port> out;
+    for (const Port& c : PlayerChoices(player))
+        if (c.pad < 0 || SamePort(c, s.players[player]) || input::PadConnected(c.pad)) out.push_back(c);
+    return out;
+}
+
+std::string ChoiceText(const Settings& s, int player, const Port& c) {
+    const Port& other = s.players[1 - player];
+    bool current = SamePort(c, s.players[player]);
+    std::string text = PortText(c);
+    if (!current && ((c.keyboard && other.keyboard) || (c.pad >= 0 && c.pad == other.pad)))
+        text += player == 0 ? "  (FROM PLAYER 2)" : "  (FROM PLAYER 1)";
+    if (current && c.pad >= 0 && !input::PadConnected(c.pad)) text += "  (UNPLUGGED)";
+    return text;
+}
+
 // label left, a drop-down list of the player's choices where the value sits: stepping through them would hand
 // devices back and forth between the players on the way
 void PlayerRow(const char* label, int player) {
@@ -463,16 +497,9 @@ void PlayerRow(const char* label, int player) {
     // opaque: the rows under the list showed through
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
     if (ImGui::BeginCombo("##device", PortText(s.players[player]).c_str())) {
-        const Port& other = s.players[1 - player];
-        for (const Port& c : PlayerChoices(player)) {
+        for (const Port& c : PlayerList(s, player)) {
             bool current = SamePort(c, s.players[player]);
-            // an unplugged controller is left out, unless the player has it now
-            if (c.pad >= 0 && !current && !input::PadConnected(c.pad)) continue;
-            std::string text = PortText(c);
-            if (!current && ((c.keyboard && other.keyboard) || (c.pad >= 0 && c.pad == other.pad)))
-                text += player == 0 ? "  (FROM PLAYER 2)" : "  (FROM PLAYER 1)";
-            if (current && c.pad >= 0 && !input::PadConnected(c.pad)) text += "  (UNPLUGGED)";
-            if (ImGui::Selectable(text.c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
+            if (ImGui::Selectable(ChoiceText(s, player, c).c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
             if (current) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -642,6 +669,54 @@ void Step(const Row& row, int step) {
 void Defaults(int page) {
     std::lock_guard lock(UiLock());
     RestoreDefaults(page);
+}
+
+std::vector<std::string> Choices(const Row& row, int* current) {
+    std::lock_guard lock(UiLock());
+    std::vector<std::string> out;
+    *current = 0;
+    if (row.kind != Kind::Value) return out;
+    const Settings& s = Get();
+    if (row.id == kPlayer1 || row.id == kPlayer2) {
+        int player = row.id == kPlayer1 ? 0 : 1;
+        for (const Port& c : PlayerList(s, player)) {
+            if (SamePort(c, s.players[player])) *current = int(out.size());
+            out.push_back(ChoiceText(s, player, c));
+        }
+        return out;
+    }
+    g_picks = 0;
+    for (g_pick = 0; g_pick < std::max(g_picks, 1); g_pick++) {
+        Settings copy = s;
+        out.push_back(RowText(row.id, 1, copy));
+    }
+    g_pick = -1;
+    *current = g_picked;
+    // a range that only steps, or a row that can't change now
+    if (g_picks < 2) out.clear();
+    return out;
+}
+
+bool Shown(const Row& row) {
+    std::lock_guard lock(UiLock());
+    bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
+    return !sm3 || Get().shader_model >= 3;
+}
+
+void Choose(const Row& row, int index) {
+    std::lock_guard lock(UiLock());
+    Settings& s = Get();
+    if (row.id == kPlayer1 || row.id == kPlayer2) {
+        int player = row.id == kPlayer1 ? 0 : 1;
+        std::vector<Port> list = PlayerList(s, player);
+        if (index >= 0 && index < int(list.size()) && !SamePort(list[size_t(index)], s.players[player]) &&
+            SetPlayer(s, player, list[size_t(index)]))
+            Changed(false);
+        return;
+    }
+    g_pick = index;
+    RowText(row.id, 1);
+    g_pick = -1;
 }
 
 }  // namespace rows

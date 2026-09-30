@@ -11,6 +11,7 @@
 #include <mutex>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -133,25 +134,25 @@ constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
     {{"move_back", "MOVE BACK", "S"}, 17},
-    {{"strafe_left", "STRAFE LEFT", "A"}, 18},
-    {{"strafe_right", "STRAFE RIGHT", "D"}, 19},
-    {{"fire", "FIRE", "LMB"}, 7},
-    {{"alt_fire", "ALT FIRE", "RMB"}, 6},
-    {{"interact", "INTERACT", "Space,Enter"}, 0},
+    {{"strafe_left", "MOVE LEFT", "A"}, 18},
+    {{"strafe_right", "MOVE RIGHT", "D"}, 19},
     {{"jump", "JUMP", "Shift"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
-    {{"scope", "SCOPE", "E,MMB"}, 2},
-    {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
-    {{"zoom", "EEV / ZOOM", "1"}, 15},
-    {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
-    // the pad's black button brings up a picker between these two; the keys do each at once
+    {{"back_to_wall", "BACK TO WALL / SWITCH HAND", "Q"}, 14},
+    {{"fire", "FIRE", "LMB"}, 7},
+    {{"alt_fire", "ALTERNATE FIRE", "RMB"}, 6},
+    {{"interact", "INTERACTION", "Space,Enter"}, 0},
+    {{"scope", "USE / EQUIP", "E,MMB"}, 2},
+    // the pad's black button brings up a picker between whistle and co-op action; the keys do each at once
     {{"whistle", "WHISTLE", "V"}, -1, true, KeyEvent::Whistle},
-    {{"sidekick", "SIDEKICK / CO-OP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
-    {{"goggles", "EMF VISION", "4"}, 8},
-    {{"next_vision", "THERMAL VISION", "3"}, 11},
-    {{"previous_vision", "NIGHT VISION", "2"}, 10},
-    {{"switch_camera", "SWITCH CAMERA", "5"}, 9, true},
+    {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
     {{"opsat", "OPSAT", "F1"}, 13},
+    {{"zoom", "EEV VISION / ZOOM / SNIPER", "1"}, 15},
+    {{"previous_vision", "NIGHT VISION", "2"}, 10},
+    {{"next_vision", "THERMAL VISION", "3"}, 11},
+    {{"goggles", "EMF VISION", "4"}, 8},
+    {{"switch_camera", "STICKY CAM VISION", "5"}, 9, true},
+    {{"sidekick", "COOP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},

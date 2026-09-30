@@ -19,6 +19,8 @@ void UpdateView(uint32_t viewport);               // views.cpp
 void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
 void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
 void MenuTick(X86Context& ctx);     // options_menu.cpp
+void MenuPlace(X86Context& ctx);    // options_menu.cpp
+bool BlankRow(uint32_t list, int row);  // options_menu.cpp
 void PromptsTick(X86Context& ctx);  // prompts.cpp
 void NameEntryTick(X86Context& ctx, uint32_t top);  // name_entry.cpp
 }
@@ -179,6 +181,7 @@ bool Menu(Game& g) {
         return true;
     }
     int16_t hit = int16_t(Call(g.ctx, kListHitTest, widget, {g.scratch}));
+    if (game::BlankRow(widget, hit)) hit = -1;
     if (hit >= 0 && hit != int16_t(R16(widget + 0x9C))) {
         Call(g.ctx, kListSelect, widget, {uint32_t(hit), 0, 1});
         Virtual(g.ctx, hovered, 0xC);
@@ -204,6 +207,7 @@ X86_FUNC(sub_0004B525) {
     uint32_t esp = ctx.esp;
     Game g{ctx, engine, viewport, (esp - 0x40) & ~0xFu};
     ctx.esp = g.scratch - 0x10;
+    game::MenuPlace(ctx);
     bool menu = Menu(g);
     input::SetMenu(menu);
     uint32_t top = InputPage();

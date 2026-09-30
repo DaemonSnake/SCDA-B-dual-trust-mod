@@ -20,7 +20,7 @@ namespace app {
 
 namespace {
 
-const char* kModes[] = {"fullscreen", "borderless", "windowed"};
+const char* kModes[] = {"fullscreen", "windowed", "borderless"};
 
 // "keyboard", "controllerN", both joined by '+', or "none"
 std::string PortName(const Port& p) {
@@ -66,7 +66,9 @@ void Load() {
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
+    // 0 (follow the render scale) is no longer offered
     s.shadow_resolution = std::min(t["shadow_resolution"].value_or(s.shadow_resolution), 8192u);
+    if (!s.shadow_resolution) s.shadow_resolution = Settings{}.shadow_resolution;
     s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
     s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
     s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);

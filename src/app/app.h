@@ -4,11 +4,12 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 // the host side: window, settings, options menu
 namespace app {
 
-enum class DisplayMode : uint32_t { Fullscreen, Borderless, Windowed };
+enum class DisplayMode : uint32_t { Fullscreen, Windowed, Borderless };
 
 // what a player's controller port has plugged in: the keyboard and mouse, an XInput controller, or both
 struct Port {
@@ -24,7 +25,7 @@ struct Settings {
     bool fps_counter = false;
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
-    uint32_t shadow_resolution = 0;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
+    uint32_t shadow_resolution = 2048;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
     uint32_t shader_model = 3;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
     bool hdr_rendering = true;
     bool tone_mapping = true;
@@ -88,6 +89,11 @@ const Row* Page(int page, size_t* count);
 std::string Value(const Row& row);
 void Step(const Row& row, int step);
 void Defaults(int page);
+// a value row's list, empty when it only steps; current is the one it has
+std::vector<std::string> Choices(const Row& row, int* current);
+void Choose(const Row& row, int index);
+// false for a row the game menu leaves out: the shader model 3.0 features at 1.1
+bool Shown(const Row& row);
 }  // namespace rows
 
 // the console on the backtick key, drawn by DrawUi
