@@ -4,7 +4,6 @@
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
 #include <algorithm>
-#include <cstdio>
 #include <iterator>
 
 #include "app/app.h"
@@ -42,7 +41,7 @@ constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
 // manager: +0x3C contexts, +0x40 count; context: +0x14 draw stack, +0x18 input stack;
 // stack: +4 begin, +8 end of {page, flags}; screen: +0x84 width, +0x86 height
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668;
-// page: +8 instances begin, +0xC end, +0x14 id, +0x1C layer (100 HUD, the base default), +0x24 focused; instance: +8 widget, +0x4C flags (2 enabled, 8 focused),
+// page: +8 instances begin, +0xC end, +0x14 id, +0x1C layer (100 HUD, the base default), +0x24 focused; instance: +8 widget, +0x18 bit 0 visible, +0x4C flags (2 enabled, 8 focused),
 // vtable +0xC Focus, +0x10 Unfocus; widget: vtable +0xC type, +0x10 GetBounds(short rect[4] left right top bottom)
 // list: +0x3C up arrow, +0x50 down arrow, +0x7C up arrow rect, +0x8C down arrow rect, +0x9C selection
 constexpr uint32_t kListType = 10;
@@ -97,8 +96,9 @@ uint32_t InputPage() {
     return 0;
 }
 
+// a hidden widget can be enabled too: Load Game keeps its save list, taller than the mission list, under it
 bool Focusable(Game& g, uint32_t instance) {
-    if (!(G<uint8_t>(instance + 0x4C) & 2) || !R32(instance + 8)) return false;
+    if (!(G<uint8_t>(instance + 0x18) & 1) || !(G<uint8_t>(instance + 0x4C) & 2) || !R32(instance + 8)) return false;
     switch (Virtual(g.ctx, R32(instance + 8), 0xC)) {
         case 2: case 3: case 4: case 9: case 10: case 12: return true;
         default: return false;
@@ -198,20 +198,6 @@ X86_FUNC(sub_0004B525) {
     __imp__sub_0004B525(ctx, base);
     uint32_t client = R32(viewport + 0x18);
     uint32_t engine = client ? R32(client + 0x2C) : 0;
-    // TEMPORARY: split screen viewports, +0x1EC/+0x1F0 the players' claimed ports, +0x1F4 the port each reads
-    if (client) {
-        static std::string last;
-        std::string now;
-        for (uint32_t i = 0; i < std::min(R32(client + 0x34), 4u); i++) {
-            uint32_t v = R32(R32(client + 0x30) + i * 4);
-            char item[64];
-            std::snprintf(item, sizeof(item), " %08X %d/%d/%d", v, int32_t(R32(v + 0x1EC)), int32_t(R32(v + 0x1F0)),
-                          int32_t(R32(v + 0x1F4)));
-            now += item;
-        }
-        if (now != last) LOGI("split: viewports%s (keyboard on port %d)", now.c_str(), input::KeyboardPort());
-        last = now;
-    }
     if (!engine || R32(R32(client + 0x30)) != viewport) return;
     // guest calls go below a scratch block under the caller's stack
     uint32_t esp = ctx.esp;
