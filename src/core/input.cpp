@@ -166,6 +166,7 @@ constexpr Target kVersusActions[] = {
     {{"laser", "LASER", "B"}, 8},
     {{"night_vision", "NIGHT VISION", "Tab"}, 10},
     {{"previous_camera", "PREVIOUS CAMERA", "V"}, 9, true},
+    {{"help", "HELP", "F1"}, 4},
     {{"pause", "PAUSE", "Escape"}, 12},
 };
 constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
