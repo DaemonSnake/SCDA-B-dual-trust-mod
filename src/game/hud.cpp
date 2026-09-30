@@ -15,6 +15,10 @@
 
 using namespace kernel;
 
+namespace game {
+void EventPrompts(X86Context& ctx, uint32_t bar);  // prompts.cpp
+}
+
 namespace {
 
 constexpr uint32_t Crc32(std::string_view text) {
@@ -43,6 +47,8 @@ struct Rule {
     constexpr Rule(uint32_t i, Mode m) : id(i), mode(m) {}
 };
 
+constexpr uint32_t kEventBar = 0x467FE0A7;  // P_hud's scripted event bar, name not recovered
+
 // Magma names pages and elements by crc32 of their name. The goggles' vignette, lens ring and frame lines
 // are arcs of one circle: only a uniform stretch keeps them on one curve
 constexpr Rule kHud[] = {
@@ -52,7 +58,7 @@ constexpr Rule kHud[] = {
     {"A_Notes", Mode::Right},           {"L_Alarms", Mode::Right},       {"A_icon_coopaction", Mode::Right},
     {"A_Info_teamate", Mode::Left},     {"I_Talking", Mode::Left},       {"A_Communications", Mode::Left},
     {"A_timer", Mode::Centre},          {"Sound_Meter", Mode::Right},
-    {0x467FE0A7, Mode::Open},  // scripted event bar: letterbox and subtitle stay, the Skip prompt goes to its side
+    {kEventBar, Mode::Open},  // scripted event bar: letterbox and subtitle stay, the Skip prompt goes to its side
 };
 constexpr Rule kOverlay[] = {
     {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
@@ -287,6 +293,11 @@ X86_FUNC(sub_002BE990) {
 X86_EXTERN_FUNC(__imp__sub_002C64E0);
 X86_FUNC(sub_002C64E0) {
     uint32_t instance = ctx.ecx;
+    // the game sets the cinematic's prompts every frame: relabelled for the keyboard just before they are drawn
+    if (R32(instance + 4) == kEventBar && (G<uint8_t>(instance + 0x18) & 1)) {
+        game::EventPrompts(ctx, instance);
+        ctx.ecx = instance;
+    }
     if (g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
     uint32_t id = R32(instance + 4);
     std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);

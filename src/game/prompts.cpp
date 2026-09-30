@@ -1,5 +1,7 @@
 // Button legends on keyboard and mouse: the icon goes and the text leads with the key, "(ENTER) Select". Menus take
-// Enter and Escape as A and B, play the bound keys. A change of device sets the legends on screen again.
+// Enter and Escape as A and B, play the bound keys. A change of device sets the legends on screen again. The in-game
+// cinematic's prompts (Skip) are no legend: the game sets them every frame, so they are relabelled as they are
+// drawn, "Skip (ESC)".
 #include <algorithm>
 #include <cctype>
 #include <initializer_list>
@@ -26,6 +28,16 @@ constexpr uint32_t kBarButtons[] = {0x56591C, 0x565910, 0x565904, 0x5658F8};  //
 constexpr uint32_t kBarText = 0x5658DC, kBarImage = 0x5658D4;
 // element: +0x1C children, text +0x2C std::wstring (+4 buffer or pointer, +0x14 length, +0x18 capacity), image +0x3C material (+4 crc32 of its name); page +0x14 id, +0x1C layer
 constexpr uint32_t kHudLayer = 100;
+constexpr uint32_t kFindId = 0x2BE900;  // thiscall(page or children, id): the child instance
+constexpr uint32_t kHud = game::magma::Id("P_hud");
+// P_hud's scripted event bar's prompts, names not recovered: text and icon, the text right aligned against the icon
+// on its right, or (before) the icon on the text's left
+struct Prompt {
+    uint32_t text, image;
+    bool before;
+};
+constexpr Prompt kEventPrompts[] = {{0xDBC4BB81, 0x0E3CCC34, false}, {0x35CADAAD, 0xE032AD18, false},
+                                    {0x42CDEA3B, 0x97359D8E, true}};
 
 enum Code { A, B, X, Y, LT, RT, White, Black, Start, Back, Up, Down, Left, Right, Move, LeftClick, RightClick };
 struct Icon {
@@ -98,6 +110,22 @@ std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
 bool Block() {
     if (!g_block) g_block = mem::AllocSystem(0x800);
     return g_block != 0;
+}
+
+std::u16string ReadText(uint32_t text) {
+    uint32_t string = text + 0x2C, length = std::min<uint32_t>(R32(string + 0x14), 0x200);
+    uint32_t data = R32(string + 0x18) >= 8 ? R32(string + 4) : string + 4;
+    std::u16string out;
+    for (uint32_t i = 0; data && i < length; i++) out += char16_t(R16(data + i * 2));
+    return out;
+}
+
+void WriteText(X86Context& ctx, uint32_t text, const std::u16string& line) {
+    size_t n = std::min<size_t>(line.size(), 0x2F0);
+    for (size_t i = 0; i < n; i++) W16(g_block + 0x10 + uint32_t(i) * 2, uint16_t(line[i]));
+    W16(g_block + 0x10 + uint32_t(n) * 2, 0);
+    ctx.ecx = text + 0x2C;
+    CallGuest(ctx, kSetText, {g_block + 0x10});
 }
 
 uint32_t Ansi(uint32_t at, std::string_view text) {
@@ -174,9 +202,62 @@ void Remember(uint32_t owner, uint32_t page, uint32_t fstring, uint32_t type) {
     g_bars[g_next++ % std::size(g_bars)] = {owner, page, type, actions};
 }
 
+uint32_t Child(X86Context& ctx, uint32_t parent, uint32_t id) {
+    ctx.ecx = parent;
+    return CallGuest(ctx, kFindId, {id});
+}
+
+// what a relabelled prompt was: its icon and the game's text, and the text put in its place
+struct Held {
+    uint32_t image = 0, material = 0;
+    std::u16string text, shown;
+};
+Held g_held[std::size(kEventPrompts)];  // game thread
+
 }  // namespace
 
 namespace game {
+
+// hud.cpp, the bar's element draw
+void EventPrompts(X86Context& ctx, uint32_t bar) {
+    bool keyboard = input::KeyboardActive();
+    uint32_t element = bar ? R32(bar + 8) : 0;
+    uint32_t box = element ? R32(element + 0x1C) : 0;
+    for (size_t i = 0; i < std::size(kEventPrompts); i++) {
+        const Prompt& p = kEventPrompts[i];
+        Held& h = g_held[i];
+        uint32_t ti = box ? Child(ctx, box, p.text) : 0, ii = box ? Child(ctx, box, p.image) : 0;
+        uint32_t text = ti ? R32(ti + 8) : 0, image = ii ? R32(ii + 8) : 0;
+        if (!text || !image || !Block()) {
+            h = {};
+            continue;
+        }
+        if (image != h.image) h = {image};
+        std::u16string now = ReadText(text);
+        uint32_t material = R32(image + 0x3C);
+        if (!keyboard) {
+            // back on the pad: the icon and the game's text return
+            if (!h.material) continue;
+            if (!material) W32(image + 0x3C, h.material);
+            if (now == h.shown) WriteText(ctx, text, h.text);
+            h.material = 0;
+            continue;
+        }
+        if (!material && (!h.material || now == h.shown)) continue;
+        // a new icon or a new text from the game is labelled again
+        uint32_t icon = material ? material : h.material;
+        std::string key = Label(R32(icon + 4), false, kHud);
+        if (key.empty()) continue;
+        std::u16string label = u"(";
+        for (char c : key) label += char16_t(uint8_t(c));
+        label += u")";
+        h.text = h.material && now == h.shown ? h.text : now;
+        h.shown = p.before ? label + u" " + h.text : h.text + u" " + label;
+        h.material = icon;
+        W32(image + 0x3C, 0);
+        WriteText(ctx, text, h.shown);
+    }
+}
 
 // game thread, every input update
 void PromptsTick(X86Context& ctx) {
