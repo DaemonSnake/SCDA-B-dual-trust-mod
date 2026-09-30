@@ -16,7 +16,8 @@
 using namespace kernel;
 
 namespace game {
-void EventPrompts(X86Context& ctx, uint32_t bar);  // prompts.cpp
+void EventPrompts(X86Context& ctx, uint32_t bar);                             // prompts.cpp
+bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance);  // prompts.cpp
 }
 
 namespace {

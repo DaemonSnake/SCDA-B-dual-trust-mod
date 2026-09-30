@@ -1,7 +1,8 @@
 // Button legends on keyboard and mouse: the icon goes and the text leads with the key, "(ENTER) Select". Menus take
 // Enter and Escape as A and B, play the bound keys. A change of device sets the legends on screen again. The in-game
 // cinematic's prompts (Skip) are no legend: the game sets them every frame, so they are relabelled as they are
-// drawn, "Skip (ESC)".
+// drawn, "Skip (ESC)". The combo escape's buttons (knock, grab) have no text at all: their key's name is drawn in
+// each icon's place with the row name's text.
 #include <algorithm>
 #include <cctype>
 #include <initializer_list>
@@ -17,6 +18,8 @@ using namespace kernel;
 namespace game {
 bool OnStack(uint32_t page);  // options_menu.cpp
 }
+
+X86_EXTERN_FUNC(__imp__sub_002C64E0);  // Magma element draw (thiscall instance), hooked in hud.cpp
 
 namespace {
 
@@ -38,6 +41,17 @@ struct Prompt {
 };
 constexpr Prompt kEventPrompts[] = {{0xDBC4BB81, 0x0E3CCC34, false}, {0x35CADAAD, 0xE032AD18, false},
                                     {0x42CDEA3B, 0x97359D8E, true}};
+// combo escape rows (hud.mgm, names not recovered): the two rows, each of up to five button slots and four arrows
+// placed left to right, and the row's name ("Knock", Title_18); a slot holds its button's icon
+constexpr uint32_t kComboRows[] = {0x0CBEB816, 0x95B7E9AC};
+constexpr uint32_t kComboArrows[] = {0x93BEFD95, 0x0AB7AC2F, 0x7DB09CB9, 0xE3D4091A};
+constexpr uint32_t kComboIcon = 0xAAA53D32, kComboGlow = 0xEA7CB115, kComboName = 0xCF667FEC;
+// widget: +0x10 left, +0x12 right, +0x14 top, +0x16 bottom (page units, in its area), an area instance's +0x10 x,
+// +0x1C its children; vtable +8 Draw
+constexpr uint32_t kRect = 0x10, kChildren = 0x1C, kDraw = 0x08;
+constexpr int kCharWidth = 10;  // Title_18 capitals, page units
+// after a name wider than its icon, so the next arrow sits midway; names sit this much higher to line up with the arrows
+constexpr int kNameGap = 12, kNameRaise = 4;
 
 enum Code { A, B, X, Y, LT, RT, White, Black, Start, Back, Up, Down, Left, Right, Move, Look, LeftClick, RightClick };
 struct Icon {
@@ -216,6 +230,60 @@ uint32_t Child(X86Context& ctx, uint32_t parent, uint32_t id) {
     return CallGuest(ctx, kFindId, {id});
 }
 
+uint32_t g_combo_name = 0;  // the last combo row name drawn, its text widget (game thread)
+// the row being drawn: how far right each slot and arrow goes, past the key names wider than their icon before it,
+// and a wide name's glow (image: both its sides), to its middle
+struct Shift {
+    uint32_t instance;
+    int dx;
+    bool image;
+};
+Shift g_shifts[16];
+size_t g_shift_count = 0;
+
+std::string ComboKey(uint32_t icon) {
+    uint32_t material = R32(icon + 0x3C);
+    return material ? Label(R32(material + 4), false, kHud) : std::string();
+}
+
+void ComboLayout(X86Context& ctx, uint32_t row) {
+    g_shift_count = 0;
+    uint32_t box = R32(row + kChildren);
+    uint32_t begin = box ? R32(box + 8) : 0, end = box ? R32(box + 0xC) : 0;
+    if (!begin || end < begin || end - begin > 4 * 16) return;
+    struct Item {
+        uint32_t instance;
+        int x, overflow;
+    };
+    Item items[16];
+    size_t n = 0;
+    for (uint32_t it = begin; it < end; it += 4) {
+        uint32_t instance = R32(it), widget = instance ? R32(instance + 8) : 0;
+        uint32_t id = instance ? R32(instance + 4) : 0;
+        if (!widget || !(G<uint8_t>(instance + 0x18) & 1) || id == kComboName) continue;
+        int overflow = 0;
+        if (std::find(std::begin(kComboArrows), std::end(kComboArrows), id) == std::end(kComboArrows)) {
+            uint32_t slot = R32(widget + kChildren);
+            uint32_t icon_instance = slot ? Child(ctx, slot, kComboIcon) : 0;
+            uint32_t icon = icon_instance ? R32(icon_instance + 8) : 0;
+            if (icon) {
+                int width = int16_t(R16(icon + kRect + 2)) - int16_t(R16(icon + kRect));
+                int wide = int(ComboKey(icon).size()) * kCharWidth - width;
+                uint32_t glow = wide > 0 ? Child(ctx, slot, kComboGlow) : 0;
+                if (glow && g_shift_count < std::size(g_shifts)) g_shifts[g_shift_count++] = {glow, wide / 2, true};
+                if (wide > 0) overflow = wide + kNameGap;
+            }
+        }
+        items[n++] = {instance, int16_t(R16(widget + kRect)), overflow};
+    }
+    std::sort(items, items + n, [](const Item& a, const Item& b) { return a.x < b.x; });
+    int dx = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (dx && g_shift_count < std::size(g_shifts)) g_shifts[g_shift_count++] = {items[i].instance, dx, false};
+        dx += items[i].overflow;
+    }
+}
+
 // what a relabelled prompt was: its icon and the game's text, and the text put in its place
 struct Held {
     uint32_t image = 0, material = 0;
@@ -266,6 +334,58 @@ void EventPrompts(X86Context& ctx, uint32_t bar) {
         W32(image + 0x3C, 0);
         WriteText(ctx, text, h.shown);
     }
+}
+
+// hud.cpp, an element about to draw inside a placed area. On the keyboard a combo icon draws without its image and
+// its key's name goes in its place, drawn by the row name's widget moved into the icon's box; a name wider than the
+// icon starts at its left and moves the rest of the row right: true when drawn here.
+bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
+    uint32_t id = R32(instance + 4), widget = R32(instance + 8);
+    if (id == kComboName) g_combo_name = widget;
+    if (std::find(std::begin(kComboRows), std::end(kComboRows), id) != std::end(kComboRows)) {
+        g_shift_count = 0;
+        if (widget && input::KeyboardActive()) ComboLayout(ctx, widget);
+        ctx.ecx = instance;  // the row still draws, and the calls above left their own this
+        return false;
+    }
+    for (size_t i = 0; i < g_shift_count && widget; i++) {
+        if (g_shifts[i].instance != instance) continue;
+        uint16_t x = R16(widget + kRect), right = R16(widget + kRect + 2);
+        W16(widget + kRect, uint16_t(int16_t(x) + g_shifts[i].dx));
+        if (g_shifts[i].image) W16(widget + kRect + 2, uint16_t(int16_t(right) + g_shifts[i].dx));
+        __imp__sub_002C64E0(ctx, base);
+        W16(widget + kRect, x);
+        W16(widget + kRect + 2, right);
+        return true;
+    }
+    if (id != kComboIcon || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !g_combo_name || !input::KeyboardActive() ||
+        !Block())
+        return false;
+    uint32_t material = R32(widget + 0x3C);
+    std::string key = ComboKey(widget);
+    if (key.empty()) return false;
+    W32(widget + 0x3C, 0);
+    __imp__sub_002C64E0(ctx, base);
+    W32(widget + 0x3C, material);
+    uint32_t name = g_combo_name;
+    uint32_t rect[2] = {R32(name + kRect), R32(name + kRect + 4)};
+    int l = int16_t(R16(widget + kRect)), r = int16_t(R16(widget + kRect + 2));
+    int t = int16_t(R16(widget + kRect + 4)), b = int16_t(R16(widget + kRect + 6));
+    int w = int(key.size()) * kCharWidth, h = int16_t(R16(name + kRect + 6)) - int16_t(R16(name + kRect + 4));
+    int x = w > r - l ? l : (l + r - w) / 2, y = (t + b - h) / 2 - kNameRaise;
+    W16(name + kRect, uint16_t(int16_t(x)));
+    W16(name + kRect + 2, uint16_t(int16_t(x + w)));
+    W16(name + kRect + 4, uint16_t(int16_t(y)));
+    W16(name + kRect + 6, uint16_t(int16_t(y + h)));
+    std::u16string text = ReadText(name), line;
+    for (char c : key) line += char16_t(uint8_t(c));
+    WriteText(ctx, name, line);
+    ctx.ecx = name;
+    CallGuest(ctx, R32(R32(name) + kDraw), {});
+    WriteText(ctx, name, text);
+    W32(name + kRect, rect[0]);
+    W32(name + kRect + 4, rect[1]);
+    return true;
 }
 
 // game thread, every input update
