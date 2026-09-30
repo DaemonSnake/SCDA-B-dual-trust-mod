@@ -514,6 +514,7 @@ static void FlushStream(Voice& v) {
 STREAM(AddRef, 1) { return uint32_t(++v.refs); }
 STREAM(SetFormat, 2) {
     ReadFormat(v, a[1]);
+    v.freq = 0;  // the XDK sets the pitch back to the new format's own rate
     v.block = -1;
     return 0;
 }
