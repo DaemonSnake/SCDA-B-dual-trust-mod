@@ -25,7 +25,7 @@ struct Settings {
     bool fps_counter = false;
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
-    uint32_t shadow_resolution = 2048;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
+    uint32_t shadow_resolution = 0;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
     uint32_t shader_model = 3;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
     bool hdr_rendering = true;
     bool tone_mapping = true;

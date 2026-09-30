@@ -38,7 +38,7 @@ constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
-constexpr uint32_t kShadowSizes[] = {512, 1024, 2048, 4096, 8192};
+constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
@@ -218,7 +218,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kAsyncShaders, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2
 };
 
@@ -230,8 +230,8 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kDisplayMode, "DISPLAY MODE"},
     {Kind::Value, kResolution, "RESOLUTION"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
+    {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
-    {Kind::Value, kVsync, "VSYNC"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
     {Kind::Heading, -1, "GRAPHICS"},
     {Kind::Value, kShaderModel, "SHADER MODEL"},
@@ -322,12 +322,13 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             break;
         case kShadowResolution: {
             uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];
-            std::snprintf(text, sizeof(text), "%u", size);
+            if (size) std::snprintf(text, sizeof(text), size == 512 ? "%u (DEFAULT)" : "%u", size);
+            else std::snprintf(text, sizeof(text), "AUTOMATIC");
             break;
         }
         case kShaderModel:
             if (step) s.shader_model = StepIndex(s.shader_model >= 3, step, 2) ? 3 : 1;
-            std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1");
+            std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1 (DEFAULT)");
             break;
         case kHdr:
         case kToneMapping:
@@ -346,12 +347,12 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         case kTickRate: {
             uint32_t rate = kTickRates[StepTable(kTickRates, s.coop_tick_rate, step)];
             if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);
-            else std::snprintf(text, sizeof(text), "GAME (22 HZ)");
+            else std::snprintf(text, sizeof(text), "22 HZ (DEFAULT)");
             break;
         }
         case kInputDelay: {
             uint32_t floor = kDelayFloors[StepTable(kDelayFloors, s.coop_input_delay_floor, step)];
-            std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (GAME)" : "%u MS", floor);
+            std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (DEFAULT)" : "%u MS", floor);
             break;
         }
         case kJoinIp:
