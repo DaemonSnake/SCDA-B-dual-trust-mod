@@ -17,6 +17,8 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 
 Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with the `Default`, `Media` and `adv` folders beside them. `default.xbe` becomes `SCDAOffline.exe` (story and co-op), `sc4_adv.xbe` becomes `SCDAOnline.exe` (versus). Picking Versus in the main menu switches to `SCDAOnline.exe` and leaving versus switches back.
 
+To play from a released build, `assets` beside the executables can instead hold the game's disc image, a full dump or an xiso (`.iso`); it is read in place, nothing is extracted. Building needs the extracted files.
+
 ## Features
 
 ### Display

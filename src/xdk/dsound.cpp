@@ -8,7 +8,6 @@
 #include <map>
 #include <vector>
 
-#include <fstream>
 
 #include "audio/audio.h"
 #include "xbe/xbe.h"
@@ -372,8 +371,7 @@ HLE_STDCALL(XAudioDownloadEffectsImage, 4) {
         for (auto& sec : g_image->sections)
             if (sec.name == name) img.assign(static_cast<uint8_t*>(HostPtr(sec.va)), static_cast<uint8_t*>(HostPtr(sec.va)) + sec.vsize);
     } else {
-        std::ifstream f(ResolvePath(name, 0), std::ios::binary);
-        img.assign(std::istreambuf_iterator<char>(f), {});
+        ReadGameFile(name, img);
     }
     auto u32 = [&](size_t o) { uint32_t v = 0; if (o + 4 <= img.size()) std::memcpy(&v, &img[o], 4); return v; };
     size_t t = 0x818 + size_t(u32(0x804) + u32(0x80C)) * 4;
