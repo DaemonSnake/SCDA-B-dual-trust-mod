@@ -24,6 +24,10 @@ void Init();
 uint32_t KernelThunkAddress(uint32_t ordinal);
 }  // namespace dispatch
 
+namespace xnet {
+void CloseSockets();  // xdk/xnet.cpp
+}
+
 namespace kernel {
 
 uint8_t* g_base = nullptr;
@@ -79,25 +83,19 @@ void SetSavedDataAddress(uint32_t surface) { g_saved_data = surface; }
 const xbe::Image* g_image = nullptr;
 static xbe::Image g_xbe;
 
-bool Boot(const std::string& xbe_path, const std::string& game_dir, const std::string& data_dir) {
+bool Boot(std::vector<uint8_t> xbe, const std::string& xbe_name, const std::string& game_dir, const std::string& data_dir) {
     if (!mem::Init()) return false;
     g_base = mem::Base();
 
-    std::ifstream f(xbe_path, std::ios::binary);
-    if (!f) {
-        LOGE("boot: cannot open %s", xbe_path.c_str());
-        return false;
-    }
-    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), {});
     std::string err;
-    if (!g_xbe.Parse(std::move(data), err)) {
-        LOGE("boot: %s: %s", xbe_path.c_str(), err.c_str());
+    if (!g_xbe.Parse(std::move(xbe), err)) {
+        LOGE("boot: %s: %s", xbe_name.c_str(), err.c_str());
         return false;
     }
     g_image = &g_xbe;
     const xbe::Image& img = g_xbe;
     if (img.entry != X86EntryPoint) {
-        LOGE("boot: %s entry %08X does not match the recompiled entry %08X, wrong executable", xbe_path.c_str(), img.entry,
+        LOGE("boot: %s entry %08X does not match the recompiled entry %08X, wrong executable", xbe_name.c_str(), img.entry,
              X86EntryPoint);
         return false;
     }
@@ -180,6 +178,8 @@ void Relaunch(const char* exe) {
     size_t args = line[0] == L'"' ? line.find(L'"', 1) + 1 : line.find(L' ');
     line = L"\"" + path + L"\"" + (args == std::wstring::npos ? L"" : line.substr(args));
     if (line.find(L"--relaunched") == std::wstring::npos) line += L" --relaunched";  // no boot splash again
+    // this process lives on through the handover below: its ports must be free for the new one (co-op binds them again)
+    xnet::CloseSockets();
     STARTUPINFOW si{sizeof(si)};
     PROCESS_INFORMATION pi{};
     if (CreateProcessW(path.c_str(), line.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {

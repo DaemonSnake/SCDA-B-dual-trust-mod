@@ -11,6 +11,7 @@
 #include <mutex>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -84,7 +85,9 @@ std::array<std::atomic<int>, 32> g_down_as{};
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
-std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false};
+std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false}, g_text{false};
+std::mutex g_chars_lock;
+std::u16string g_chars;  // typed, not yet taken
 std::atomic<uint32_t> g_stick_keys{0};  // StickKeys
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
@@ -131,25 +134,25 @@ constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
     {{"move_back", "MOVE BACK", "S"}, 17},
-    {{"strafe_left", "STRAFE LEFT", "A"}, 18},
-    {{"strafe_right", "STRAFE RIGHT", "D"}, 19},
-    {{"fire", "FIRE", "LMB"}, 7},
-    {{"alt_fire", "ALT FIRE", "RMB"}, 6},
-    {{"interact", "INTERACT", "Space,Enter"}, 0},
+    {{"strafe_left", "MOVE LEFT", "A"}, 18},
+    {{"strafe_right", "MOVE RIGHT", "D"}, 19},
     {{"jump", "JUMP", "Shift"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
-    {{"scope", "SCOPE", "E,MMB"}, 2},
-    {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
-    {{"zoom", "EEV / ZOOM", "1"}, 15},
-    {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
-    // the pad's black button brings up a picker between these two; the keys do each at once
+    {{"back_to_wall", "BACK TO WALL / SWITCH HAND", "Q"}, 14},
+    {{"fire", "FIRE", "LMB"}, 7},
+    {{"alt_fire", "ALTERNATE FIRE", "RMB"}, 6},
+    {{"interact", "INTERACTION", "Space,Enter"}, 0},
+    {{"scope", "USE / EQUIP", "E,MMB"}, 2},
+    // the pad's black button brings up a picker between whistle and co-op action; the keys do each at once
     {{"whistle", "WHISTLE", "V"}, -1, true, KeyEvent::Whistle},
-    {{"sidekick", "SIDEKICK / CO-OP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
-    {{"goggles", "EMF VISION", "4"}, 8},
-    {{"next_vision", "THERMAL VISION", "3"}, 11},
-    {{"previous_vision", "NIGHT VISION", "2"}, 10},
-    {{"switch_camera", "SWITCH CAMERA", "5"}, 9, true},
+    {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
     {{"opsat", "OPSAT", "F1"}, 13},
+    {{"zoom", "EEV VISION / ZOOM / SNIPER", "1"}, 15},
+    {{"previous_vision", "NIGHT VISION", "2"}, 10},
+    {{"next_vision", "THERMAL VISION", "3"}, 11},
+    {{"goggles", "EMF VISION", "4"}, 8},
+    {{"switch_camera", "STICKY CAM VISION", "5"}, 9, true},
+    {{"sidekick", "COOP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
@@ -212,7 +215,7 @@ constexpr Name kNames[] = {
     {VK_OEM_COMMA, "Comma"}, {VK_OEM_PERIOD, "Period"}, {VK_OEM_2, "Slash"},
 };
 
-// arrows move at full tilt so menus always see a press, Backspace always backs out of a menu
+// arrows move at full tilt so menus always see a press, Backspace backs out of a menu but deletes in a name
 constexpr int kArrows[] = {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT};
 
 std::mutex g_bind_lock;
@@ -284,6 +287,7 @@ void Keyboard(Pad& p) {
         // in a menu the mouse buttons belong to the cursor
         for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
         if (kActions[i].play_only && menu) held = false;
+        if (g_text && kActions[i].button != 8 + 4) held = false;
         if (!held) {
             g_down_as[i] = 0;
             continue;
@@ -315,7 +319,7 @@ void Keyboard(Pad& p) {
         else p.buttons |= uint16_t(1u << (b - 8));
         if (b == 0 && g_title) p.buttons |= kStart;
     }
-    if (Down(VK_BACK) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    if ((Down(VK_BACK) && !g_text) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
     if (menu && Down(VK_RETURN)) {
         p.analog[0] = 0xFF;
@@ -441,6 +445,24 @@ void SetPauseMenu(bool pause) { g_pause_menu = pause; }
 void SetOpsat(bool opsat) { g_opsat = opsat; }
 
 void SetQuickInventory(bool open) { g_quick = open; }
+
+void SetTextEntry(bool on) {
+    if (g_text.exchange(on) == on) return;
+    std::lock_guard lock(g_chars_lock);
+    g_chars.clear();
+}
+
+void OnChar(unsigned c) {
+    if (!g_text || !Active() || c > 0xFFFF) return;
+    g_keyboard_ms = NowMs();
+    std::lock_guard lock(g_chars_lock);
+    if (g_chars.size() < 64) g_chars += char16_t(c);
+}
+
+std::u16string TakeChars() {
+    std::lock_guard lock(g_chars_lock);
+    return std::exchange(g_chars, {});
+}
 
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
@@ -626,8 +648,16 @@ void Bind(size_t action, int vk) {
     if (action >= kCount || !NameOf(vk) || (action == kConsoleAction && Mouse(vk))) return;
     {
         std::lock_guard lock(g_bind_lock);
-        g_binds[action] = {vk};
-        app::Get().keys[kActions[action].action.id] = Join(g_binds[action]);
+        // a new key joins the action's keys (two at most, the older goes); one it has already comes off, unless it is
+        // the last
+        std::vector<int>& keys = g_binds[action];
+        if (auto it = std::find(keys.begin(), keys.end(), vk); it != keys.end()) {
+            if (keys.size() > 1) keys.erase(it);
+        } else {
+            keys.push_back(vk);
+            if (keys.size() > 2) keys.erase(keys.begin());
+        }
+        app::Get().keys[kActions[action].action.id] = Join(keys);
     }
     app::Save();
 }

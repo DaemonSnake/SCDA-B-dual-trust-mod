@@ -18,6 +18,7 @@ using namespace kernel;
 namespace game {
 void EventPrompts(X86Context& ctx, uint32_t bar);                             // prompts.cpp
 bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance);  // prompts.cpp
+bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance);  // options_menu.cpp
 }
 
 namespace {
@@ -294,11 +295,13 @@ X86_FUNC(sub_002BE990) {
 X86_EXTERN_FUNC(__imp__sub_002C64E0);
 X86_FUNC(sub_002C64E0) {
     uint32_t instance = ctx.ecx;
+    if (game::OptionsElement(ctx, base, instance)) return;
     // the game sets the cinematic's prompts every frame: relabelled for the keyboard just before they are drawn
     if (R32(instance + 4) == kEventBar && (G<uint8_t>(instance + 0x18) & 1)) {
         game::EventPrompts(ctx, instance);
         ctx.ecx = instance;
     }
+    if (g_decided && game::ComboElement(ctx, base, instance)) return;
     if (g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
     uint32_t id = R32(instance + 4);
     std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);

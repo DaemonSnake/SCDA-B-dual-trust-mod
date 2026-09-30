@@ -114,6 +114,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
             if (input::ConsoleKey(int(wp)) && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
             return 0;
+        case WM_CHAR:
+            input::OnChar(unsigned(wp));
+            break;
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
             break;
@@ -172,17 +175,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-// assets\default.xbe beside the exe or in any folder above it (the build output)
-std::filesystem::path FindGame() {
-    auto dir = ExeDir();
-    for (int i = 0; i < 6; i++) {
-        if (std::filesystem::exists(dir / "assets" / "default.xbe")) return dir / "assets";
-        if (!dir.has_parent_path() || dir.parent_path() == dir) break;
-        dir = dir.parent_path();
-    }
-    return {};
-}
-
 }  // namespace
 
 std::filesystem::path ExeDir() {
@@ -235,12 +227,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     logx::Init((app::ExeDir() / "logs").string(), "scda");
     app::Load();
 
-    auto game = app::FindGame();
-    if (game.empty()) {
-        MessageBoxW(nullptr, L"Put the game files in the assets folder: default.xbe with the Default and Media folders beside it.",
-                    L"Splinter Cell Double Agent", MB_ICONERROR);
-        return 1;
-    }
+    app::GameFiles game;
+    if (!app::FindGame(game)) return 1;
 
     bool splash = app::OpenSplash(), handover = app::StartHandover();
 
@@ -273,7 +261,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     input::LoadBindings();
     std::wstring hdd = app::Instance() > 1 ? L"hdd" + std::to_wstring(app::Instance()) : L"hdd";
     if (app::Instance()) SetWindowTextW(app::g_hwnd, (L"Tom Clancy's Splinter Cell: Double Agent [" + std::to_wstring(app::Instance()) + L"]").c_str());
-    if (!kernel::Boot((game / IMAGE_XBE).string(), game.string(), (app::ExeDir() / hdd).string())) {
+    if (!kernel::Boot(std::move(game.xbe), IMAGE_XBE, game.dir.string(), (app::ExeDir() / hdd).string())) {
         MessageBoxW(app::g_hwnd, L"The game failed to start, see the log in the logs folder.", L"Splinter Cell Double Agent",
                     MB_ICONERROR);
         return 1;

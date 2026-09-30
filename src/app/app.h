@@ -4,11 +4,12 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 // the host side: window, settings, options menu
 namespace app {
 
-enum class DisplayMode : uint32_t { Fullscreen, Borderless, Windowed };
+enum class DisplayMode : uint32_t { Fullscreen, Windowed, Borderless };
 
 // what a player's controller port has plugged in: the keyboard and mouse, an XInput controller, or both
 struct Port {
@@ -29,7 +30,7 @@ struct Settings {
     bool hdr_rendering = true;
     bool tone_mapping = true;
     bool hq_soft_shadows = true;
-    bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it
+    bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
@@ -55,6 +56,13 @@ float RenderScale(uint32_t guest_height);
 bool Widescreen();
 
 std::filesystem::path ExeDir();
+// the game in assets (game_files.cpp): its folder and this executable's xbe, from the extracted files or a disc
+// image, which it mounts as D:; false after telling the player what is missing
+struct GameFiles {
+    std::filesystem::path dir;
+    std::vector<uint8_t> xbe;
+};
+bool FindGame(GameFiles& game);
 int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests
 void* Window();  // HWND
 // boot splash: SplinterCell4Logo.bmp or .png beside the exe, up before the game window
@@ -88,6 +96,11 @@ const Row* Page(int page, size_t* count);
 std::string Value(const Row& row);
 void Step(const Row& row, int step);
 void Defaults(int page);
+// a value row's list, empty when it only steps; current is the one it has
+std::vector<std::string> Choices(const Row& row, int* current);
+void Choose(const Row& row, int index);
+// false for a row the game menu leaves out: the shader model 3.0 features at 1.1
+bool Shown(const Row& row);
 }  // namespace rows
 
 // the console on the backtick key, drawn by DrawUi

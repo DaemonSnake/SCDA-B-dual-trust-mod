@@ -20,7 +20,7 @@ namespace app {
 
 namespace {
 
-const char* kModes[] = {"fullscreen", "borderless", "windowed"};
+const char* kModes[] = {"fullscreen", "windowed", "borderless"};
 
 // "keyboard", "controllerN", both joined by '+', or "none"
 std::string PortName(const Port& p) {
