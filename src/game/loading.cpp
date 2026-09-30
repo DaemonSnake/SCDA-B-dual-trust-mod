@@ -154,6 +154,14 @@ X86_FUNC(sub_000367E4) {
     if (!ctx.eax && g_controls_screen && input::Pressed()) ctx.eax = 1;
 }
 
+// front end video frame (thiscall, 2 arguments): a mission's outro plays here on the level change, the input page
+// still the mission review's
+X86_EXTERN_FUNC(__imp__sub_00038F96);
+X86_FUNC(sub_00038F96) {
+    input::MovieFrame();
+    __imp__sub_00038F96(ctx, base);
+}
+
 // level load progress (thiscall(progress), ret 4): draws the bar alone and presents it over whatever the back buffer
 // holds. The saving screen behind it is drawn once, into one of the two buffers, so every other frame showed the
 // bar on the other buffer's older picture. The frame just shown is copied into the back buffer for the next bar.

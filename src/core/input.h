@@ -36,6 +36,9 @@ void SetPauseMenu(bool pause);
 void SetOpsat(bool opsat);
 // the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
 void SetQuickInventory(bool open);
+// a video drew a frame (a mission's outro, played while the last menu is still the input page): no cursor over it
+void MovieFrame();
+bool Movie();
 
 // What the player looks through, set by the game side each input update. In the EEV and the sticky camera
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.

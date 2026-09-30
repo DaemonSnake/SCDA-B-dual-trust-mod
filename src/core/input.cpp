@@ -41,6 +41,8 @@ std::atomic<uint32_t> g_clicks{0};
 std::atomic<uint64_t> g_keyboard_ms{0}, g_pad_ms{0};
 std::atomic<uint32_t> g_keys_held{0}, g_pad_held{0};
 std::atomic<bool> g_rumbling{false};  // port 0's motors were last set running
+std::atomic<uint64_t> g_movie_ms{0};  // the last movie frame
+constexpr uint64_t kMovieMs = 250;
 
 uint64_t NowMs() {
     auto since = std::chrono::steady_clock::now().time_since_epoch();
@@ -410,6 +412,14 @@ void SetMenu(bool menu) {
 }
 
 bool InMenu() { return g_menu; }
+
+void MovieFrame() {
+    uint64_t now = NowMs();
+    if (now - g_movie_ms.exchange(now) > kMovieMs)
+        PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+}
+
+bool Movie() { return NowMs() - g_movie_ms < kMovieMs; }
 
 bool KeyboardActive() { return g_keyboard_ms >= g_pad_ms; }
 
