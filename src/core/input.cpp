@@ -648,8 +648,16 @@ void Bind(size_t action, int vk) {
     if (action >= kCount || !NameOf(vk) || (action == kConsoleAction && Mouse(vk))) return;
     {
         std::lock_guard lock(g_bind_lock);
-        g_binds[action] = {vk};
-        app::Get().keys[kActions[action].action.id] = Join(g_binds[action]);
+        // a new key joins the action's keys (two at most, the older goes); one it has already comes off, unless it is
+        // the last
+        std::vector<int>& keys = g_binds[action];
+        if (auto it = std::find(keys.begin(), keys.end(), vk); it != keys.end()) {
+            if (keys.size() > 1) keys.erase(it);
+        } else {
+            keys.push_back(vk);
+            if (keys.size() > 2) keys.erase(keys.begin());
+        }
+        app::Get().keys[kActions[action].action.id] = Join(keys);
     }
     app::Save();
 }
