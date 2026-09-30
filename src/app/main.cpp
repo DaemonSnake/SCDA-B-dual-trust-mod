@@ -114,6 +114,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
             if (input::ConsoleKey(int(wp)) && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
             return 0;
+        case WM_CHAR:
+            input::OnChar(unsigned(wp));
+            break;
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
             break;

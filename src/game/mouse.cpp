@@ -20,6 +20,7 @@ void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
 void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
 void MenuTick(X86Context& ctx);     // options_menu.cpp
 void PromptsTick(X86Context& ctx);  // prompts.cpp
+void NameEntryTick(X86Context& ctx, uint32_t top);  // name_entry.cpp
 }
 
 namespace {
@@ -216,6 +217,7 @@ X86_FUNC(sub_0004B525) {
     game::UpdateView(viewport);
     game::MenuTick(ctx);
     game::PromptsTick(ctx);
+    game::NameEntryTick(ctx, top);
     bool net = (R32(engine + kNetA) && R32(engine + kNetB)) || R32(engine + kNetC);
     input::SetNetSession(net);
     float dx, dy;

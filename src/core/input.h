@@ -40,6 +40,10 @@ void SetPauseMenu(bool pause);
 void SetOpsat(bool opsat);
 // the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
 void SetQuickInventory(bool open);
+// a name being typed: the keys type (OnChar) and press nothing but Enter (A) and pause (B)
+void SetTextEntry(bool on);
+void OnChar(unsigned c);      // window thread, WM_CHAR
+std::u16string TakeChars();  // typed since the last call, backspace as '\b'
 // a video drew a frame (a mission's outro, played while the last menu is still the input page): no cursor over it
 void MovieFrame();
 bool Movie();

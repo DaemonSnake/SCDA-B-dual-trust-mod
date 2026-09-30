@@ -84,7 +84,9 @@ std::array<std::atomic<int>, 32> g_down_as{};
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
-std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false};
+std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false}, g_text{false};
+std::mutex g_chars_lock;
+std::u16string g_chars;  // typed, not yet taken
 std::atomic<uint32_t> g_stick_keys{0};  // StickKeys
 constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
@@ -212,7 +214,7 @@ constexpr Name kNames[] = {
     {VK_OEM_COMMA, "Comma"}, {VK_OEM_PERIOD, "Period"}, {VK_OEM_2, "Slash"},
 };
 
-// arrows move at full tilt so menus always see a press, Backspace always backs out of a menu
+// arrows move at full tilt so menus always see a press, Backspace backs out of a menu but deletes in a name
 constexpr int kArrows[] = {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT};
 
 std::mutex g_bind_lock;
@@ -284,6 +286,7 @@ void Keyboard(Pad& p) {
         // in a menu the mouse buttons belong to the cursor
         for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
         if (kActions[i].play_only && menu) held = false;
+        if (g_text && kActions[i].button != 8 + 4) held = false;
         if (!held) {
             g_down_as[i] = 0;
             continue;
@@ -315,7 +318,7 @@ void Keyboard(Pad& p) {
         else p.buttons |= uint16_t(1u << (b - 8));
         if (b == 0 && g_title) p.buttons |= kStart;
     }
-    if (Down(VK_BACK) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    if ((Down(VK_BACK) && !g_text) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
     if (menu && Down(VK_RETURN)) {
         p.analog[0] = 0xFF;
@@ -441,6 +444,24 @@ void SetPauseMenu(bool pause) { g_pause_menu = pause; }
 void SetOpsat(bool opsat) { g_opsat = opsat; }
 
 void SetQuickInventory(bool open) { g_quick = open; }
+
+void SetTextEntry(bool on) {
+    if (g_text.exchange(on) == on) return;
+    std::lock_guard lock(g_chars_lock);
+    g_chars.clear();
+}
+
+void OnChar(unsigned c) {
+    if (!g_text || !Active() || c > 0xFFFF) return;
+    g_keyboard_ms = NowMs();
+    std::lock_guard lock(g_chars_lock);
+    if (g_chars.size() < 64) g_chars += char16_t(c);
+}
+
+std::u16string TakeChars() {
+    std::lock_guard lock(g_chars_lock);
+    return std::exchange(g_chars, {});
+}
 
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {

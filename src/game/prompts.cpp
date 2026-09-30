@@ -33,6 +33,8 @@ constexpr uint32_t kBarText = 0x5658DC, kBarImage = 0x5658D4;
 constexpr uint32_t kHudLayer = 100;
 constexpr uint32_t kFindId = 0x2BE900;  // thiscall(page or children, id): the child instance
 constexpr uint32_t kHud = game::magma::Id("P_hud");
+// name entry (name_entry.cpp): the keys type, Backspace deletes (X); the switch to the digits (Y) goes
+constexpr uint32_t kNameEntry = game::magma::Id("P_VirtualKeyboard");
 // P_hud's scripted event bar's prompts, names not recovered: text and icon, the text right aligned against the icon
 // on its right, or (before) the icon on the text's left
 struct Prompt {
@@ -108,7 +110,7 @@ std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
     switch (icon->code) {
         case A: return menu ? "ENTER" : Keys({camera ? "fire" : "interact"});
         case B: return !menu ? Keys({"crouch"}) : page_id == game::magma::Id("P_Pause") ? "BACKSPACE" : "ESC";
-        case X: return Keys({camera ? "alt_fire" : "scope"});
+        case X: return page_id == kNameEntry ? "BACKSPACE" : Keys({camera ? "alt_fire" : "scope"});
         case Y: return Keys({"jump"});
         case LT: return Keys({camera ? "strafe_left" : "alt_fire"});
         case RT: return Keys({camera ? "strafe_right" : "fire"});
@@ -223,6 +225,26 @@ void Remember(uint32_t owner, uint32_t page, uint32_t fstring, uint32_t type) {
             return;
         }
     g_bars[g_next++ % std::size(g_bars)] = {owner, page, type, actions};
+}
+
+// the actions without Y's pair, in the block's FString
+uint32_t WithoutY(uint32_t fstring) {
+    uint32_t data = R32(fstring), chars = std::min<uint32_t>(R32(fstring + 4), 0x100);
+    std::u16string actions, out;
+    for (uint32_t i = 0; data && i + 1 < chars; i++) actions += char16_t(R16(data + i * 2));
+    for (size_t at = 0; at < actions.size();) {
+        size_t comma = std::min(actions.find(u',', at), actions.size());
+        size_t end = std::min(actions.find(u',', comma + 1), actions.size());
+        if (actions.compare(at, comma - at, u"Y") != 0) out += (out.empty() ? u"" : u",") + actions.substr(at, end - at);
+        at = end + 1;
+    }
+    size_t n = std::min<size_t>(out.size(), 0x2F0);
+    for (size_t i = 0; i < n; i++) W16(g_block + 0x10 + uint32_t(i) * 2, uint16_t(out[i]));
+    W16(g_block + 0x10 + uint32_t(n) * 2, 0);
+    W32(g_block, g_block + 0x10);
+    W32(g_block + 4, uint32_t(n + 1));
+    W32(g_block + 8, uint32_t(n + 1));
+    return g_block;
 }
 
 uint32_t Child(X86Context& ctx, uint32_t parent, uint32_t id) {
@@ -414,6 +436,8 @@ X86_EXTERN_FUNC(__imp__sub_002915C1);
 X86_FUNC(sub_002915C1) {
     uint32_t owner = ctx.ecx, page = R32(ctx.esp + 4), actions = R32(ctx.esp + 8), type = R32(ctx.esp + 12);
     if (page && actions && actions != g_block) Remember(owner, page, actions, type);
+    if (page && actions && R32(page + 0x14) == kNameEntry && input::KeyboardActive() && Block())
+        W32(ctx.esp + 8, WithoutY(actions));
     __imp__sub_002915C1(ctx, base);
     if (!page || !input::KeyboardActive()) return;
     uint32_t eax = ctx.eax;
