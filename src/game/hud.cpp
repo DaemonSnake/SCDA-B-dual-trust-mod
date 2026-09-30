@@ -299,6 +299,7 @@ X86_FUNC(sub_002C64E0) {
         game::EventPrompts(ctx, instance);
         ctx.ecx = instance;
     }
+    if (g_decided && game::ComboElement(ctx, base, instance)) return;
     if (g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
     uint32_t id = R32(instance + 4);
     std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);
