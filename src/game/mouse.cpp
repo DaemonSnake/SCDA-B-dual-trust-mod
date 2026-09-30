@@ -48,6 +48,9 @@ constexpr uint32_t kListType = 10;
 constexpr uint32_t kHudLayer = 100;
 // held open in play and worked with the move keys: the mouse keeps looking around
 constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
+// a hidden button that takes a page's buttons (mission end and review, loadout); the pad cannot move focus off it,
+// a click anywhere presses A on it
+constexpr uint32_t kEventsCatcher = game::magma::Id("B_EventsCatcher");
 constexpr uint32_t kListHitTest = 0x2C1190, kListSelect = 0x2C2040, kPageSetFocus = 0x2C5370;
 
 struct Game {
@@ -157,6 +160,10 @@ bool Menu(Game& g) {
              layer, focus, focusable, page ? "menu" : "not a menu");
     }
     if (!focusable) return false;
+    if (focused && R32(focused + 4) == kEventsCatcher) {
+        if (clicked) Tap(g, kJoyA);
+        return true;
+    }
     if (!hovered) return true;
     if (hovered != focused) Call(g.ctx, kPageSetFocus, page, {hovered});
     uint32_t widget = R32(hovered + 8);
