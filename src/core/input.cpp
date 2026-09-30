@@ -162,7 +162,6 @@ constexpr Target kVersusActions[] = {
     {{"versus_jump", "JUMP", "Space"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
     {{"versus_scope", "SCOPE", "E"}, 2},
-    {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
     {{"versus_zoom", "ZOOM / LOOK BACK", "MMB"}, 15},
     {{"laser", "LASER", "B"}, 8},
     {{"night_vision", "NIGHT VISION", "Tab"}, 10},
