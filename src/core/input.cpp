@@ -69,14 +69,15 @@ float g_zoom_left = 0.0f;  // seconds of full stick still to hold, negative zoom
 std::chrono::steady_clock::time_point g_zoom_time;
 
 // The sticky camera reads Interaction for gas, Scope for noise, Duck to leave, and Fire and AltFire to switch
-// cameras. Fire and alt fire are moved onto gas and noise, pause onto leave, and strafing switches cameras.
+// cameras. Fire and alt fire are moved onto gas and noise, pause onto leave, and strafing switches cameras; the
+// interact and scope keys press nothing there, so gas and noise have one key each.
 struct Remap {
-    int from, to;
+    int from, to;  // to -1: no button
 };
 // Interaction is the pad's A and Scope its X.
-constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}};
-// the target each held action went down as plus one, 0 while up, so a key cannot stick when the camera opens or
-// closes under it
+constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}, {0, -1}, {2, -1}};
+// the target each held action went down as plus one (-1 for none), 0 while up, so a key cannot stick when the camera
+// opens or closes under it
 std::array<std::atomic<int>, 32> g_down_as{};
 
 // In a menu pause (Escape) backs out as B, except in the pause menu, which only Start closes.
@@ -298,16 +299,17 @@ void Keyboard(Pad& p) {
             g_down_as[i] = 1;
             continue;
         }
-        int b = g_down_as[i] - 1;
-        if (b < 0) {
+        int b = g_down_as[i] - 1;  // -2: held as no button
+        if (b == -1) {
             int button = kActions[i].button;
             b = camera                    ? Remapped(kCameraRemap, button)
                 : g_opsat               ? Remapped(kOpsatRemap, button)
                 : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
                                         : button;
-            g_down_as[i] = b + 1;
+            g_down_as[i] = b < 0 ? -1 : b + 1;
             if (b >= 16) g_pick_last = b - 16;
         }
+        if (b < 0) continue;
         if (b >= 16) move[b - 16] = 1;
         else if (b < 8) p.analog[b] = 0xFF;
         else p.buttons |= uint16_t(1u << (b - 8));

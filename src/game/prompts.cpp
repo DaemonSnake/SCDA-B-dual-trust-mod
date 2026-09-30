@@ -39,7 +39,7 @@ struct Prompt {
 constexpr Prompt kEventPrompts[] = {{0xDBC4BB81, 0x0E3CCC34, false}, {0x35CADAAD, 0xE032AD18, false},
                                     {0x42CDEA3B, 0x97359D8E, true}};
 
-enum Code { A, B, X, Y, LT, RT, White, Black, Start, Back, Up, Down, Left, Right, Move, LeftClick, RightClick };
+enum Code { A, B, X, Y, LT, RT, White, Black, Start, Back, Up, Down, Left, Right, Move, Look, LeftClick, RightClick };
 struct Icon {
     uint32_t id;
     Code code;
@@ -53,14 +53,17 @@ constexpr Icon kIcons[] = {
     {"Button_start", Start}, {"button_start", Start},   {"Button_Start", Start},   {"Button_back", Back},
     {"button_back", Back},   {"Button_Back", Back},     {"Button_DU", Up},         {"Button_DD", Down},
     {"Button_DL", Left},     {"Button_DR", Right},      {"Button_AL_up", Move},    {"button_al_up", Move},
-    {"Button_AG_up", Move},  {"Button_AI_up", Move},    {"Button_AS_up", Move},    {"Button_AL_clic", LeftClick},
+    {"Button_AG_up", Move},  {"Button_AI_up", Move},    {"Button_AS_up", Move},    {"Button_AL", Move},
+    {"button_al", Move},     {"button_ag", Move},       {"button_ai", Move},       {"button_as", Move},
+    {"Button_AR", Look},     {"button_ar", Look},       {"button_ad", Look},       {"Button_AL_clic", LeftClick},
     {"Button_AG_clic", LeftClick}, {"Button_AI_clic", LeftClick}, {"Button_AS_clic", LeftClick},
     {"Button_AR_clic", RightClick}, {"Button_AD_clic", RightClick},
 };
 
 uint32_t g_block = 0;  // +0 FString, +0x10 text, +0x600 slot names
 
-std::string Keys(std::initializer_list<const char*> ids) {
+// keys of one letter run together ("WASD") unless split
+std::string Keys(std::initializer_list<const char*> ids, bool split = false) {
     size_t count = 0;
     const input::Action* actions = input::Actions(&count);
     std::string out;
@@ -78,20 +81,23 @@ std::string Keys(std::initializer_list<const char*> ids) {
                 single &= k.size() == 1;
                 keys[n++] = k;
             }
-    for (size_t i = 0; i < n; i++) out += (i && !single ? "/" : "") + keys[i];
+    for (size_t i = 0; i < n; i++) out += (i && (split || !single) ? "/" : "") + keys[i];
     return out;
 }
 
 std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
     const Icon* icon = std::find_if(std::begin(kIcons), std::end(kIcons), [&](const Icon& i) { return i.id == material_id; });
     if (icon == std::end(kIcons)) return {};
+    // the sticky camera's page: gas on fire, noise on alt fire, strafing switches cameras (input.cpp's camera remap),
+    // forward and back zoom
+    bool camera = page_id == game::magma::Id("P_Camera");
     switch (icon->code) {
-        case A: return menu ? "ENTER" : Keys({"interact"});
+        case A: return menu ? "ENTER" : Keys({camera ? "fire" : "interact"});
         case B: return !menu ? Keys({"crouch"}) : page_id == game::magma::Id("P_Pause") ? "BACKSPACE" : "ESC";
-        case X: return Keys({"scope"});
+        case X: return Keys({camera ? "alt_fire" : "scope"});
         case Y: return Keys({"jump"});
-        case LT: return Keys({"alt_fire"});
-        case RT: return Keys({"fire"});
+        case LT: return Keys({camera ? "strafe_left" : "alt_fire"});
+        case RT: return Keys({camera ? "strafe_right" : "fire"});
         case White: return Keys({"quick_inventory"});
         case Black: return Keys({"sidekick"});
         case Start: return page_id == game::magma::Id("P_Start") ? "ENTER" : Keys({"pause"});
@@ -100,7 +106,10 @@ std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
         case Down: return menu ? "DOWN" : Keys({"switch_camera"});
         case Left: return menu ? "LEFT" : Keys({"previous_vision"});
         case Right: return menu ? "RIGHT" : Keys({"next_vision"});
-        case Move: return Keys({"move_forward", "strafe_left", "move_back", "strafe_right"});
+        case Move:
+            return camera ? Keys({"move_forward", "move_back"}, true)
+                          : Keys({"move_forward", "strafe_left", "move_back", "strafe_right"});
+        case Look: return "MOUSE";
         case LeftClick: return Keys({"back_to_wall"});
         case RightClick: return Keys({"zoom"});
     }
