@@ -28,7 +28,22 @@ Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with t
 - **FPS Counter** - Shows the frame rate on screen.
 - 
 ### Graphics
+
+### Shader Model 3
 - **Shader Model** - Chooses between Shader Model 1.1, the console's look, and Shader Model 3.0, which turns on the Chaos Theory PC style features.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/52b7ed68-cb87-466e-847b-8364589a6d8b"></td>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/d82cc615-ea9a-4621-991c-663e7d3bd242"></td>
+    </tr>
+    <tr>
+      <td align="center">Off</td>
+      <td align="center">On</td>
+    </tr>
+  </table>
+</div>
+
 - **HDR Rendering** - 
 - **Tone Mapping** - 
 - **HQ Soft Shadows** - 
