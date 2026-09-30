@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <iterator>
 #include <mutex>
+#include <span>
+#include <string_view>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -21,6 +23,7 @@
 
 #include "app/app.h"
 #include "core/log.h"
+#include "image_symbols.h"
 
 namespace input {
 
@@ -121,7 +124,7 @@ struct Target {
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
     KeyEvent event = KeyEvent::None;
 };
-constexpr Target kActions[] = {
+constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
     {{"move_back", "MOVE BACK", "S"}, 17},
     {{"strafe_left", "STRAFE LEFT", "A"}, 18},
@@ -147,7 +150,29 @@ constexpr Target kActions[] = {
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
 };
-constexpr size_t kCount = std::size(kActions);
+// Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
+constexpr Target kVersusActions[] = {
+    {{"move_forward", "MOVE FORWARD", "W"}, 16},
+    {{"move_back", "MOVE BACK", "S"}, 17},
+    {{"strafe_left", "STRAFE LEFT", "A"}, 18},
+    {{"strafe_right", "STRAFE RIGHT", "D"}, 19},
+    {{"fire", "FIRE", "LMB"}, 7},
+    {{"alt_fire", "ALT FIRE", "RMB"}, 6},
+    {{"versus_interact", "INTERACT", "Shift"}, 0},
+    {{"versus_jump", "JUMP", "Space"}, 3},
+    {{"crouch", "CROUCH", "C"}, 1},
+    {{"versus_scope", "SCOPE", "E"}, 2},
+    {{"back_to_wall", "BACK TO WALL", "Q"}, 14},
+    {{"versus_zoom", "ZOOM / LOOK BACK", "MMB"}, 15},
+    {{"laser", "LASER", "B"}, 8},
+    {{"night_vision", "NIGHT VISION", "Tab"}, 10},
+    {{"previous_camera", "PREVIOUS CAMERA", "V"}, 9, true},
+    {{"pause", "PAUSE", "Escape"}, 12},
+};
+constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
+constexpr std::span<const Target> kActions =
+    kVersus ? std::span<const Target>(kVersusActions) : std::span<const Target>(kStoryActions);
+constexpr size_t kCount = kActions.size();
 static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");
 
 struct Name {
