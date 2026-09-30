@@ -18,6 +18,7 @@ scda.toml
 /logs/
 /hdd/
 /CrashDumps/
+/shadercache/
 
 # editors
 .vs/

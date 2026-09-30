@@ -160,7 +160,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kAsyncShaders, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse
 };
 
 using rows::Kind;
@@ -181,6 +181,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kHdr, "HDR RENDERING"},
     {Kind::Value, kToneMapping, "TONE MAPPING"},
     {Kind::Value, kHqShadows, "HQ SOFT SHADOWS"},
+    {Kind::Value, kAsyncShaders, "ASYNC SHADERS"},
     {Kind::Heading, -1, "GAME"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
     {Kind::Heading, -1, "CO-OP"},
@@ -277,6 +278,10 @@ std::string RowText(int id, int step) {
             std::snprintf(text, sizeof(text), "%s", OnOff(on));
             break;
         }
+        case kAsyncShaders:
+            if (step) s.async_shaders = !s.async_shaders;
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.async_shaders));
+            break;
         case kSkipIntros:
             if (step) s.skip_intros = !s.skip_intros;
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));

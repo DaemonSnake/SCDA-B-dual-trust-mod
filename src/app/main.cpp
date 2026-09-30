@@ -285,6 +285,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         DispatchMessageW(&msg);
     }
     if (app::g_mode_changed) ChangeDisplaySettingsW(nullptr, 0);
+    gpu::SavePipelineCache();
     logx::Flush();
     kernel::Shutdown(0);
 }

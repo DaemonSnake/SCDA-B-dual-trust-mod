@@ -13,8 +13,10 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -29,6 +31,7 @@
 #include "app/app.h"
 #include "core/log.h"
 #include "gpu/backend.h"
+#include "gpu/pipeline_cache.h"
 #include "gpu/shaders.h"
 #include "gpu/texture.h"
 #include "gpu/vertex.h"
@@ -53,6 +56,8 @@ constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 // game's blends use as a factor, keeps its 0..1 clamp; tone mapping brings it back when the frame is read
 constexpr DXGI_FORMAT kHdrFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
 constexpr float kHeadroom = 8.0f;
+// longest a frame missing draws still on the build threads keeps the last whole frame on screen instead
+constexpr auto kHoldMax = std::chrono::milliseconds(200);
 
 // TEMPORARY perf diagnostic: where a frame's time goes, one log line a second
 using PerfClock = std::chrono::steady_clock;
@@ -61,9 +66,14 @@ struct Perf {
     double draw = 0, assemble = 0, bind = 0, sig = 0, texup = 0, compile = 0, clear = 0, copy = 0, present = 0, wait = 0,
            swap = 0, sync = 0;
     uint64_t draws = 0, verts = 0, upload = 0, overflow = 0, sigs = 0, sig_bytes = 0, texups = 0, texup_bytes = 0,
-             newtex = 0, targets = 0, rtups = 0, shrinks = 0, syncs = 0, psos = 0, shaders = 0, raw = 0, lates = 0;
+             newtex = 0, targets = 0, rtups = 0, shrinks = 0, syncs = 0, skipped = 0, raw = 0, lates = 0;
 };
 Perf g_perf;
+// shader and pipeline builds on any thread
+struct BuildPerf {
+    std::atomic<uint64_t> compiled{0}, disk{0}, created{0}, library{0}, queued{0}, compile_us{0}, create_us{0};
+};
+BuildPerf g_build;
 struct PerfScope {
     double& acc;
     PerfClock::time_point t = PerfClock::now();
@@ -348,8 +358,14 @@ private:
     bool tex_soft_[4] = {};  // stage samples the soft shadow's copy of the chain
     float tex_wide_[4] = {};  // host texels per console texel of a target read into a smaller one, 0 otherwise
     uint32_t Samplers(const State& s, const TexInfo info[4]);
+    // shaders by source hash: Register keeps the source, Shader finds the bytecode on disk or compiles it; with compile
+    // false it only looks, and sets pending where the compiler is needed
+    uint64_t Register(std::string src, const char* entry, const char* profile);
+    ID3DBlob* Shader(uint64_t hash, bool compile, bool& pending);
     ID3DBlob* Compile(const std::string& src, const char* entry, const char* profile, uint64_t& hash);
-    ID3D12PipelineState* Pipeline(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps);
+    ID3D12PipelineState* Pipeline(const PsoKey& k);
+    ComPtr<ID3D12PipelineState> CreatePipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs, ID3DBlob* ps, bool compile, bool& pending);
+    void TakeBuilt();
     ID3D12PipelineState* BlitPipeline(DXGI_FORMAT rtv);
     void ResizeSwap();
     float Scale() const { return scale_; }
@@ -376,9 +392,24 @@ private:
     uint32_t srv_inc_ = 0, smp_inc_ = 0, rtv_inc_ = 0, dsv_inc_ = 0;
     std::vector<uint32_t> free_rtv_, free_dsv_;
     ComPtr<ID3D12RootSignature> root_;
-    std::unordered_map<uint64_t, ComPtr<ID3DBlob>> blobs_;
+    struct Source {
+        std::string text, entry, profile;
+        ComPtr<ID3DBlob> code;
+        uint8_t state = 0;  // 0 source only, 1 compiling, 2 done (no code: it failed)
+    };
+    std::unordered_map<uint64_t, Source> shaders_;  // build threads too, under shader_lock_
+    std::mutex shader_lock_;
+    std::condition_variable shader_done_;
     std::unordered_map<uint64_t, uint64_t> vs_src_;  // program key to source hash
     std::unordered_map<uint64_t, ComPtr<ID3D12PipelineState>> psos_;
+    // async shaders: a pipeline that needs a compiler is built on the build threads, its draws skipped until it is back
+    bool async_ = false;
+    bool skipped_frame_ = false, shown_ = false;
+    std::chrono::steady_clock::time_point shown_t_;
+    std::unordered_set<uint64_t> building_;
+    std::vector<std::pair<uint64_t, ComPtr<ID3D12PipelineState>>> built_;
+    std::mutex built_lock_;
+    std::atomic<bool> built_ready_{false};
     std::unordered_map<uint64_t, uint32_t> samplers_;
     uint32_t smp_used_ = 0;
     std::unordered_map<uint64_t, Target> targets_;
@@ -528,6 +559,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     ComPtr<ID3DBlob> rs, err;
     if (FAILED(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &rs, &err))) return false;
     dev_->CreateRootSignature(0, rs->GetBufferPointer(), rs->GetBufferSize(), IID_PPV_ARGS(&root_));
+    cache::Open(dev_.Get(), Hash(rs->GetBufferPointer(), rs->GetBufferSize()));
 
     for (auto& f : frames_) {
         dev_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&f.alloc));
@@ -567,6 +599,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     hdr_ = sm3_ && set.hdr_rendering;
     tone_ = sm3_ && set.tone_mapping;
     hq_shadows_ = sm3_ && set.hq_soft_shadows;
+    async_ = set.async_shaders;
     SetSoftScale();
     Begin();
     LOGI("d3d12: %ux%u guest, %ux%u window, render scale %.3f", width, height, bb_w_, bb_h_, scale_);
@@ -882,24 +915,72 @@ void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect
     cl_->DrawInstanced(3, 1, 0, 0);
 }
 
-ID3DBlob* D3D12Backend::Compile(const std::string& src, const char* entry, const char* profile, uint64_t& hash) {
-    // one source can hold several entry points
-    hash = Hash(src.data(), src.size(), Hash(entry, std::strlen(entry), Hash(profile, std::strlen(profile))));
-    auto it = blobs_.find(hash);
-    if (it != blobs_.end()) return it->second.Get();
+constexpr uint64_t kSourceCheck = 0x5CDA0002C0FFEE11ull;  // seed of the second source hash the disk cache keeps
+
+ComPtr<ID3DBlob> CompileHlsl(const std::string& src, const std::string& entry, const std::string& profile, uint64_t hash) {
+    auto t = PerfClock::now();
     ComPtr<ID3DBlob> code, err;
-    PerfScope perf_compile{g_perf.compile};
-    g_perf.shaders++;
-    HRESULT hr = D3DCompile(src.data(), src.size(), nullptr, nullptr, nullptr, entry, profile, D3DCOMPILE_OPTIMIZATION_LEVEL1, 0,
-                            &code, &err);
+    HRESULT hr = D3DCompile(src.data(), src.size(), nullptr, nullptr, nullptr, entry.c_str(), profile.c_str(),
+                            D3DCOMPILE_OPTIMIZATION_LEVEL1, 0, &code, &err);
+    g_build.compiled++;
+    g_build.compile_us += uint64_t(PerfMs(t) * 1000);
     if (FAILED(hr)) {
-        LOGE("d3d12: %s compile failed: %s", profile, err ? static_cast<const char*>(err->GetBufferPointer()) : "?");
+        LOGE("d3d12: %s compile failed: %s", profile.c_str(), err ? static_cast<const char*>(err->GetBufferPointer()) : "?");
         LOGE("%s", src.c_str());
-        blobs_[hash] = nullptr;
         return nullptr;
     }
-    blobs_[hash] = code;
-    return code.Get();
+    cache::AddShader(hash, Hash(src.data(), src.size(), kSourceCheck), code.Get());
+    return code;
+}
+
+uint64_t D3D12Backend::Register(std::string src, const char* entry, const char* profile) {
+    // one source can hold several entry points
+    uint64_t hash = Hash(src.data(), src.size(), Hash(entry, std::strlen(entry), Hash(profile, std::strlen(profile))));
+    std::lock_guard lock(shader_lock_);
+    auto [it, fresh] = shaders_.try_emplace(hash);
+    if (fresh) {
+        it->second.text = std::move(src);
+        it->second.entry = entry;
+        it->second.profile = profile;
+    }
+    return hash;
+}
+
+ID3DBlob* D3D12Backend::Shader(uint64_t hash, bool compile, bool& pending) {
+    std::unique_lock lock(shader_lock_);
+    Source& s = shaders_[hash];
+    if (s.state == 0 && (s.code = cache::FindShader(hash, Hash(s.text.data(), s.text.size(), kSourceCheck)))) {
+        s.state = 2;
+        s.text = {};
+        g_build.disk++;
+    }
+    while (s.state == 1) {
+        if (!compile) {
+            pending = true;
+            return nullptr;
+        }
+        shader_done_.wait(lock);
+    }
+    if (s.state == 2) return s.code.Get();
+    if (!compile) {
+        pending = true;
+        return nullptr;
+    }
+    s.state = 1;
+    std::string text = std::move(s.text);
+    lock.unlock();
+    ComPtr<ID3DBlob> code = CompileHlsl(text, s.entry, s.profile, hash);
+    lock.lock();
+    s.code = std::move(code);
+    s.state = 2;
+    shader_done_.notify_all();
+    return s.code.Get();
+}
+
+ID3DBlob* D3D12Backend::Compile(const std::string& src, const char* entry, const char* profile, uint64_t& hash) {
+    hash = Register(src, entry, profile);
+    bool pending = false;
+    return Shader(hash, true, pending);
 }
 
 ID3D12PipelineState* D3D12Backend::BlitPipeline(DXGI_FORMAT rtv) {
@@ -1095,10 +1176,57 @@ void D3D12Backend::Resolve(Target& t) {
     Post("tone", t.fmt, Cpu(rtv_heap_.Get(), t.view, rtv_inc_), t.w, t.h, in, fmt, pt);
 }
 
-ID3D12PipelineState* D3D12Backend::Pipeline(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps) {
+void D3D12Backend::TakeBuilt() {
+    std::lock_guard lock(built_lock_);
+    built_ready_ = false;
+    for (auto& [h, pso] : built_) {
+        // a pipeline made meanwhile without waiting stays: command lists hold it
+        psos_.emplace(h, std::move(pso));
+        building_.erase(h);
+    }
+    built_.clear();
+}
+
+ID3D12PipelineState* D3D12Backend::Pipeline(const PsoKey& k) {
+    if (built_ready_.load(std::memory_order_acquire)) TakeBuilt();
     uint64_t h = Hash(&k, sizeof(k));
     auto it = psos_.find(h);
     if (it != psos_.end()) return it->second.Get();
+    bool async = async_ && !cap_;
+    if (async && building_.count(h)) {
+        g_perf.skipped++;
+        skipped_frame_ = true;
+        return nullptr;
+    }
+    PerfScope perf_compile{g_perf.compile};
+    bool pending = false;
+    ID3DBlob* vs = Shader(k.vs, !async, pending);
+    ID3DBlob* ps = Shader(k.ps, !async, pending);
+    ComPtr<ID3D12PipelineState> pso;
+    if (!pending && vs && ps) pso = CreatePipeline(k, h, vs, ps, !async, pending);
+    if (pending) {
+        building_.insert(h);
+        g_build.queued++;
+        g_perf.skipped++;
+        skipped_frame_ = true;
+        cache::Post([this, k, h] {
+            bool unused = false;
+            ID3DBlob* vs = Shader(k.vs, true, unused);
+            ID3DBlob* ps = Shader(k.ps, true, unused);
+            ComPtr<ID3D12PipelineState> pso;
+            if (vs && ps) pso = CreatePipeline(k, h, vs, ps, true, unused);
+            std::lock_guard lock(built_lock_);
+            built_.emplace_back(h, std::move(pso));
+            built_ready_.store(true, std::memory_order_release);
+        });
+        return nullptr;
+    }
+    return (psos_[h] = std::move(pso)).Get();
+}
+
+// from the library, else from the driver when compile is set (any thread)
+ComPtr<ID3D12PipelineState> D3D12Backend::CreatePipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs, ID3DBlob* ps, bool compile,
+                                                         bool& pending) {
     D3D12_INPUT_ELEMENT_DESC el[16];
     uint32_t n = 0;
     for (uint32_t r = 0; r < 16; r++)
@@ -1142,11 +1270,27 @@ ID3D12PipelineState* D3D12Backend::Pipeline(const PsoKey& k, ID3DBlob* vs, ID3DB
     d.RTVFormats[0] = k.has_rt ? DXGI_FORMAT(k.rtfmt) : DXGI_FORMAT_UNKNOWN;
     d.DSVFormat = k.has_ds ? DXGI_FORMAT_D24_UNORM_S8_UINT : DXGI_FORMAT_UNKNOWN;
     d.SampleDesc.Count = 1;
-    ComPtr<ID3D12PipelineState> pso;
-    g_perf.psos++;
-    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) LOGE("d3d12: pipeline creation failed");
-    psos_[h] = pso;
-    return pso.Get();
+    // the bytecode's own checksum: another compiler's output for the same source is another pipeline
+    auto sum = [](ID3DBlob* b) { return Hash(static_cast<const uint8_t*>(b->GetBufferPointer()) + 4, 16); };
+    uint64_t name = Hash(&h, sizeof(h), sum(vs) ^ sum(ps) * 3);
+    ComPtr<ID3D12PipelineState> pso = cache::LoadPipeline(name, d);
+    if (pso) {
+        g_build.library++;
+        return pso;
+    }
+    if (!compile) {
+        pending = true;
+        return nullptr;
+    }
+    auto t = PerfClock::now();
+    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) {
+        LOGE("d3d12: pipeline creation failed");
+        return nullptr;
+    }
+    g_build.created++;
+    g_build.create_us += uint64_t(PerfMs(t) * 1000);
+    cache::StorePipeline(name, pso.Get());
+    return pso;
 }
 
 ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& sv) {
@@ -1383,14 +1527,12 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         vkey = Hash(&fk, sizeof(fk), vkey);
     }
     uint64_t vh;
-    ID3DBlob* vs;
     auto vit = vs_src_.find(vkey);
     if (vit != vs_src_.end()) {
         vh = vit->second;
-        vs = blobs_[vh].Get();
     } else {
         std::string src = prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk);
-        vs = Compile(src, "main", "vs_5_0", vh);
+        vh = Register(std::move(src), "main", "vs_5_0");
         vs_src_[vkey] = vh;
     }
     TexInfo info[4];
@@ -1404,16 +1546,13 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     PixelKey pk = MakePixelKey(s, info);
     uint64_t pkh = Hash(&pk, sizeof(pk));
     uint64_t ph;
-    ID3DBlob* ps;
     auto pit = vs_src_.find(pkh ^ 0x9E3779B97F4A7C15ull);
     if (pit != vs_src_.end()) {
         ph = pit->second;
-        ps = blobs_[ph].Get();
     } else {
-        ps = Compile(PixelHlsl(pk), "main", "ps_5_0", ph);
+        ph = Register(PixelHlsl(pk), "main", "ps_5_0");
         vs_src_[pkh ^ 0x9E3779B97F4A7C15ull] = ph;
     }
-    if (!vs || !ps) return;
 
     // pipeline
     auto sm = [&](uint32_t method) { return s.simple[method >> 2]; };
@@ -1465,7 +1604,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     k.cull = cull != 0 && a.topology == Topology::Triangles;
     k.ccw = cull == 0x900;  // culling clockwise leaves counter clockwise as the front
     k.fill = s.rs[kRsFillMode];
-    ID3D12PipelineState* pso = Pipeline(k, vs, ps);
+    ID3D12PipelineState* pso = Pipeline(k);
     if (!pso) return;
     cl_->SetPipelineState(pso);
 
@@ -1920,44 +2059,57 @@ void D3D12Backend::Present(const Surface& front) {
     }
     Transition(lut_.Get(), lut_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
+    // a frame missing draws still on the build threads is not shown, the last whole one stays up: otherwise a new
+    // effect's intermediate passes flash on screen
+    auto now_t = std::chrono::steady_clock::now();
+    bool hold = skipped_frame_ && shown_ && now_t - shown_t_ < kHoldMax;
+    skipped_frame_ = false;
     uint32_t bi = swap_->GetCurrentBackBufferIndex();
     D3D12_RESOURCE_STATES bs = D3D12_RESOURCE_STATE_PRESENT;
-    Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), kRtvCount + bi, rtv_inc_);
-    float black[4] = {0, 0, 0, 1};
-    cl_->ClearRenderTargetView(rh, black, 0, nullptr);
-    cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
-    bound_rt_ = bound_ds_ = nullptr;
-    if (t) {
-        // 16:9 when the console reports a widescreen display, else 4:3
-        bool wide = app::Widescreen();
-        float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
-        float vw = std::min(w, h * aspect), vh = vw / aspect;
-        float uv[4] = {0, 0, 1, 1};
-        D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
-        D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
-        cl_->RSSetViewports(1, &vp);
-        cl_->RSSetScissorRects(1, &sc);
-        Transition(t->res.Get(), t->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        Blit(t->res.Get(), t->fmt, uv, gamma_, false);
+    if (!hold) {
+        Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), kRtvCount + bi, rtv_inc_);
+        float black[4] = {0, 0, 0, 1};
+        cl_->ClearRenderTargetView(rh, black, 0, nullptr);
+        cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
+        bound_rt_ = bound_ds_ = nullptr;
+        if (t) {
+            // 16:9 when the console reports a widescreen display, else 4:3
+            bool wide = app::Widescreen();
+            float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
+            float vw = std::min(w, h * aspect), vh = vw / aspect;
+            float uv[4] = {0, 0, 1, 1};
+            D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
+            D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
+            cl_->RSSetViewports(1, &vp);
+            cl_->RSSetScissorRects(1, &sc);
+            Transition(t->res.Get(), t->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            Blit(t->res.Get(), t->fmt, uv, gamma_, false);
+        }
+        {
+            std::lock_guard lock(app::UiLock());
+            ImGui_ImplDX12_NewFrame();
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+            app::DrawUi(fps_);
+            ImGui::Render();
+            ID3D12DescriptorHeap* uh[] = {ui_heap_.Get()};
+            cl_->SetDescriptorHeaps(1, uh);
+            ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cl_.Get());
+        }
+        Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_PRESENT);
     }
-    {
-        std::lock_guard lock(app::UiLock());
-        ImGui_ImplDX12_NewFrame();
-        ImGui_ImplWin32_NewFrame();
-        ImGui::NewFrame();
-        app::DrawUi(fps_);
-        ImGui::Render();
-        ID3D12DescriptorHeap* uh[] = {ui_heap_.Get()};
-        cl_->SetDescriptorHeaps(1, uh);
-        ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cl_.Get());
-    }
-    Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_PRESENT);
     Submit(false);
-    bool vsync = app::Get().vsync;
-    auto perf_swap = PerfClock::now();
-    swap_->Present(vsync ? 1 : 0, !vsync && tearing_ ? DXGI_PRESENT_ALLOW_TEARING : 0);
-    g_perf.swap += PerfMs(perf_swap);
+    if (!hold) {
+        bool vsync = app::Get().vsync;
+        auto perf_swap = PerfClock::now();
+        swap_->Present(vsync ? 1 : 0, !vsync && tearing_ ? DXGI_PRESENT_ALLOW_TEARING : 0);
+        g_perf.swap += PerfMs(perf_swap);
+        shown_ = true;
+        shown_t_ = now_t;
+    } else {
+        LOG_FIRST(16, "d3d12: frame held, draws waiting on the build threads");  // TEMPORARY
+    }
 
     presents_++;
     presents_seen_.store(presents_);
@@ -2015,10 +2167,17 @@ void D3D12Backend::Present(const Surface& front) {
                  g_perf_wait_kind_ns[4].exchange(0) / n / 1e6, g_perf_wait_kind_ns[5].exchange(0) / n / 1e6,
                  g_perf_sync_block.exchange(0) / n, g_perf_sync_late.exchange(0) / n);
             LOGI("perf: per frame %.0f draws (%.0f raw) %.0fk verts %.1f MB upload %.1f overflow | %.0f checks %.2f MB hashed | %.1f tex uploads "
-                 "%.2f MB, %.1f new tex, %.1f new targets, %.1f target uploads, %.1f shrinks, %.1f read-backs %.1f late | %llu shaders %llu psos this second",
+                 "%.2f MB, %.1f new tex, %.1f new targets, %.1f target uploads, %.1f shrinks, %.1f read-backs %.1f late | %llu draws skipped this second",
                  p.draws / n, p.raw / n, p.verts / n / 1000.0, p.upload / n / 1048576.0, p.overflow / n, p.sigs / n, p.sig_bytes / n / 1048576.0,
                  p.texups / n, p.texup_bytes / n / 1048576.0, p.newtex / n, p.targets / n, p.rtups / n, p.shrinks / n, p.syncs / n, p.lates / n,
-                 (unsigned long long)p.shaders, (unsigned long long)p.psos);
+                 (unsigned long long)p.skipped);
+            uint64_t compiled = g_build.compiled.exchange(0), created = g_build.created.exchange(0);
+            uint64_t compile_us = g_build.compile_us.exchange(0), create_us = g_build.create_us.exchange(0);
+            LOGI("perf: this second: %llu shaders compiled (%.1f ms each) %llu from disk | %llu pipelines created (%.1f ms each) "
+                 "%llu from the library | %llu sent to the build threads, %zu building",
+                 (unsigned long long)compiled, compiled ? compile_us / 1000.0 / compiled : 0.0, (unsigned long long)g_build.disk.exchange(0),
+                 (unsigned long long)created, created ? create_us / 1000.0 / created : 0.0, (unsigned long long)g_build.library.exchange(0),
+                 (unsigned long long)g_build.queued.exchange(0), building_.size());
             g_perf = Perf{};
             perf_start = PerfClock::now();
             perf_frames = 0;
@@ -2031,6 +2190,8 @@ void D3D12Backend::Present(const Surface& front) {
     sm3_ = set.shader_model >= 3;
     tone_ = sm3_ && set.tone_mapping;
     hq_shadows_ = sm3_ && set.hq_soft_shadows;
+    async_ = set.async_shaders;
+    cache::SaveWhenIdle();
     bool hdr = sm3_ && set.hdr_rendering;
     if (std::fabs(want - scale_) > 1e-4f || shadows != shadow_res_ || hdr != hdr_) {
         hdr_ = hdr;

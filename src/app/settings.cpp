@@ -54,6 +54,7 @@ void Load() {
     s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
     s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);
     s.hq_soft_shadows = t["hq_soft_shadows"].value_or(s.hq_soft_shadows);
+    s.async_shaders = t["async_shaders"].value_or(s.async_shaders);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
@@ -81,6 +82,7 @@ void Save() {
                   {"hdr_rendering", s.hdr_rendering},
                   {"tone_mapping", s.tone_mapping},
                   {"hq_soft_shadows", s.hq_soft_shadows},
+                  {"async_shaders", s.async_shaders},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},

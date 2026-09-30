@@ -32,6 +32,7 @@ Copy the game disc's files into `assets`: `default.xbe` and `sc4_adv.xbe` with t
 - **HDR Rendering** - 
 - **Tone Mapping** - 
 - **HQ Soft Shadows** - 
+- **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
 
 ### Mouse and Keyboard
 - **Keyboard Support** - Fully supports keyboard and mouse input.
