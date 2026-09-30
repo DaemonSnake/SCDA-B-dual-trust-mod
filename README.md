@@ -1,4 +1,4 @@
-# Tom Clancy's Splinter Cell: Double Agent - V2 Recomp
+# Tom Clancy's Splinter Cell: Double Agent - XBE Recomp
 
 A static recompilation of the original Xbox version of Splinter Cell: Double Agent into a native 64 bit Windows executable. The game's x86 code is translated to C++ ahead of time, the Xbox kernel, Direct3D and DirectSound calls are implemented on Windows, and everything is drawn with Direct3D 12 and played through XAudio2.
 
