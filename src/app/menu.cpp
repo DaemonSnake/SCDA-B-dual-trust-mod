@@ -240,7 +240,6 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
-    {Kind::Value, kAsyncShaders, "ASYNC SHADERS"},
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
@@ -340,10 +339,6 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             std::snprintf(text, sizeof(text), "%s", OnOff(on));
             break;
         }
-        case kAsyncShaders:
-            Flip(s.async_shaders, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.async_shaders));
-            break;
         case kSkipIntros:
             Flip(s.skip_intros, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));

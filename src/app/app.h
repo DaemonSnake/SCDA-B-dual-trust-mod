@@ -30,7 +30,7 @@ struct Settings {
     bool hdr_rendering = true;
     bool tone_mapping = true;
     bool hq_soft_shadows = true;
-    bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it
+    bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
