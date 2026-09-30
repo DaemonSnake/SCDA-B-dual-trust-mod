@@ -1,4 +1,4 @@
-// The console on the backtick key. A line goes to the game through UPlayer::Exec on the next input update, as the
+// The console on its key (backtick by default). A line goes to the game through UPlayer::Exec on the next input update, as the
 // game's own console would send it, and what the command prints comes back into the log.
 #include <algorithm>
 #include <atomic>
@@ -34,7 +34,7 @@ void Add(std::string line) {
 
 int LineCallback(ImGuiInputTextCallbackData* data) {
     // the console key's own character
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) return data->EventChar == '`' || data->EventChar == '~';
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) return data->EventChar == '`' || data->EventChar == '~' || input::ConsoleChar(data->EventChar);
     if (data->EventFlag != ImGuiInputTextFlags_CallbackHistory || g_history.empty()) return 0;
     int n = int(g_history.size());
     if (data->EventKey == ImGuiKey_UpArrow) g_recall = g_recall < 0 ? n - 1 : std::max(0, g_recall - 1);

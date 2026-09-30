@@ -83,5 +83,7 @@ void Bind(size_t action, int vk);
 void ResetBindings();
 void LoadBindings();  // after the settings load
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
+bool ConsoleKey(int vk);     // the console action is bound to this key
+bool ConsoleChar(unsigned c);  // the character a console key types, kept out of the console's line
 
 }  // namespace input

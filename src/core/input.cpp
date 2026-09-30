@@ -6,6 +6,7 @@
 #include <bit>
 #include <chrono>
 #include <cstdlib>
+#include <cwctype>
 #include <iterator>
 #include <mutex>
 #include <span>
@@ -124,6 +125,8 @@ struct Target {
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
     KeyEvent event = KeyEvent::None;
 };
+// the console key: the host opens it, the pad never sees it
+constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
     {{"move_back", "MOVE BACK", "S"}, 17},
@@ -149,6 +152,7 @@ constexpr Target kStoryActions[] = {
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
+    {{"console", "CONSOLE", "Backtick"}, kHostKey},
 };
 // Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
 constexpr Target kVersusActions[] = {
@@ -168,12 +172,18 @@ constexpr Target kVersusActions[] = {
     {{"previous_camera", "PREVIOUS CAMERA", "V"}, 9, true},
     {{"help", "HELP", "F1"}, 4},
     {{"pause", "PAUSE", "Escape"}, 12},
+    {{"console", "CONSOLE", "Backtick"}, kHostKey},
 };
 constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 constexpr std::span<const Target> kActions =
     kVersus ? std::span<const Target>(kVersusActions) : std::span<const Target>(kStoryActions);
 constexpr size_t kCount = kActions.size();
 static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");
+constexpr size_t kConsoleAction = [] {
+    for (size_t i = 0; i < kCount; i++)
+        if (kActions[i].button == kHostKey) return i;
+    return kCount;
+}();
 
 struct Name {
     int vk;
@@ -268,6 +278,7 @@ void Keyboard(Pad& p) {
     int move[4] = {};
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
+        if (kActions[i].button == kHostKey) continue;
         bool held = false;
         // in a menu the mouse buttons belong to the cursor
         for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
@@ -496,14 +507,14 @@ uint64_t Pads() {
 // keyboards' Print Screen comes as 0xFF, and the 0xC1..0xDA block is the pads' own
 bool AnswerKey(int vk) {
     switch (vk) {
-        case VK_F10: case VK_F3: case VK_OEM_3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
+        case VK_F10: case VK_F3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
         case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
         case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
         case 0x07: case 0x0A: case 0x0B: case 0x0E: case 0x0F: case 0x5E: case 0xE0: case 0xE8: case 0xFF:
             return false;
     }
     if ((vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) || (vk >= 0x88 && vk <= 0x9F) ||
-        (vk >= 0xC1 && vk <= 0xDA))
+        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk))
         return false;
     return Down(vk);
 }
@@ -574,13 +585,30 @@ std::string Binding(size_t action) {
 }
 
 void Bind(size_t action, int vk) {
-    if (action >= kCount || !NameOf(vk)) return;
+    // the console opens from the window's key messages, which mouse buttons do not send
+    if (action >= kCount || !NameOf(vk) || (action == kConsoleAction && Mouse(vk))) return;
     {
         std::lock_guard lock(g_bind_lock);
         g_binds[action] = {vk};
         app::Get().keys[kActions[action].action.id] = Join(g_binds[action]);
     }
     app::Save();
+}
+
+bool ConsoleKey(int vk) {
+    std::lock_guard lock(g_bind_lock);
+    if (kConsoleAction >= kCount) return false;
+    const auto& b = g_binds[kConsoleAction];
+    return std::find(b.begin(), b.end(), vk) != b.end();
+}
+
+bool ConsoleChar(unsigned c) {
+    std::lock_guard lock(g_bind_lock);
+    if (kConsoleAction >= kCount) return false;
+    for (int vk : g_binds[kConsoleAction])
+        if (unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF; k && towupper(wint_t(c)) == towupper(wint_t(k)))
+            return true;
+    return false;
 }
 
 void ResetBindings() {

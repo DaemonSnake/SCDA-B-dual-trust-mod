@@ -112,7 +112,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == VK_F3) DumpThreads();
             if (wp == VK_ESCAPE && MenuOpen() && !Capturing()) ToggleMenu();
             else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
-            if (wp == VK_OEM_3 && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
+            if (input::ConsoleKey(int(wp)) && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
             return 0;
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
