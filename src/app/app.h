@@ -10,6 +10,12 @@ namespace app {
 
 enum class DisplayMode : uint32_t { Fullscreen, Borderless, Windowed };
 
+// what a player's controller port has plugged in: the keyboard and mouse, an XInput controller, or both
+struct Port {
+    bool keyboard = false;
+    int pad = -1;  // XInput slot 0-3, -1 for none
+};
+
 struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
@@ -31,6 +37,7 @@ struct Settings {
     uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     bool hide_hud = false;                 // debug: the HUD layer's Magma pages are not drawn in a level
+    Port players[2] = {{true, 0}, {false, 1}};  // guest ports 0 and 1; 2 and 3 stay empty
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
 

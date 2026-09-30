@@ -22,6 +22,23 @@ namespace {
 
 const char* kModes[] = {"fullscreen", "borderless", "windowed"};
 
+// "keyboard", "controllerN", both joined by '+', or "none"
+std::string PortName(const Port& p) {
+    std::string name = p.keyboard ? "keyboard" : "";
+    if (p.pad >= 0) name += (name.empty() ? "controller" : "+controller") + std::to_string(p.pad + 1);
+    return name.empty() ? "none" : name;
+}
+
+Port ParsePort(const std::string& name, Port fallback) {
+    Port p;
+    p.keyboard = name.find("keyboard") != std::string::npos;
+    if (size_t at = name.find("controller"); at != std::string::npos && at + 10 < name.size()) {
+        int n = name[at + 10] - '0';
+        if (n >= 1 && n <= 4) p.pad = n - 1;
+    }
+    return p.keyboard || p.pad >= 0 || name == "none" ? p : fallback;
+}
+
 std::filesystem::path File() { return ExeDir() / "scda.toml"; }
 
 }  // namespace
@@ -62,6 +79,13 @@ void Load() {
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
     s.hide_hud = t["hide_hud"].value_or(s.hide_hud);
+    Port p1 = ParsePort(t["player1"].value_or(PortName(s.players[0])), s.players[0]);
+    Port p2 = ParsePort(t["player2"].value_or(PortName(s.players[1])), s.players[1]);
+    // a device sits on one port only
+    if (p1.keyboard) p2.keyboard = false;
+    if (p1.pad == p2.pad) p2.pad = -1;
+    s.players[0] = p1;
+    s.players[1] = p2;
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
@@ -89,7 +113,9 @@ void Save() {
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
                   {"join_ip", s.join_ip},
-                  {"hide_hud", s.hide_hud}};
+                  {"hide_hud", s.hide_hud},
+                  {"player1", PortName(s.players[0])},
+                  {"player2", PortName(s.players[1])}};
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);

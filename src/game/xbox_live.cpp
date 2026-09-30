@@ -10,10 +10,12 @@ namespace {
 // Live status updater (thiscall, ret 8): +0x2734 the L_username text of system.mgm's A_Panel_Live area, the
 // "SIGN-IN FAILED" / "NOT SIGNED IN" line that every menu page instances
 constexpr uint32_t kStatusText = 0x2734;
-// instance: +4 id, +0x18 bit 0 visible, +0x1C up and +0x20 down neighbour ids, +0x4C bit 0 default;
+// instance: +4 id, +0x18 bit 0 visible, +0x1C up and +0x20 down neighbour ids, +0x3C up and +0x40 down neighbour
+// instances (resolved from the ids at load, what navigation follows), +0x4C bit 0 default;
 // +0x0C keyframes: +4 begin, +8 end of keyframe pointers; keyframe +4 its frame; position frame (vtable 0x5681C4)
 // +8 x, +0xA y (short)
 constexpr uint32_t kId = 0x04, kVisible = 0x18, kUp = 0x1C, kDown = 0x20, kFlags = 0x4C, kDefault = 0x01;
+constexpr uint32_t kUpInstance = 0x3C, kDownInstance = 0x40;
 constexpr uint32_t kKeyframes = 0x0C, kFrame = 0x04, kPositionFrame = 0x5681C4, kY = 0x0A;
 constexpr uint32_t kSetEnabled = 0x2C87E0;  // thiscall instance (bool)
 // co-op menu: +0x24 P_MainCOOP, then its buttons B_Online, B_Split, B_LAN, B_Options
@@ -92,6 +94,8 @@ X86_FUNC(sub_001A7137) {
     for (int i = 0; i < 3; i++) {
         W32(order[i] + kUp, R32(order[(i + 2) % 3] + kId));
         W32(order[i] + kDown, R32(order[(i + 1) % 3] + kId));
+        W32(order[i] + kUpInstance, order[(i + 2) % 3]);
+        W32(order[i] + kDownInstance, order[(i + 1) % 3]);
         if (row <= 0 || row >= 100) continue;
         int move = top + i * row - FirstY(order[i]);
         EachFrame(order[i], [&](uint32_t frame) { W16(frame + kY, uint16_t(int16_t(R16(frame + kY)) + move)); });

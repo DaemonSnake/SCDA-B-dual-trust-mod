@@ -14,8 +14,12 @@ struct Pad {
 };
 
 void Init(void* hwnd);
-// keyboard and mouse buttons are merged into port 0, which is always connected
+// Ports 0 and 1 have what F10 > PLAYER 1 / PLAYER 2 plugs in; 2 and 3 are empty. The keyboard and mouse buttons
+// merge into the pad of the port they share, which is connected as long as the keyboard is on it.
 Pad Poll(int port);
+// the port the keyboard and mouse are on, -1 for none
+int KeyboardPort();
+bool PadConnected(int slot);  // XInput slot 0-3
 void Rumble(int port, uint16_t left, uint16_t right);
 void SetBlocked(bool blocked);  // the options panel takes the input
 

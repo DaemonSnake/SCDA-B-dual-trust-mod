@@ -17,7 +17,8 @@ constexpr uint32_t kAnalogUp = 0xC4;   // IK_AnalogUp, then Down, Left, Right
 X86_EXTERN_FUNC(__imp__sub_0004AF95);
 X86_FUNC(sub_0004AF95) {
     uint32_t key = R32(ctx.esp + 12) - kAnalogUp;
-    if (key < 4 && R32(ctx.ecx + kPadIndex) == 0 && input::StickKeys() >> key & 1)
+    int keyboard = input::KeyboardPort();
+    if (key < 4 && keyboard >= 0 && R32(ctx.ecx + kPadIndex) == uint32_t(keyboard) && input::StickKeys() >> key & 1)
         G<float>(ctx.esp + 4) = float(int32_t(R32(ctx.esp + 8)));
     __imp__sub_0004AF95(ctx, base);
 }

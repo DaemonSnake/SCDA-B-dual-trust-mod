@@ -4,6 +4,7 @@
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 
 #include "app/app.h"
@@ -48,6 +49,11 @@ constexpr uint32_t kListType = 10;
 constexpr uint32_t kHudLayer = 100;
 // held open in play and worked with the move keys: the mouse keeps looking around
 constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
+// the message box, among others "Controller Disconnected ... press START": up while a player has lost its port,
+// which only a Start press on a free port claims back
+constexpr uint32_t kMsgBox = game::magma::Id("P_MsgBox");
+// first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; client +0x34 viewport count
+constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kViewportCount = 0x34;
 // a hidden button that takes a page's buttons (mission end and review, loadout); the pad cannot move focus off it,
 // a click anywhere presses A on it
 constexpr uint32_t kEventsCatcher = game::magma::Id("B_EventsCatcher");
@@ -192,6 +198,20 @@ X86_FUNC(sub_0004B525) {
     __imp__sub_0004B525(ctx, base);
     uint32_t client = R32(viewport + 0x18);
     uint32_t engine = client ? R32(client + 0x2C) : 0;
+    // TEMPORARY: split screen viewports, +0x1EC/+0x1F0 the players' claimed ports, +0x1F4 the port each reads
+    if (client) {
+        static std::string last;
+        std::string now;
+        for (uint32_t i = 0; i < std::min(R32(client + 0x34), 4u); i++) {
+            uint32_t v = R32(R32(client + 0x30) + i * 4);
+            char item[64];
+            std::snprintf(item, sizeof(item), " %08X %d/%d/%d", v, int32_t(R32(v + 0x1EC)), int32_t(R32(v + 0x1F0)),
+                          int32_t(R32(v + 0x1F4)));
+            now += item;
+        }
+        if (now != last) LOGI("split: viewports%s (keyboard on port %d)", now.c_str(), input::KeyboardPort());
+        last = now;
+    }
     if (!engine || R32(R32(client + 0x30)) != viewport) return;
     // guest calls go below a scratch block under the caller's stack
     uint32_t esp = ctx.esp;
@@ -201,8 +221,10 @@ X86_FUNC(sub_0004B525) {
     input::SetMenu(menu);
     uint32_t top = InputPage();
     uint32_t page = top ? R32(top + 0x14) : 0;
-    input::SetTitleScreen(page == game::magma::Id("P_Start"));
-    input::SetPauseMenu(page == game::magma::Id("P_Pause"));
+    bool reconnect = page == kMsgBox && (int32_t(R32(viewport + kPlayer1Port)) == -1 ||
+                                         (R32(client + kViewportCount) > 1 && int32_t(R32(viewport + kPlayer2Port)) == -1));
+    input::SetTitleScreen(page == game::magma::Id("P_Start") || reconnect);
+    input::SetPauseMenu(page == game::magma::Id("P_Pause") || reconnect);
     input::SetQuickInventory(page == kQuickInventory);
     input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
     game::UpdateView(viewport);

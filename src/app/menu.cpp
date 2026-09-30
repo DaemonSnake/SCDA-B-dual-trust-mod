@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,10 @@ constexpr uint32_t kFpsCaps[] = {0, 30, 60, 75, 90, 120, 144, 165, 240, 360};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
+// player 2 may be empty from its own list, player 1 only by handing its devices to player 2
+constexpr Port kPlayer1Choices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3}, {true, -1},
+                                    {false, 0}, {false, 1}, {false, 2}, {false, 3}};
+constexpr Port kPlayer2Choices[] = {{false, -1}, {true, -1}, {false, 0}, {false, 1}, {false, 2}, {false, 3}};
 
 int StepIndex(int index, int step, int count) {
     if (count <= 0) return 0;
@@ -153,6 +158,46 @@ bool TextRow(const char* label, char* buf, size_t size) {
 
 const char* OnOff(bool on) { return on ? "ON" : "OFF"; }
 
+std::string PortText(const Port& p) {
+    if (p.keyboard && p.pad >= 0) return "KEYBOARD + CONTROLLER " + std::to_string(p.pad + 1);
+    if (p.keyboard) return "KEYBOARD";
+    if (p.pad >= 0) return "CONTROLLER " + std::to_string(p.pad + 1);
+    return "NOT CONNECTED";
+}
+
+bool SamePort(const Port& a, const Port& b) { return a.keyboard == b.keyboard && a.pad == b.pad; }
+
+// a device the other player has moves over to this one, which may leave them with nothing
+Port Leftover(const Settings& s, int player, const Port& choice) {
+    Port left = s.players[1 - player];
+    if (choice.keyboard) left.keyboard = false;
+    if (choice.pad >= 0 && choice.pad == left.pad) left.pad = -1;
+    return left;
+}
+
+// Stepping would pass through choices on the way, so it skips those that leave player 1 with nothing; the list
+// takes any choice.
+bool SetPlayer(Settings& s, int player, const Port& choice, bool keep_player1 = false) {
+    Port left = Leftover(s, player, choice);
+    if (keep_player1 && player == 1 && !left.keyboard && left.pad < 0) return false;
+    s.players[1 - player] = left;
+    s.players[player] = choice;
+    return true;
+}
+
+std::span<const Port> PlayerChoices(int player) {
+    return player == 0 ? std::span<const Port>(kPlayer1Choices) : std::span<const Port>(kPlayer2Choices);
+}
+
+void StepPlayer(Settings& s, int player, int step) {
+    std::span<const Port> choices = PlayerChoices(player);
+    int count = int(choices.size()), i = 0;
+    for (int k = 0; k < count; k++)
+        if (SamePort(choices[k], s.players[player])) i = k;
+    for (int tries = 1; tries < count; tries++)
+        if (SetPlayer(s, player, choices[i = StepIndex(i, step, count)], true)) return;
+}
+
 void Changed(bool display) {
     if (display) ApplyDisplay();
     Save();
@@ -160,7 +205,8 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kAsyncShaders, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kAsyncShaders, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse,
+    kPlayer1, kPlayer2
 };
 
 using rows::Kind;
@@ -184,6 +230,9 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kAsyncShaders, "ASYNC SHADERS"},
     {Kind::Heading, -1, "GAME"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
+    {Kind::Heading, -1, "CONTROLLERS"},
+    {Kind::Value, kPlayer1, "PLAYER 1"},
+    {Kind::Value, kPlayer2, "PLAYER 2"},
     {Kind::Heading, -1, "CO-OP"},
     {Kind::Value, kTickRate, "TICK RATE"},
     {Kind::Value, kInputDelay, "MIN INPUT DELAY"},
@@ -299,6 +348,13 @@ std::string RowText(int id, int step) {
         }
         case kJoinIp:
             return s.join_ip;
+        case kPlayer1:
+        case kPlayer2: {
+            int player = id == kPlayer1 ? 0 : 1;
+            if (step) StepPlayer(s, player, step);
+            std::snprintf(text, sizeof(text), "%s", PortText(s.players[player]).c_str());
+            break;
+        }
         case kHideHud:
             if (step) s.hide_hud = !s.hide_hud;
             std::snprintf(text, sizeof(text), "%s", OnOff(s.hide_hud));
@@ -390,6 +446,43 @@ void PollCapture() {
     g_capture_done = ImGui::GetFrameCount();
 }
 
+// label left, a drop-down list of the player's choices where the value sits: stepping through them would hand
+// devices back and forth between the players on the way
+void PlayerRow(const char* label, int player) {
+    Settings& s = Get();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
+    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
+    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    ImGui::PushID(label);
+    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
+    ImGui::SetNextItemWidth(block_w);
+    // opaque: the rows under the list showed through
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
+    if (ImGui::BeginCombo("##device", PortText(s.players[player]).c_str())) {
+        const Port& other = s.players[1 - player];
+        for (const Port& c : PlayerChoices(player)) {
+            bool current = SamePort(c, s.players[player]);
+            // an unplugged controller is left out, unless the player has it now
+            if (c.pad >= 0 && !current && !input::PadConnected(c.pad)) continue;
+            std::string text = PortText(c);
+            if (!current && ((c.keyboard && other.keyboard) || (c.pad >= 0 && c.pad == other.pad)))
+                text += player == 0 ? "  (FROM PLAYER 2)" : "  (FROM PLAYER 1)";
+            if (current && c.pad >= 0 && !input::PadConnected(c.pad)) text += "  (UNPLUGGED)";
+            if (ImGui::Selectable(text.c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
+            if (current) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+    ImGui::SetCursorPos(ImVec2(row_x, row_y));
+    ImGui::Dummy(ImVec2(row_w, row_h));
+}
+
 void DrawRows(int page) {
     size_t count = 0;
     const Row* list = rows::Page(page, &count);
@@ -397,6 +490,8 @@ void DrawRows(int page) {
         const Row& r = list[i];
         if (r.kind == Kind::Heading) {
             Section(r.label);
+        } else if (r.kind == Kind::Value && (r.id == kPlayer1 || r.id == kPlayer2)) {
+            PlayerRow(r.label, r.id == kPlayer1 ? 0 : 1);
         } else if (r.kind == Kind::Value) {
             if (int step = OptionRow(r.label, RowText(r.id, 0).c_str())) RowText(r.id, step);
         } else if (r.kind == Kind::Bind) {

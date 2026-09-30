@@ -40,11 +40,11 @@ HWND g_hwnd = nullptr;
 std::atomic<int> g_dx{0}, g_dy{0};
 std::atomic<uint32_t> g_clicks{0};
 
-// While the keyboard or mouse was used after the pad's last new press, port 0's pad does not rumble. Only new
-// pad presses count, so a drifting stick never takes over from the keyboard.
+// While the keyboard or mouse was used after the pad's last new press, the pad sharing the keyboard's port does not
+// rumble. Only new pad presses count, so a drifting stick never takes over from the keyboard.
 std::atomic<uint64_t> g_keyboard_ms{0}, g_pad_ms{0};
 std::atomic<uint32_t> g_keys_held{0}, g_pad_held{0};
-std::atomic<bool> g_rumbling{false};  // port 0's motors were last set running
+std::atomic<bool> g_rumbling{false};  // the keyboard port's motors were last set running
 std::atomic<uint64_t> g_movie_ms{0};  // the last movie frame
 constexpr uint64_t kMovieMs = 250;
 
@@ -468,6 +468,18 @@ int TakeWheel() { return g_wheel.exchange(0); }
 
 uint32_t StickKeys() { return g_stick_keys; }
 
+int KeyboardPort() {
+    const app::Settings& s = app::Get();
+    for (int port = 0; port < 2; port++)
+        if (s.players[port].keyboard) return port;
+    return -1;
+}
+
+bool PadConnected(int slot) {
+    XINPUT_STATE s{};
+    return slot >= 0 && XInputGetState(DWORD(slot), &s) == ERROR_SUCCESS;
+}
+
 void SetNetSession(bool net) {
     if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
 }
@@ -634,9 +646,11 @@ int PressedKey() {
 
 Pad Poll(int port) {
     Pad p;
+    int slot = port >= 0 && port < 2 ? app::Get().players[port].pad : -1;
+    bool keyboard = port == KeyboardPort();
     XINPUT_STATE s{};
-    bool pad = XInputGetState(DWORD(port), &s) == ERROR_SUCCESS;
-    p.connected = pad || port == 0;
+    bool pad = slot >= 0 && XInputGetState(DWORD(slot), &s) == ERROR_SUCCESS;
+    p.connected = pad || keyboard;
     if (!p.connected || g_blocked) return p;
     if (pad) {
         const XINPUT_GAMEPAD& g = s.Gamepad;
@@ -658,7 +672,7 @@ Pad Poll(int port) {
         p.ly = g.sThumbLY;
         p.rx = g.sThumbRX;
         p.ry = g.sThumbRY;
-        if (port == 0) {
+        if (keyboard) {
             uint32_t held = p.buttons;
             for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > 30) << (8 + i);
             int bit = 16;
@@ -667,22 +681,26 @@ Pad Poll(int port) {
         }
     }
     // a motor the game left running when the keyboard took over, the game may not set it again
-    if (port == 0 && g_rumbling && KeyboardLast()) {
+    if (keyboard && g_rumbling && KeyboardLast()) {
         XINPUT_VIBRATION off{};
-        XInputSetState(0, &off);
+        if (slot >= 0) XInputSetState(DWORD(slot), &off);
         g_rumbling = false;
     }
-    if (port == 0) g_stick_keys = 0;
-    if (port == 0 && Active()) Keyboard(p);
-    if (port == 0 && NowMs() < g_tap_until) p.buttons |= g_tap;
+    if (!keyboard) return p;
+    g_stick_keys = 0;
+    if (Active()) Keyboard(p);
+    if (NowMs() < g_tap_until) p.buttons |= g_tap;
     return p;
 }
 
 void Rumble(int port, uint16_t left, uint16_t right) {
-    if (port == 0 && KeyboardLast()) left = right = 0;
-    if (port == 0) g_rumbling = left || right;
+    int slot = port >= 0 && port < 2 ? app::Get().players[port].pad : -1;
+    bool keyboard = port == KeyboardPort();
+    if (keyboard && KeyboardLast()) left = right = 0;
+    if (keyboard) g_rumbling = left || right;
+    if (slot < 0) return;
     XINPUT_VIBRATION v{left, right};
-    XInputSetState(DWORD(port), &v);
+    XInputSetState(DWORD(slot), &v);
 }
 
 }  // namespace input
