@@ -154,6 +154,14 @@ X86_FUNC(sub_000367E4) {
     if (!ctx.eax && g_controls_screen && input::Pressed()) ctx.eax = 1;
 }
 
+// the movies' skip check (thiscall viewport), A or Start let go on any pad; the keyboard's usual confirm and back
+// keys skip too
+X86_EXTERN_FUNC(__imp__sub_0004B46F);
+X86_FUNC(sub_0004B46F) {
+    __imp__sub_0004B46F(ctx, base);
+    if (!ctx.eax && input::SkipKeyReleased()) ctx.eax = 1;
+}
+
 // front end video frame (thiscall, 2 arguments): a mission's outro plays here on the level change, the input page
 // still the mission review's
 X86_EXTERN_FUNC(__imp__sub_00038F96);

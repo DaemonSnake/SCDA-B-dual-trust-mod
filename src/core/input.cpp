@@ -568,6 +568,29 @@ bool Pressed() {
     return NewPress(w) != 0;
 }
 
+bool SkipKeyReleased() {
+    constexpr int kKeys[] = {VK_SHIFT, VK_RETURN, VK_SPACE, VK_ESCAPE};
+    constexpr uint64_t kGapMs = 500;  // polls further apart than this are another movie
+    static uint32_t up = 0, down = 0;  // seen up since the watch started, then down
+    static uint64_t last = 0;
+    uint64_t now = NowMs();
+    if (now - last > kGapMs || !Active()) up = down = 0;
+    last = now;
+    if (!Active()) return false;
+    bool released = false;
+    for (size_t i = 0; i < std::size(kKeys); i++) {
+        uint32_t bit = 1u << i;
+        if (Down(kKeys[i])) {
+            if (up & bit) down |= bit;
+        } else {
+            up |= bit;
+            released |= (down & bit) != 0;
+            down &= ~bit;
+        }
+    }
+    return released;
+}
+
 bool Cursor(int& x, int& y, int& w, int& h) {
     POINT pt;
     RECT r;

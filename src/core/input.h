@@ -68,6 +68,9 @@ void TapButtons(uint16_t buttons);
 void WaitForPress();
 // the same press, polled: one went down since the last call (the first call only notes what is held)
 bool Pressed();
+// Shift, Enter, Space or Escape let go in the game window, once per press; only a press seen going down counts, so
+// the key that started a movie does not skip it
+bool SkipKeyReleased();
 bool InMenu();
 // the keyboard or mouse was used after the pad's last new press
 bool KeyboardActive();
