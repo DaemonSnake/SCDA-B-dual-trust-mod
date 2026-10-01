@@ -58,6 +58,11 @@ uint64_t NowMs() {
 
 bool KeyboardLast() { return g_keyboard_ms > g_pad_ms; }
 
+// Windows asks for the cursor only when the mouse moves: a menu opening or the keyboard taking over shows it at once
+void RefreshCursor() {
+    if (g_hwnd) PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+}
+
 std::atomic<int> g_view{0};
 std::atomic<float> g_zoom_speed{0.0f};
 std::atomic<int> g_wheel{0};
@@ -330,7 +335,11 @@ void Keyboard(Pad& p) {
     if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN)) p.buttons |= kStart;
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
     keys |= uint32_t(Down(VK_BACK)) << 31;
-    if (keys & ~g_keys_held.exchange(keys)) g_keyboard_ms = NowMs();
+    if (keys & ~g_keys_held.exchange(keys)) {
+        bool was_pad = !KeyboardActive();
+        g_keyboard_ms = NowMs();
+        if (was_pad) RefreshCursor();
+    }
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
     bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
@@ -577,6 +586,7 @@ void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
         if (menu) ClipCursor(nullptr);
         g_settle_mouse = true;
+        RefreshCursor();
     }
 }
 
@@ -839,7 +849,12 @@ Pad Poll(int port) {
             for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > 30) << (8 + i);
             int bit = 16;
             for (int16_t axis : {p.lx, p.ly, p.rx, p.ry}) held |= uint32_t(std::abs(int(axis)) > 8000) << bit++;
-            if (held & ~g_pad_held.exchange(held)) g_pad_ms = NowMs();
+            if (held & ~g_pad_held.exchange(held)) {
+                bool was_keyboard = KeyboardActive();
+                g_pad_ms = NowMs();
+                // the menu cursor goes now rather than at the next mouse move
+                if (was_keyboard) PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+            }
         }
     }
     // a motor the game left running when the keyboard took over, the game may not set it again

@@ -154,7 +154,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
                 SetCursor(MenuOpen() || ConsoleOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512))
-                          : input::InMenu() && !input::Movie() ? static_cast<HCURSOR>(MenuCursor())
+                          : input::InMenu() && !input::Movie() && input::KeyboardActive() ? static_cast<HCURSOR>(MenuCursor())
                                                                : nullptr);
                 return TRUE;
             }
