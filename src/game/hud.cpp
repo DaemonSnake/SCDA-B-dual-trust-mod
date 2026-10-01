@@ -50,6 +50,7 @@ struct Rule {
 };
 
 constexpr uint32_t kEventBar = 0x467FE0A7;  // P_hud's scripted event bar, name not recovered
+constexpr uint32_t kFileView = 0x4E6BBCC7;  // computer.mgm's open file page over P_Computer, name not recovered
 
 // Magma names pages and elements by crc32 of their name. The goggles' vignette, lens ring and frame lines
 // are arcs of one circle: only a uniform stretch keeps them on one curve
@@ -83,13 +84,17 @@ struct Page {
     bool half;
     constexpr Page(std::string_view name, std::span<const Rule> r, Mode m = Mode::Fill, bool h = false)
         : id(Crc32(name)), rules(r), others(m), half(h) {}
+    constexpr Page(uint32_t i, std::span<const Rule> r, Mode m = Mode::Fill, bool h = false)
+        : id(i), rules(r), others(m), half(h) {}
 };
 
 // pages not listed are menus: Fill. The scope's side strips hold the outer ring's left and right arcs, which
-// stretching bulges: Extend repeats their outer edge instead
+// stretching bulges: Extend repeats their outer edge instead. The open file page draws its own comms box and legend
+// over P_Computer's, so it is placed the same way or both show
 constexpr Page kPages[] = {
     {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay, Mode::Extend},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
+    {kFileView, kOverlay},
 };
 
 constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8;  // page units
