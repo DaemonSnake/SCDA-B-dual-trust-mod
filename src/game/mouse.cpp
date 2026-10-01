@@ -233,6 +233,7 @@ X86_FUNC(sub_0004B525) {
     }
     if (!net) game::WhistleKeys(ctx, viewport);
     game::QuickSaveKeys(ctx, viewport, menu);
+    if (input::TakeEvent(input::KeyEvent::Reload) && !menu) game::QueueCommand("Reload", game::Route::Player);
     game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

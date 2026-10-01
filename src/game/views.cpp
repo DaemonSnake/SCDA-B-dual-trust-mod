@@ -3,6 +3,7 @@
 // level instead, up zooms in and down zooms out, stopping at the ends, and the click is tapped until the level
 // is reached. Sticky camera: the input side zooms it with the stick and remaps its keys.
 // Scripted events (in-game cinematics): s_ScriptedEvent's ProcessPauseMenu skips them, so Enter presses Start too.
+// Aiming with no interaction in reach, the pad's A reloads; the keyboard has a reload key instead.
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -58,6 +59,22 @@ void Eev(uint32_t pc) {
     }
 }
 
+// controller IManager (EInteractionManager), its Interactions a TArray (+0 data, +4 count)
+bool InteractReloads(uint32_t pc, uint32_t state) {
+    static constexpr uint32_t kTargeting[] = {
+        unreal::Name("s_FirstPersonTargeting"),  unreal::Name("s_Targeting"),
+        unreal::Name("s_RappellingTargeting"),   unreal::Name("s_DualRappellingTargeting"),
+        unreal::Name("s_SplitTargeting"),        unreal::Name("s_HOHTargeting"),
+        unreal::Name("s_GrabTargeting"),         unreal::Name("s_OverTrainTargeting"),
+        unreal::Name("s_TeamShouldersTargeting"), unreal::Name("s_CoopHangedTargeting"),
+    };
+    if (std::find(std::begin(kTargeting), std::end(kTargeting), state) == std::end(kTargeting)) return false;
+    uint32_t manager_offset = unreal::Offset(pc, unreal::Name("IManager"));
+    uint32_t manager = manager_offset ? R32(pc + manager_offset) : 0;
+    uint32_t list = manager ? unreal::Offset(manager, unreal::Name("Interactions")) : 0;
+    return list && R32(manager + list + 4) == 0;
+}
+
 }  // namespace
 
 namespace game {
@@ -88,6 +105,7 @@ void UpdateView(uint32_t viewport) {
         }
     }
     input::SetView(view, zoom_speed);
+    input::SetInteractReloads(InteractReloads(pc, state));
     if (view == input::View::Eev) Eev(pc);
     else g_in_eev = false;
 }

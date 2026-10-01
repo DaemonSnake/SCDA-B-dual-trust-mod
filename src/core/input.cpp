@@ -126,6 +126,7 @@ std::atomic<int> g_speed{4};
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
 
 std::atomic<bool> g_net{false};
+std::atomic<bool> g_interact_reloads{false};
 constexpr int kBlack = 4;  // Pad::analog
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
@@ -150,6 +151,7 @@ constexpr Target kStoryActions[] = {
     {{"alt_fire", "ALTERNATE FIRE", "RMB"}, 6},
     {{"interact", "INTERACTION", "Space,Enter"}, 0},
     {{"scope", "USE / EQUIP", "E,MMB"}, 2},
+    {{"reload", "RELOAD", "R"}, -1, true, KeyEvent::Reload},
     // the pad's black button brings up a picker between whistle and co-op action; the keys do each at once
     {{"whistle", "WHISTLE", "V"}, -1, true, KeyEvent::Whistle},
     {{"quick_inventory", "QUICK INVENTORY", "Ctrl"}, 5},
@@ -302,6 +304,7 @@ void Keyboard(Pad& p) {
         keys |= 1u << i;
         if (kActions[i].event != KeyEvent::None && g_net) {
             if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
+            if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[0] = 0xFF;
             g_down_as[i] = 1;
             continue;
         }
@@ -310,6 +313,8 @@ void Keyboard(Pad& p) {
             g_down_as[i] = 1;
             continue;
         }
+        // latched for the press, so an interaction coming into reach does not start one under a held key
+        if (!g_down_as[i] && kActions[i].button == 0 && g_interact_reloads && !menu) g_down_as[i] = -1;
         int b = g_down_as[i] - 1;  // -2: held as no button
         if (b == -1) {
             int button = kActions[i].button;
@@ -625,6 +630,10 @@ bool PadConnected(int slot) {
 
 void SetNetSession(bool net) {
     if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
+}
+
+void SetInteractReloads(bool on) {
+    if (g_interact_reloads.exchange(on) != on) LOGI("input: interact %s", on ? "reloads, held back" : "interacts");
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
