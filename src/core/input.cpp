@@ -50,6 +50,8 @@ std::atomic<uint32_t> g_keys_held{0}, g_pad_held{0};
 std::atomic<bool> g_rumbling{false};  // the keyboard port's motors were last set running
 std::atomic<uint64_t> g_movie_ms{0};  // the last movie frame
 constexpr uint64_t kMovieMs = 250;
+std::atomic<uint64_t> g_skip_ms{0};  // the cinematic's Skip prompt last drawn
+constexpr uint64_t kSkipMs = 250;
 
 uint64_t NowMs() {
     auto since = std::chrono::steady_clock::now().time_since_epoch();
@@ -337,7 +339,8 @@ void Keyboard(Pad& p) {
         p.analog[0] = 0xFF;
         if (g_title) p.buttons |= kStart;
     }
-    if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN)) p.buttons |= kStart;
+    if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs)
+        p.buttons |= kStart;
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
     keys |= uint32_t(Down(VK_BACK)) << 31;
     if (keys & ~g_keys_held.exchange(keys)) {
@@ -543,9 +546,13 @@ void OnRawInput(void* handle) {
     }
 }
 
+void OnPress() { g_press_counts = Active() && g_menu; }
+
 void OnClick() {
-    if (Active() && g_menu) g_clicks++;
+    if (g_press_counts.exchange(false) && Active() && g_menu) g_clicks++;
 }
+
+void SkipPromptShown() { g_skip_ms = NowMs(); }
 
 void ReleaseCursor() {
     ClipCursor(nullptr);

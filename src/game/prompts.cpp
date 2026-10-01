@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "core/input.h"
 #include "game/magma.h"
@@ -322,6 +323,13 @@ void EventPrompts(X86Context& ctx, uint32_t bar) {
     bool keyboard = input::KeyboardActive();
     uint32_t element = bar ? R32(bar + 8) : 0;
     uint32_t box = element ? R32(element + 0x1C) : 0;
+    uint32_t skip = box ? Child(ctx, box, kEventPrompts[0].text) : 0;
+    uint32_t skip_text = skip ? R32(skip + 8) : 0;
+    bool skippable = skip_text && (G<uint8_t>(skip + 0x18) & 1) && !ReadText(skip_text).empty();
+    if (skippable) input::SkipPromptShown();
+    static bool was_skippable = false;
+    if (std::exchange(was_skippable, skippable) != skippable)
+        LOGI("prompts: cinematic skip prompt %s", skippable ? "shown" : "hidden");
     for (size_t i = 0; i < std::size(kEventPrompts); i++) {
         const Prompt& p = kEventPrompts[i];
         Held& h = g_held[i];

@@ -68,6 +68,8 @@ void SetNetSession(bool net);
 // reload key reloads (in a synced session it holds A, as the pad would)
 void SetInteractReloads(bool on);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
+// the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses
+void SkipPromptShown();
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
 void TapButtons(uint16_t buttons);
 
