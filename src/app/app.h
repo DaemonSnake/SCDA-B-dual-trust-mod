@@ -11,10 +11,10 @@ namespace app {
 
 enum class DisplayMode : uint32_t { Fullscreen, Windowed, Borderless };
 
-// what a player's controller port has plugged in: the keyboard and mouse, an XInput controller, or both
+// what a player's controller port has plugged in: the keyboard and mouse, a controller, or both
 struct Port {
     bool keyboard = false;
-    int pad = -1;  // XInput slot 0-3, -1 for none
+    int pad = -1;  // controller slot 0-3, -1 for none
 };
 
 struct Settings {

@@ -19,7 +19,7 @@ void Init(void* hwnd);
 Pad Poll(int port);
 // the port the keyboard and mouse are on, -1 for none
 int KeyboardPort();
-bool PadConnected(int slot);  // XInput slot 0-3
+bool PadConnected(int slot);  // controller slot 0-3
 void Rumble(int port, uint16_t left, uint16_t right);
 void SetBlocked(bool blocked);  // the options panel takes the input
 
