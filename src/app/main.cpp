@@ -126,6 +126,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_INPUT:
             input::OnRawInput(reinterpret_cast<void*>(lp));
             break;
+        case WM_LBUTTONDOWN:
+            input::OnPress();
+            break;
         case WM_LBUTTONUP:
             input::OnClick();
             break;

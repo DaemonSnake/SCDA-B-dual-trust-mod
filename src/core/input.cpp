@@ -42,6 +42,8 @@ std::atomic<bool> g_settle_mouse{false};
 HWND g_hwnd = nullptr;
 std::atomic<int> g_dx{0}, g_dy{0};
 std::atomic<uint32_t> g_clicks{0};
+// a press made while the input was not taken (a key capture binding the left button) is no click on its release
+std::atomic<bool> g_press_counts{false};
 
 // While the keyboard or mouse was used after the pad's last new press, the pad sharing the keyboard's port does not
 // rumble. Only new pad presses count, so a drifting stick never takes over from the keyboard.

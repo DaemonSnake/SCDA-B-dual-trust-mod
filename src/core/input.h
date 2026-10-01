@@ -25,7 +25,8 @@ void SetBlocked(bool blocked);  // the options panel takes the input
 
 // window thread
 void OnRawInput(void* handle);
-void OnClick();
+void OnPress();  // the left button went down
+void OnClick();  // and came up: a menu click, when it also went down in the menu with the input taken
 void ReleaseCursor();
 // raw mouse counts since the last call, scaled by the settings; false when there are none
 bool TakeMouse(float& dx, float& dy);
