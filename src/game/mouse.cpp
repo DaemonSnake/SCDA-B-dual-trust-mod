@@ -3,6 +3,7 @@
 // them; the game's ini binds them to aMouseX and aMouseY.
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
+// The wheel steps up and down as the stick does, a notch a step.
 #include <algorithm>
 #include <iterator>
 
@@ -210,6 +211,7 @@ X86_FUNC(sub_0004B525) {
     game::MenuPlace(ctx);
     bool menu = Menu(g);
     input::SetMenu(menu);
+    for (int n = input::TakeMenuWheel(); menu && n; n += n > 0 ? -1 : 1) Tap(g, n > 0 ? kAnalogUp : kAnalogDown);
     uint32_t top = InputPage();
     uint32_t page = top ? R32(top + 0x14) : 0;
     bool reconnect = page == kMsgBox && (int32_t(R32(viewport + kPlayer1Port)) == -1 ||

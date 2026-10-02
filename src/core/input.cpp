@@ -70,6 +70,7 @@ void RefreshCursor() {
 std::atomic<int> g_view{0};
 std::atomic<float> g_zoom_speed{0.0f};
 std::atomic<int> g_wheel{0};
+std::atomic<int> g_menu_wheel{0};  // wheel delta in a menu not yet taken, WHEEL_DELTA a notch
 std::atomic<uint16_t> g_tap{0};
 std::atomic<uint64_t> g_tap_until{0};
 constexpr uint64_t kTapMs = 80;
@@ -540,6 +541,7 @@ void OnRawInput(void* handle) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
     }
+    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && g_menu) g_menu_wheel += SHORT(m.usButtonData);
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
@@ -599,6 +601,7 @@ std::u16string TakeChars() {
 void SetMenu(bool menu) {
     if (g_menu.exchange(menu) != menu) {
         if (menu) ClipCursor(nullptr);
+        g_menu_wheel = 0;
         g_settle_mouse = true;
         RefreshCursor();
     }
@@ -622,6 +625,12 @@ void SetView(View view, float zoom_speed) {
 }
 
 int TakeWheel() { return g_wheel.exchange(0); }
+
+int TakeMenuWheel() {
+    int notches = g_menu_wheel / WHEEL_DELTA;
+    g_menu_wheel -= notches * WHEEL_DELTA;
+    return notches;
+}
 
 uint32_t StickKeys() { return g_stick_keys; }
 
@@ -711,14 +720,17 @@ int NewPress(PressWatch& w) {
 
 }  // namespace
 
-void WaitForPress() {
+void WaitForPress(void (*tick)(void*), void* arg) {
     // the picture is no menu: the cursor goes, now rather than at the next mouse move
     SetMenu(false);
     PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     PressWatch w;
     NewPress(w);
     int pressed;
-    while (!(pressed = NewPress(w))) Sleep(10);
+    while (!(pressed = NewPress(w))) {
+        if (tick) tick(arg);
+        Sleep(10);
+    }
     bool pad = pressed >= 0x100;
     LOGI("input: the wait ended by %s %X", pad ? "pad button" : "key", pad ? pressed - 0x100 : pressed);
 }
