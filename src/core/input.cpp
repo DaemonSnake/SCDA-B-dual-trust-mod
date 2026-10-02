@@ -720,17 +720,14 @@ int NewPress(PressWatch& w) {
 
 }  // namespace
 
-void WaitForPress(void (*tick)(void*), void* arg) {
+void WaitForPress() {
     // the picture is no menu: the cursor goes, now rather than at the next mouse move
     SetMenu(false);
     PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
     PressWatch w;
     NewPress(w);
     int pressed;
-    while (!(pressed = NewPress(w))) {
-        if (tick) tick(arg);
-        Sleep(10);
-    }
+    while (!(pressed = NewPress(w))) Sleep(10);
     bool pad = pressed >= 0x100;
     LOGI("input: the wait ended by %s %X", pad ? "pad button" : "key", pad ? pressed - 0x100 : pressed);
 }
