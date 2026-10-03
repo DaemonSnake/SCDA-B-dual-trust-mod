@@ -2,13 +2,13 @@
 
 A static recompilation of the original Xbox version of Splinter Cell: Double Agent into a native 64 bit Windows executable. The game's x86 code is translated to C++ ahead of time, the Xbox kernel, Direct3D and DirectSound calls are implemented on Windows, and everything is drawn with Direct3D 12 and played through XAudio2. Made with the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool, created for this game originally.
 
-## Installation
+## Game Setup
 
-1. Install Visual Studio 2022 with **Desktop development with C++**, **C++ Clang tools for Windows** and **C++ CMake tools for Windows** (build.bat offers to add the last two), plus Git.
-2. Clone this repository.
-3. Put the game files in the `assets` folder (see Game Setup).
-4. Run `build.bat`. The first build recompiles the game and takes a while.
-5. Run `out\build\win-amd64-release\SCDAOffline.exe`.
+- Put the game files in the `assets` folder.
+- Run `SCDAOffline.exe`.
+- You can adjust the recomp settings inside the in-game options menu whilst the game is running, or alternatively via the F10 quick menu.
+<img width="1920" height="1080" alt="{3C71BA44-CD79-411A-90CB-7F88F80572B9}" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3" /> 
+
 
 > [!NOTE]
 > No game data, XEX bytes or generated code are in this repository. You must own the game.
@@ -18,12 +18,12 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 ### Display
 - **Native Renderer** - The game renders through a native Direct3D 12 renderer, no emulation.
 - **Display Mode** - Allows you to change between Fullscreen, Borderless and Windowed modes.
-- **Resolution** - Lists every mode your monitor reports and defaults to the desktop mode, replacing the 1280x720 lock.
+- **Resolution** - Lists every mode your monitor reports and defaults to the desktop mode, replacing the 640x480 lock.
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, for supersampling or downscaling, independent of the window size.
 - **Max Frame Rate** - Caps the frame rate at your monitor's refresh rate, at a value you pick, or removes the cap, replacing the console's 30 FPS limiter.
--**V-Sync** - Enables V-Sync, reducing tearing.
+- **V-Sync** - Enables V-Sync, reducing tearing.
 - **FPS Counter** - Shows the frame rate on screen.
-- 
+
 ### Graphics
 - **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
@@ -58,5 +58,13 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 ### General
 - **Boot Splash** - Put a `SplinterCell4Logo.png` (or `.bmp`) beside the exe for a splash screen at launch.
 - **Versus** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
+
+### Build
+
+- Install Visual Studio 2022 with **Desktop development with C++**, **C++ Clang tools for Windows** and **C++ CMake tools for Windows** (build.bat offers to add the last two), plus Git.
+- Clone this repository.
+- Put the game files in the `assets` folder.
+- Run `build.bat`. The first build recompiles the game and takes a while.
+- Run `out\build\win-amd64-release\SCDAOffline.exe`.
 
 
