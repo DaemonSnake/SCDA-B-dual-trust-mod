@@ -13,6 +13,11 @@
 
 using namespace kernel;
 
+namespace versus {
+void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub);  // prompts.cpp
+void LeavePage();
+}  // namespace versus
+
 namespace {
 
 // Magma names pages by crc32 of the lowercase name
@@ -41,6 +46,7 @@ struct Quad {
 bool g_hud = false;      // a HUD page is being drawn
 bool g_capture = false;  // a HUD instance is being drawn: its quads wait for its bounds
 bool g_replay = false;
+bool g_pages = false;    // a page was drawn this frame
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
 
@@ -84,7 +90,10 @@ X86_FUNC(sub_0025A3F0) {
         seen.push_back(id);
         LOGI("versus widescreen: page %08X %s", id, g_hud ? "hud" : "menu");
     }
+    g_pages = true;
+    versus::EnterPage(ctx, ctx.ecx, 0);
     __imp__sub_0025A3F0(ctx, base);
+    versus::LeavePage();
     g_hud = saved;
 }
 
@@ -126,8 +135,10 @@ X86_FUNC(sub_002620A0) {
 // Magma frame (thiscall): every page into the canvas, which its caller then flushes
 X86_EXTERN_FUNC(__imp__sub_00252B80);
 X86_FUNC(sub_00252B80) {
+    g_pages = false;
     __imp__sub_00252B80(ctx, base);
-    if (!app::Get().fps_counter) return;
+    // while loading no page draws and the fonts' textures cannot be made: text then reads a closed package
+    if (!app::Get().fps_counter || !g_pages) return;
     g_replay = true;
     g_mode = Mode::Left;
     app::DrawFps(ctx);
