@@ -11,6 +11,7 @@
 
 #include "app/app.h"
 #include "game/loading.h"
+#include "gpu/backend.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -253,7 +254,7 @@ bool g_loading = false;  // a loading picture is up, no Magma page drawn since
 // in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
 // centred 4:3 like the page around it. A quad the full viewport wide (full screen movies, post effects) is left as
-// it is, and so is the loading bar over a loading picture, which is stretched with the frame. The ESRB notice keeps
+// it is, and so is the loading bar over a loading picture, which is pillarboxed with the frame. The ESRB notice keeps
 // its 4:3 proportions: a sixth of its width more on each side (clamped, so the edge columns reach the screen sides).
 X86_EXTERN_FUNC(__imp__sub_002E3011);
 X86_FUNC(sub_002E3011) {
@@ -322,6 +323,7 @@ X86_FUNC(sub_002C64E0) {
 X86_EXTERN_FUNC(__imp__sub_002303E8);
 X86_FUNC(sub_002303E8) {
     __imp__sub_002303E8(ctx, base);
+    if (app::Get().fps_counter) Draw(ctx, base, Mode::Left, [](X86Context& c, uint8_t*) { app::DrawFps(c); });
     g_offset = g_hud_seen ? kNone : kCentre;
     g_in_level = g_hud_seen;
     g_hud_seen = false;
@@ -342,7 +344,12 @@ X86_FUNC(sub_002E5F95) {
     W32(ri + 0x4B74, back);
     g_esrb = path.find("esrb") != std::string::npos;
     g_loading = p != 0 || SavedDataAddress();  // no picture: it fades from the display kept through a reboot
+    bool splash = gpu::g_splash;
+    gpu::g_splash = p != 0 && !g_esrb;  // a picture: shown 4:3 by Present
+    gpu::g_in_splash++;
     __imp__sub_002E5F95(ctx, base);
+    gpu::g_in_splash--;
+    if (!(ctx.eax & 0xFF)) gpu::g_splash = splash;  // picture not found, nothing drawn
     g_esrb = false;
     game::loading::AfterShowScreen(ctx);
 }

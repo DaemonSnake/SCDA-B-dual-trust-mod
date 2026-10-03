@@ -15,6 +15,7 @@
 
 #include "core/input.h"
 #include "game/loading.h"
+#include "gpu/backend.h"
 #include "gpu/texture.h"
 #include "kernel/memory.h"
 #include "xdk/hle.h"
@@ -40,8 +41,10 @@ void FullBar(X86Context& ctx) {
     auto f = [](float v) { return std::bit_cast<uint32_t>(v); };
     uint32_t ecx = ctx.ecx;
     ctx.ecx = device;
+    gpu::g_in_splash++;
     CallGuest(ctx, kDrawTile, {f(kBarX), f(kBarY), f(kBarX + kBarWidth), f(kBarY + kBarHeight), f(0), f(0), f(1), f(1), 0,
                                f(0), f(0), f(0)});
+    gpu::g_in_splash--;
     ctx.ecx = ecx;
     CallGuest(ctx, SYM(D3DDevice_Swap), {0});
 }
@@ -412,11 +415,14 @@ void game::loading::AfterShowScreen(X86Context& ctx) {
 // the progress thread's bar (sub_00039566, the call returning at 0x39837), ret 0x30
 X86_EXTERN_FUNC(__imp__sub_002E65A4);
 X86_FUNC(sub_002E65A4) {
-    if (R32(ctx.esp) == 0x39837 && KeptDisplayMarked()) {
+    bool bar = R32(ctx.esp) == 0x39837;
+    if (bar && KeptDisplayMarked()) {
         ctx.esp += 4 + 0x30;
         return;
     }
+    gpu::g_in_splash += bar;  // the bar stays with the picture under it
     __imp__sub_002E65A4(ctx, base);
+    gpu::g_in_splash -= bar;
 }
 
 // The controller layout screen (loading screen vtable +0x34 sub_00038C3F, thiscall) shows controllerN.tga and polls
@@ -460,7 +466,9 @@ X86_FUNC(sub_00038F96) {
 // bar on the other buffer's older picture. The frame just shown is copied into the back buffer for the next bar.
 X86_EXTERN_FUNC(__imp__sub_001CD157);
 X86_FUNC(sub_001CD157) {
+    gpu::g_in_splash++;
     __imp__sub_001CD157(ctx, base);
+    gpu::g_in_splash--;
     if (!ctx.eax) return;
     uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});
     uint32_t back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});

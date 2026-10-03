@@ -303,7 +303,7 @@ public:
     void Clear(const State& s, uint32_t count, const uint8_t* rects, uint32_t flags, uint32_t color, float z, uint32_t stencil) override;
     void Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) override;
     void Copy(const Surface& src, const Surface& dst, uint32_t count, uint32_t src_rects, uint32_t dst_points) override;
-    void Present(const Surface& front) override;
+    void Present(const Surface& front, bool pillarbox) override;
     void Sync(uint32_t data, uint32_t size) override;
     void SyncLate(uint32_t data) override;
     bool DeliverLate(uint32_t data) override;
@@ -468,7 +468,6 @@ private:
     Assembled asm_;  // kept between draws for its buffers
     bool tearing_ = false;
     uint64_t presents_ = 0;
-    double fps_ = 0;
     std::chrono::steady_clock::time_point fps_t_ = std::chrono::steady_clock::now();
     uint64_t fps_n_ = 0;
 };
@@ -2004,7 +2003,7 @@ void D3D12Backend::ResizeSwap() {
     bb_h_ = h;
 }
 
-void D3D12Backend::Present(const Surface& front) {
+void D3D12Backend::Present(const Surface& front, bool pillarbox) {
     PerfScope perf_present{g_perf.present};
     if (cap_) {
         CapStep(Surface{});
@@ -2078,6 +2077,7 @@ void D3D12Backend::Present(const Surface& front) {
             bool wide = app::Widescreen();
             float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
             float vw = std::min(w, h * aspect), vh = vw / aspect;
+            if (pillarbox) vw = vh * 4.0f / 3.0f;
             float uv[4] = {0, 0, 1, 1};
             D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
             D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
@@ -2091,7 +2091,7 @@ void D3D12Backend::Present(const Surface& front) {
             ImGui_ImplDX12_NewFrame();
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
-            app::DrawUi(fps_);
+            app::DrawUi();
             ImGui::Render();
             ID3D12DescriptorHeap* uh[] = {ui_heap_.Get()};
             cl_->SetDescriptorHeaps(1, uh);
@@ -2142,7 +2142,7 @@ void D3D12Backend::Present(const Surface& front) {
     auto now = std::chrono::steady_clock::now();
     double el = std::chrono::duration<double>(now - fps_t_).count();
     if (el >= 0.5) {
-        fps_ = fps_n_ / el;
+        app::g_fps = float(fps_n_ / el);
         fps_n_ = 0;
         fps_t_ = now;
     }

@@ -123,6 +123,17 @@ X86_FUNC(sub_002620A0) {
     ctx.esp = esp;
 }
 
+// Magma frame (thiscall): every page into the canvas, which its caller then flushes
+X86_EXTERN_FUNC(__imp__sub_00252B80);
+X86_FUNC(sub_00252B80) {
+    __imp__sub_00252B80(ctx, base);
+    if (!app::Get().fps_counter) return;
+    g_replay = true;
+    g_mode = Mode::Left;
+    app::DrawFps(ctx);
+    g_replay = false;
+}
+
 // canvas quad add for Magma text and images (thiscall(util, corners, 12 more), ret 0x34), in viewport pixels
 X86_EXTERN_FUNC(__imp__sub_001231E0);
 X86_FUNC(sub_001231E0) {

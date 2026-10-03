@@ -26,7 +26,8 @@ public:
     virtual void Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) = 0;
     virtual void Copy(const Surface& src, const Surface& dst, uint32_t count, uint32_t src_rects_va,
                       uint32_t dst_points_va) = 0;
-    virtual void Present(const Surface& front) = 0;
+    // pillarbox: the frame is a 4:3 picture
+    virtual void Present(const Surface& front, bool pillarbox) = 0;
     // the CPU is about to touch this resource's memory: write GPU results back first
     virtual void Sync(uint32_t data_va, uint32_t size) = 0;
     // a lock that does not wait for the GPU (NOOVERWRITE): a result a frame or two old is what the console gives too
@@ -60,6 +61,10 @@ inline std::atomic<uint64_t> g_perf_sync_late{0}, g_perf_sync_block{0};  // read
 
 // the pipeline library to disk now: before a quick reboot starts the next process, and at quit
 void SavePipelineCache();
+
+// the frame buffer holds a 4:3 picture until a draw from outside it (in_splash: draws that belong to it)
+inline std::atomic<bool> g_splash{false};
+inline std::atomic<int> g_in_splash{0};
 
 // F3: save the next frame, every draw and target, under claude-outputs
 inline std::atomic<bool> g_capture{false};

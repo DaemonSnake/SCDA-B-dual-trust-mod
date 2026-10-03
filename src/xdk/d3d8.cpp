@@ -349,7 +349,7 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
     g_presents++;
     // the kept display is shown until the title presents its own
     kernel::SetSavedDataAddress(0);
-    if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]));
+    if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]), gpu::g_splash);
     app::Pace();
     // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
     uint32_t last = g_buffers[g_buffer_count - 1], data = R32(last + 4), lk = R32(last + 8);
@@ -727,6 +727,7 @@ HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    if (!gpu::g_in_splash) gpu::g_splash = false;
     if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
     return 0;
 }
@@ -734,6 +735,7 @@ HLE_STDCALL(D3DDevice_DrawVertices, 3) {
 HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    if (!gpu::g_in_splash) gpu::g_splash = false;
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
     return 0;
@@ -771,6 +773,7 @@ HLE_STDCALL(D3DDevice_DrawVerticesUP, 4) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (!g_backend || !a[1] || !a[3]) return 0;
     SyncDeferred();
+    if (!gpu::g_in_splash) gpu::g_splash = false;
     auto stream = g_state.streams[0];
     g_state.streams[0] = {UpVertices(a[2], a[1] * a[3]), a[3]};
     g_backend->Draw(g_state, a[0], 0, a[1], nullptr);

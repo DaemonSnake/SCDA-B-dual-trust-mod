@@ -1,10 +1,13 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <map>
 #include <mutex>
 #include <string>
 #include <vector>
+
+struct X86Context;
 
 // the host side: window, settings, options menu
 namespace app {
@@ -82,7 +85,12 @@ std::recursive_mutex& UiLock();
 bool MenuOpen();
 bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
-void DrawUi(double fps);
+void DrawUi();
+
+// frames shown a second, from the renderer
+inline std::atomic<float> g_fps{0};
+// the frame rate in the game's font, from the image's Magma frame hook
+void DrawFps(X86Context& ctx);
 
 // option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard
 namespace rows {
