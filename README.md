@@ -21,9 +21,12 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Resolution** - Lists every mode your monitor reports and defaults to the desktop mode, replacing the 1280x720 lock.
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, for supersampling or downscaling, independent of the window size.
 - **Max Frame Rate** - Caps the frame rate at your monitor's refresh rate, at a value you pick, or removes the cap, replacing the console's 30 FPS limiter.
+-**V-Sync** - Enables V-Sync, reducing tearing.
 - **FPS Counter** - Shows the frame rate on screen.
 - 
 ### Graphics
+- **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
+- **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
 
 ### Shader Model 3
 - **Shader Model** - Chooses between Shader Model 1.1, the console's look, and Shader Model 3.0, which turns on the Chaos Theory PC style features.
@@ -43,7 +46,6 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **HDR Rendering** - 
 - **Tone Mapping** - 
 - **HQ Soft Shadows** - 
-- **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
 
 ### Mouse and Keyboard
 - **Keyboard Support** - Fully supports keyboard and mouse input.
