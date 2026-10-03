@@ -92,7 +92,7 @@ void UpdateView(uint32_t viewport) {
     } else if (state == unreal::Name("s_Ledge") || state == unreal::Name("s_NarrowLadder") ||
                state == unreal::Name("s_Pipe") || state == unreal::Name("s_PipeSlideDown")) {
         view = input::View::Ledge;
-    } else if (state == unreal::Name("s_PickLock")) {
+    } else if (state == unreal::Name("s_PickLock") || state == unreal::Name("s_HandCuffed")) {
         view = input::View::Lockpick;
     } else if (state == unreal::Name("s_Camera")) {
         uint32_t base_offset = unreal::Offset(pc, unreal::Name("Base"));
