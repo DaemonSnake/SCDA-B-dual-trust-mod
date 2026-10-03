@@ -11,7 +11,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 
 
 > [!NOTE]
-> No game data, XEX bytes or generated code are in this repository. You must own the game.
+> No game data, XBE bytes or generated code are in this repository. You must own the game.
 
 ## Features
 
