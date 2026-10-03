@@ -1,6 +1,7 @@
-// Frame rate drawn by the game in its own font, top left, over the Magma pages.
+// Frame rate (top left) and the main menu watermark, drawn by the game in its own font over the Magma pages.
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
@@ -19,8 +20,8 @@ constexpr uint32_t kFonts = kVersus ? 0x3D8D84 : 0x6A66E4, kScreen = kVersus ? 0
 constexpr uint32_t kPageHeight = kVersus ? 0xAE : 0x86;
 // versus draws without checking these: manager +0x38 viewport, its +0x64 canvas
 constexpr uint32_t kManager = 0x3D8D74, kViewport = 0x38, kCanvas = 0x64;
-// font: vtable +8 Draw
-constexpr uint32_t kName = 0x08, kFontSize = 0x49, kPages = 0x478, kDraw = 0x08;
+// font: vtable +8 Draw, +0x10 Width(text) in font pixels (solo)
+constexpr uint32_t kName = 0x08, kFontSize = 0x49, kPages = 0x478, kDraw = 0x08, kWidth = 0x10;
 constexpr int kSize = 12, kMargin = 8;  // page units
 
 // the body text font, else any font with its page textures made
@@ -42,27 +43,39 @@ bool CanvasUp() {
     return viewport && R32(viewport + kCanvas);
 }
 
-}  // namespace
-
-void app::DrawFps(X86Context& ctx) {
+// y: baseline from the bottom; right: x is the text's end (solo only)
+void Text(X86Context& ctx, const char* text, int x, int y, int size, uint32_t colour, bool shadow, bool right) {
     static const uint32_t block = mem::AllocSystem(0x60);
-    uint32_t font = Font(), screen = R32(kScreen);
-    if (!block || !font || !screen || !CanvasUp()) return;
-    char text[32];
-    int n = std::clamp(std::snprintf(text, sizeof text, "FPS: %.1f", double(g_fps.load())), 0, 31);
+    uint32_t font = Font();
+    if (!block || !font || !CanvasUp()) return;
     // style: scale, colour with alpha in the top byte, spacing, flags
     uint32_t style = block, chars = block + 0x10;
-    for (int i = 0; i <= n; i++) W16(chars + uint32_t(i) * 2, uint8_t(text[i]));
-    W32(style, std::bit_cast<uint32_t>(float(kSize) / G<uint8_t>(font + kFontSize)));
+    int n = int(std::min<size_t>(std::strlen(text), 31));
+    for (int i = 0; i <= n; i++) W16(chars + uint32_t(i) * 2, i < n ? uint8_t(text[i]) : uint8_t(0));
+    float scale = float(size) / G<uint8_t>(font + kFontSize);
+    W32(style, std::bit_cast<uint32_t>(scale));
     W32(style + 8, 0);
     W32(style + 12, 0);
-    int y = int16_t(R16(screen + kPageHeight)) - kMargin - kSize;
-    uint32_t ecx = ctx.ecx, draw = R32(R32(font) + kDraw);
+    uint32_t ecx = ctx.ecx;
     ctx.ecx = font;
-    // Draw(text, x, y of the baseline from the bottom, style, space width, count), one more in versus
-    for (int shadow : {1, 0}) {
-        W32(style + 4, shadow ? 0xFF000000u : 0xFFFFFFFFu);
-        CallGuest(ctx, draw, {chars, uint32_t(kMargin + shadow), uint32_t(y - shadow), style, 0, uint32_t(n), 0});
+    if (right) x -= int(std::lround(CallGuest(ctx, R32(R32(font) + kWidth), {chars}) * scale));
+    // Draw(text, x, y, style, space width, count), one more in versus
+    for (int s = shadow; s >= 0; s--) {
+        W32(style + 4, s ? 0xFF000000u : colour);
+        CallGuest(ctx, R32(R32(font) + kDraw), {chars, uint32_t(x + s), uint32_t(y - s), style, 0, uint32_t(n), 0});
     }
     ctx.ecx = ecx;
 }
+
+}  // namespace
+
+void app::DrawFps(X86Context& ctx) {
+    uint32_t screen = R32(kScreen);
+    if (!screen) return;
+    char text[32];
+    std::snprintf(text, sizeof text, "FPS: %.1f", double(g_fps.load()));
+    Text(ctx, text, kMargin, int16_t(R16(screen + kPageHeight)) - kMargin - kSize, kSize, 0xFFFFFFFFu, true, false);
+}
+
+// mirrors the button legend: its text starts 80 in on baseline 46, size 16, grey B0
+void app::DrawWatermark(X86Context& ctx) { Text(ctx, "XBE Recomp V1", 560, 46, 16, 0xFFB0B0B0u, false, true); }
