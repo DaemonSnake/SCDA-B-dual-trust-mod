@@ -27,6 +27,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 ### Graphics
 - **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
+- **Shadow Resolution** - Allows you to change the shadow resolution
 
 ### Shader Model 3
 - **Shader Model** - Chooses between Shader Model 1.1, the console's look, and Shader Model 3.0, which turns on the Chaos Theory PC style features.
@@ -43,9 +44,9 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
   </table>
 </div>
 
-- **HDR Rendering** - 
-- **Tone Mapping** - 
-- **HQ Soft Shadows** - 
+- **HDR Rendering** - Enables shader model 3 HDR rendering.
+- **Tone Mapping** - Enables shader model 3 tone mapping.
+- **HQ Soft Shadows** - Enables shader model 3 soft shadows
 
 ### Mouse and Keyboard
 - **Keyboard Support** - Fully supports keyboard and mouse input.
@@ -56,8 +57,10 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Custom Menu Cursor** - Put a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
 
 ### General
+- **Skip Intro** - Skips the intro logo's.
 - **Boot Splash** - Put a `SplinterCell4Logo.png` (or `.bmp`) beside the exe for a splash screen at launch.
-- **Versus** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
+- **COOP Support** - Allows for online COOP, with a custom join IP.
+- **Versus Support** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
 
 ### Build
 
@@ -65,6 +68,6 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - Clone this repository.
 - Put the game files in the `assets` folder.
 - Run `build.bat`. The first build recompiles the game and takes a while.
-- Run `out\build\win-amd64-release\SCDAOffline.exe`.
+- Run `out\build\release\SCDAOffline.exe`.
 
 
