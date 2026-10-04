@@ -68,9 +68,14 @@ std::string MapName(const std::string& url) {
     return url.substr(at, url.find_first_of("? ", at) - at);
 }
 
-// single player missions only: the main menu (map Menu) has nothing to read, and in co-op (x01_coop_ice_a,
-// every co-op map has _coop_) a player held on the picture would fall behind the other
-bool Waits(const std::string& map) { return !map.empty() && map != "menu" && map.find("_coop_") == std::string::npos; }
+// Net-Z instance, null outside a LAN or Live session
+constexpr uint32_t kNetwork = 0x67296C;
+
+// every mission but the main menu (map Menu). A co-op map (each has _coop_) waits in split screen only: over the
+// network both machines relaunch, and the client looks for the host for 20 s, the host waits for it for 30 s
+bool Waits(const std::string& map) {
+    return !map.empty() && map != "menu" && (map.find("_coop_") == std::string::npos || !R32(kNetwork));
+}
 
 }  // namespace
 
