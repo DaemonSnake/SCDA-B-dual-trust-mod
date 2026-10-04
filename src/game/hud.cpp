@@ -330,10 +330,11 @@ X86_FUNC(sub_002303E8) {
     g_hud_seen = false;
 }
 
-// render device ShowScreen(path, ...) (thiscall on the render device): reads the picture's index bytes into the
-// device's cached back buffer (+0x4B74), then fades to it from the front buffer through Swaps of its own. The engine
-// refreshes that cache only after its own Swap, so after an earlier ShowScreen it can be the front buffer, and the
-// index bytes land in the picture being faded from. It is pointed at the current back buffer first.
+// render device ShowScreen(path, persist, fade, clear) (thiscall on the render device): reads the picture's index
+// bytes into the device's cached back buffer (+0x4B74), then fades to it from the front buffer through Swaps of its
+// own. The engine refreshes that cache only after its own Swap, so after an earlier ShowScreen it can be the front
+// buffer, and the index bytes land in the picture being faded from. It is pointed at the current back buffer first.
+// Without a picture the frame on screen stays what it was (faded out, or put in both buffers), 4:3 if it was.
 X86_EXTERN_FUNC(__imp__sub_002E5F95);
 X86_FUNC(sub_002E5F95) {
     game::loading::BeforeShowScreen(ctx);
@@ -343,10 +344,11 @@ X86_FUNC(sub_002E5F95) {
     uint32_t cached = R32(ri + 0x4B74), back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
     if (cached) W32(cached, R32(cached) - 1);  // the cache's reference moves to the back buffer
     W32(ri + 0x4B74, back);
+    if (!p && !SavedDataAddress() && !G<uint8_t>(ctx.esp + 0xC)) return game::loading::BothBuffers(ctx, ri);
     g_esrb = path.find("esrb") != std::string::npos;
-    g_loading = p != 0 || SavedDataAddress();  // no picture: it fades from the display kept through a reboot
+    g_loading |= p != 0 || SavedDataAddress();  // no picture: it fades from the display kept through a reboot
     bool splash = gpu::g_splash;
-    gpu::g_splash = p != 0 && !g_esrb;  // a picture: shown 4:3 by Present
+    if (p) gpu::g_splash = !g_esrb;  // a picture: shown 4:3 by Present
     gpu::g_in_splash++;
     __imp__sub_002E5F95(ctx, base);
     gpu::g_in_splash--;

@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-set "OUT=out\build\win-amd64-release"
+set "OUT=out\build\release"
 if not exist "%OUT%\SCDAOffline.exe" call build.bat || exit /b 1
 del /q SCDARecomp.zip 2>nul
 rem an empty assets folder beside the executables, where the game (files or .iso) goes

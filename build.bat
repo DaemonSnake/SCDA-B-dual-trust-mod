@@ -1,16 +1,16 @@
 @echo off
 setlocal
-title Tom Clancy's Splinter Cell: Double Agent - Build
+title Tom Clancy's Splinter Cell: Double Agent - XBE Recomp - Build
 cd /d "%~dp0"
 echo.
-echo   Tom Clancy's Splinter Cell: Double Agent - build
-echo   ================================================
+echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp
+echo   =====================================================
 echo.
 
 set "PF86=%ProgramFiles(x86)%"
 set "VSINST=%PF86%\Microsoft Visual Studio\Installer"
 set "VSWHERE=%VSINST%\vswhere.exe"
-set "OUT=%CD%\out\build\win-amd64-release"
+set "OUT=%CD%\out\build\release"
 
 if not exist assets\default.xbe goto :nogame
 if not exist assets\sc4_adv.xbe goto :nogame
@@ -41,14 +41,14 @@ for /f "tokens=*" %%v in ('clang++ --version ^| findstr /i version') do echo    
 
 rem ---------------------------------------------------------------- game
 echo [2/2] Game code
-echo       first build recompiles default.xbe and sc4_adv.xbe, expect 30 to 90 minutes ...
-cmake --preset win-amd64-release >nul || goto :fail
-cmake --build out\build\win-amd64-release || goto :fail
+echo       the first build recompiles default.xbe and sc4_adv.xbe: 30 to 90 minutes on weaker systems ...
+cmake --preset release >nul || goto :fail
+cmake --build out\build\release || goto :fail
 
 echo.
-echo   Tom Clancy's Splinter Cell: Double Agent built.
-echo   out\build\win-amd64-release\SCDAOffline.exe  story and co-op
-echo   out\build\win-amd64-release\SCDAOnline.exe   versus, started from the main menu
+echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.
+echo   out\build\release\SCDAOffline.exe  story and co-op
+echo   out\build\release\SCDAOnline.exe   versus, started from the main menu
 echo.
 if defined CI exit /b 0
 choice /c YN /n /m "  Play now? [Y/N] "

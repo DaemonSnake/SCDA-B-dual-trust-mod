@@ -480,6 +480,17 @@ X86_FUNC(sub_00038F96) {
     __imp__sub_00038F96(ctx, base);
 }
 
+namespace {
+// the frame just shown, copied into the back buffer
+void KeepFrame(X86Context& ctx) {
+    uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});
+    uint32_t back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
+    CallGuest(ctx, SYM(D3DDevice_CopyRects), {front, 0, 0, back, 0});
+    W32(front, R32(front) - 1);
+    W32(back, R32(back) - 1);
+}
+}  // namespace
+
 // level load progress (thiscall(progress), ret 4): draws the bar alone and presents it over whatever the back buffer
 // holds. The saving screen behind it is drawn once, into one of the two buffers, so every other frame showed the
 // bar on the other buffer's older picture. The frame just shown is copied into the back buffer for the next bar.
@@ -488,10 +499,18 @@ X86_FUNC(sub_001CD157) {
     gpu::g_in_splash++;
     __imp__sub_001CD157(ctx, base);
     gpu::g_in_splash--;
-    if (!ctx.eax) return;
-    uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});
-    uint32_t back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
-    CallGuest(ctx, SYM(D3DDevice_CopyRects), {front, 0, 0, back, 0});
-    W32(front, R32(front) - 1);
-    W32(back, R32(back) - 1);
+    if (ctx.eax) KeepFrame(ctx);
+}
+
+// render device +0x4B74 back buffer, +0x4B78 depth: ShowScreen leaves them bound; persist is its second argument,
+// clear (the frame goes black) its fourth
+void game::loading::BothBuffers(X86Context& ctx, uint32_t ri) {
+    bool persist = G<uint8_t>(ctx.esp + 8);
+    if (G<uint8_t>(ctx.esp + 0x10)) CallGuest(ctx, SYM(D3DDevice_Clear), {0, 0, gpu::kClearTarget, 0, 0, 0});
+    CallGuest(ctx, SYM(D3DDevice_Swap), {0});
+    KeepFrame(ctx);
+    CallGuest(ctx, SYM(D3DDevice_SetRenderTarget), {R32(ri + 0x4B74), R32(ri + 0x4B78)});
+    if (persist) CallGuest(ctx, SYM(D3DDevice_PersistDisplay), {});
+    ctx.eax = 1;
+    ctx.esp += 4 + 0x10;
 }
