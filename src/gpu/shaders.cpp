@@ -31,6 +31,7 @@ struct VOut {
     float4 t2 : TEXCOORD2;
     float4 t3 : TEXCOORD3;
     float fog : TEXCOORD4;
+    noperspective float4 e : TEXCOORD5;  // console pixel position as drawn, and with its far edges pulled out
 };
 cbuffer VC : register(b0) { float4 c[192]; };
 cbuffer DC : register(b1) {
@@ -205,8 +206,10 @@ const char* kVsEpilogue = R"(
     precise float4 q;
     // full screen passes drawn half a pixel up-left for the console's integer pixel centers stop half a pixel short
     // of the far edges on D3D12's, which upscaled leaves the last host columns and rows undrawn
+    o.e.xy = p.xy;
     if (abs(p.x - (surf.x - 0.5)) < 1e-3) p.x = surf.x;
     if (abs(p.y - (surf.y - 0.5)) < 1e-3) p.y = surf.y;
+    o.e.zw = p.xy;
     q.x = p.x * 2 / surf.x - 1;
     q.y = 1 - p.y * 2 / surf.y;
     q.z = p.z * surf.z;
@@ -464,6 +467,11 @@ float4 spreadtap(Texture2D t, SamplerState s, float2 uv, float4 w, float m) {
             c += float4(saturate(v.rgb * m), v.a);
         }
     return c / (n * n);
+}
+// pulling a quad's far edges out stretches what it carries: the value where the pixel is on the quad as drawn
+float4 unstretch(float4 t, float4 e) {
+    float2 d = e.zw - e.xy, g = float2(ddx(e.x), ddy(e.y));
+    return t + (d.x ? d.x / g.x * ddx(t) : 0) + (d.y ? d.y / g.y * ddy(t) : 0);
 }
 void alphatest(float a) {
     int f = (int)misc.y;
@@ -757,6 +765,7 @@ std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode,
     float2 sp = (float2(cp.x, -cp.y) / cp.w + 1) * 0.5 * surf.xy;
     if (abs(sp.x - (surf.x - 0.5)) < 1e-3) cp.x = cp.w;
     if (abs(sp.y - (surf.y - 0.5)) < 1e-3) cp.y = -cp.w;
+    o.e = float4(sp, (float2(cp.x, -cp.y) / cp.w + 1) * 0.5 * surf.xy);
     o.pos = cp;
     o.d0 = saturate(oD0);
     o.d1 = saturate(oD1);
@@ -782,7 +791,7 @@ std::string PixelHlsl(const PixelKey& k) {
         s += F("%s tex%d : register(t%d);\n%s smp%d : register(s%d);\n", type, i, i, t.shadow ? "SamplerComparisonState" : "SamplerState", i, i);
     }
     s += F("float4 main(VOut i, bool front : SV_IsFrontFace) : SV_Target {\n");
-    s += "    float4 pT0 = i.t0, pT1 = i.t1, pT2 = i.t2, pT3 = i.t3;\n";
+    s += "    float4 pT0 = unstretch(i.t0, i.e), pT1 = unstretch(i.t1, i.e), pT2 = unstretch(i.t2, i.e), pT3 = unstretch(i.t3, i.e);\n";
     s += k.two_sided ? "    float4 v0 = front ? i.d0 : i.b0, v1 = front ? i.d1 : i.b1;\n" : "    float4 v0 = i.d0, v1 = i.d1;\n";
     s += "    if (misc.w == 0) v1 = float4(0, 0, 0, 1);\n";
     s += "    float4 pFog = float4(fogcolor.rgb, saturate(i.fog));\n";
