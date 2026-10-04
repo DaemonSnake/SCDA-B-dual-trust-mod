@@ -219,7 +219,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kHideHud, kSensitivity, kInvertMouse,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kHideHud, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2
 };
 
@@ -247,6 +247,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
     {Kind::Text, kJoinIp, "COOP JOIN IP"},
     {Kind::Value, kMicrophone, "COOP MICROPHONE"},
+    {Kind::Value, kPushToTalk, "COOP PUSH TO TALK"},
     {Kind::Heading, -1, "CONTROLLERS"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
@@ -361,6 +362,10 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             return s.join_ip;
         case kMicrophone:
             return s.microphone.empty() ? "SYSTEM DEFAULT" : s.microphone;
+        case kPushToTalk:
+            Flip(s.push_to_talk, step);
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.push_to_talk));
+            break;
         case kPlayer1:
         case kPlayer2: {
             int player = id == kPlayer1 ? 0 : 1;
@@ -730,7 +735,7 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
-    if (row.kind == Kind::Value && row.id == kMicrophone) return false;
+    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk)) return false;
     bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
     return !sm3 || Get().shader_model >= 3;
 }

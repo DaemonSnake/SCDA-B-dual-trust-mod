@@ -41,6 +41,8 @@ constexpr uint32_t kSlots = 10, kObjectSize = 4 + kSlots * 4;
 constexpr uint32_t kMaxLagMs = 200, kAheadMs = 60;
 // the Opus voice link beside the game's 8 kHz voice; off leaves the game's own voice alone
 constexpr bool kVoiceLink = true;
+// push to talk keeps the microphone open this long after the whistle key is let go
+constexpr int64_t kTalkHoldMs = 300;
 
 struct Packet {
     uint32_t buffer, size, completed, status, context;
@@ -85,7 +87,7 @@ void Flush(Media& m, std::vector<Done>& done) {
     m.packets.clear();
 }
 
-void Step(Media& m, std::vector<Done>& done) {
+void Step(Media& m, std::vector<Done>& done, bool open) {
     auto now = std::chrono::steady_clock::now();
     if (!m.stream) {
         double ms = std::chrono::duration<double, std::milli>(now - m.last).count();
@@ -106,6 +108,8 @@ void Step(Media& m, std::vector<Done>& done) {
             if (m.stream ? audio::Available(m.stream) < p.size : m.budget < p.size) break;
             if (m.stream) {
                 audio::Read(m.stream, HostPtr(p.buffer), p.size);
+                // closed, the game hears silence: nothing to send, nothing for the guards
+                if (!open) std::memset(HostPtr(p.buffer), 0, p.size);
             } else {
                 std::memset(HostPtr(p.buffer), 0, p.size);
                 m.budget -= p.size;
@@ -131,6 +135,14 @@ void Step(Media& m, std::vector<Done>& done) {
     }
 }
 
+bool MicOpen() {
+    static int64_t until = 0;  // the pump thread's
+    if (!app::Get().push_to_talk) return true;
+    int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (input::EventKeyHeld(input::KeyEvent::Whistle)) until = now + kTalkHoldMs;
+    return now < until;
+}
+
 // the console's USB driver completes packets on its own, the title's callbacks run at DPC level
 void Pump(X86Context& ctx) {
     for (;;) {
@@ -139,7 +151,9 @@ void Pump(X86Context& ctx) {
         std::vector<Done> done;
         {
             std::lock_guard lock(g_lock);
-            for (auto& [obj, m] : g_media) Step(m, done);
+            bool open = MicOpen();
+            audio::SetMicOpen(open);
+            for (auto& [obj, m] : g_media) Step(m, done, open);
         }
         Deliver(ctx, done);
     }

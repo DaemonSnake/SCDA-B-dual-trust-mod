@@ -41,6 +41,7 @@ struct Settings {
     uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::string microphone;                // recording device by name, empty the system default
+    bool push_to_talk = false;             // co-op voice only while the whistle key is held
     bool hide_hud = false;                 // debug: the HUD layer's Magma pages are not drawn in a level
     Port players[2] = {{true, 0}, {false, 1}};  // guest ports 0 and 1; 2 and 3 stay empty
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
@@ -110,7 +111,7 @@ void Defaults(int page);
 // a value row's list, empty when it only steps; current is the one it has
 std::vector<std::string> Choices(const Row& row, int* current);
 void Choose(const Row& row, int index);
-// false for a row the game menu leaves out: the shader model 3.0 features at 1.1, the microphone (F10 only)
+// false for a row the game menu leaves out: the shader model 3.0 features at 1.1, the microphone and push to talk (F10 only)
 bool Shown(const Row& row);
 }  // namespace rows
 

@@ -66,6 +66,7 @@ std::thread g_worker;
 std::atomic<bool> g_stop{false};
 std::atomic<int64_t> g_heard{0};
 std::atomic<bool> g_running{false};
+std::atomic<bool> g_mic_open{true};
 // packets the game's voice socket took for the link, by sender address and port
 struct Incoming {
     uint64_t from;
@@ -220,6 +221,8 @@ void Run(std::string microphone) {
         // every frame is encoded, sent or not, so the encoder never jumps
         while (capture && encoder && Available(capture) >= sizeof(pcm)) {
             Read(capture, pcm, sizeof(pcm));
+            // silence rather than nothing, so the peer keeps the link's voice and never falls back to the game's
+            if (!g_mic_open) std::fill(std::begin(pcm), std::end(pcm), int16_t(0));
             int bytes = opus_encode(encoder, pcm, kFrame, packet + kHeader, opus_int32(kMaxPayload));
             uint16_t seq = sequence++;
             if (bytes <= 0) continue;
@@ -285,6 +288,8 @@ bool TakeVoiceLinkPacket(uint32_t address, uint16_t port, const uint8_t* data, i
     if (g_in.size() < kMaxIncoming) g_in.push_back({uint64_t(address) << 16 | port, std::vector<uint8_t>(data, data + bytes)});
     return true;
 }
+
+void SetMicOpen(bool open) { g_mic_open = open; }
 
 bool VoiceLinkHeard() {
     int64_t heard = g_heard;

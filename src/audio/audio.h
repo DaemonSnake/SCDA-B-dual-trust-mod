@@ -32,5 +32,6 @@ void VoiceSent(uint32_t address);  // the game sent voice to this IPv4, network 
 // a datagram from the game's voice socket: true when it was the link's, which the game must not see
 bool TakeVoiceLinkPacket(uint32_t address, uint16_t port, const uint8_t* data, int bytes);
 bool VoiceLinkHeard();             // the link's voice arrived lately: the game's is not played
+void SetMicOpen(bool open);        // push to talk: closed, the link sends silence
 
 }  // namespace audio

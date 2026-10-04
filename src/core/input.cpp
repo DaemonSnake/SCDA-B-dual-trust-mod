@@ -270,6 +270,15 @@ std::string Join(const std::vector<int>& vks) {
 
 bool Active() { return g_hwnd && GetForegroundWindow() == g_hwnd && !g_blocked; }
 bool Down(int vk) { return GetAsyncKeyState(vk) < 0; }
+bool HeldKeys(KeyEvent event) {
+    std::vector<int> keys;
+    {
+        std::lock_guard lock(g_bind_lock);
+        for (size_t i = 0; i < kCount; i++)
+            if (kActions[i].event == event) keys = g_binds[i];
+    }
+    return std::any_of(keys.begin(), keys.end(), Down);
+}
 bool Mouse(int vk) { return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2; }
 
 void Keyboard(Pad& p) {
@@ -655,6 +664,8 @@ void SetInteractReloads(bool on) {
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
+
+bool EventKeyHeld(KeyEvent event) { return Active() && HeldKeys(event); }
 
 void TapButtons(uint16_t buttons) {
     g_tap = buttons;
