@@ -24,6 +24,7 @@
 #include "gpu/backend.h"
 #include "image_symbols.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
@@ -36,8 +37,78 @@ constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
 bool g_mode_changed = false;
 bool g_apply_posted = false;  // a display apply is waiting in the queue or running
 
+// every committed page of the guest space goes into a crash dump, physical RAM once (not its write-combined view)
+constexpr size_t kMaxDumpRanges = 8192;
+struct DumpRange {
+    ULONG64 base;
+    ULONG size;
+};
+DumpRange g_dump_ranges[kMaxDumpRanges];
+size_t g_dump_count = 0, g_dump_next = 0;
+
+void CollectGuestRanges() {
+    g_dump_count = g_dump_next = 0;
+    uint8_t* base = mem::Base();
+    if (!base) return;
+    uint8_t* wc = base + mem::kWriteCombineBase;
+    uint8_t* end = base + (1ull << 32);
+    MEMORY_BASIC_INFORMATION mbi;
+    for (uint8_t* p = base; p < end && g_dump_count < kMaxDumpRanges && VirtualQuery(p, &mbi, sizeof(mbi));
+         p = static_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize) {
+        if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || mbi.AllocationBase == wc) continue;
+        g_dump_ranges[g_dump_count++] = {ULONG64(mbi.BaseAddress), ULONG(mbi.RegionSize)};
+    }
+}
+
+BOOL CALLBACK DumpCallback(PVOID, const PMINIDUMP_CALLBACK_INPUT in, PMINIDUMP_CALLBACK_OUTPUT out) {
+    if (in->CallbackType != MemoryCallback) return TRUE;
+    if (g_dump_next >= g_dump_count) return FALSE;
+    out->MemoryBase = g_dump_ranges[g_dump_next].base;
+    out->MemorySize = g_dump_ranges[g_dump_next].size;
+    g_dump_next++;
+    return TRUE;
+}
+
+// enough to place a crash from a friend's build without its pdb
+void LogCrash(EXCEPTION_POINTERS* e) {
+    const EXCEPTION_RECORD& r = *e->ExceptionRecord;
+    const CONTEXT& c = *e->ContextRecord;
+    auto exe = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
+    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(exe + reinterpret_cast<const IMAGE_DOS_HEADER*>(exe)->e_lfanew);
+    uint64_t rip = uint64_t(r.ExceptionAddress);
+    LOGE("crash: exception %08lX at exe+%llX, exe linked %08lX", r.ExceptionCode, rip - uint64_t(exe),
+         nt->FileHeader.TimeDateStamp);
+    if (r.ExceptionCode == EXCEPTION_ACCESS_VIOLATION && r.NumberParameters >= 2) {
+        uint64_t a = r.ExceptionInformation[1], guest = a - uint64_t(mem::Base());
+        const char* op = r.ExceptionInformation[0] == 1 ? "write" : r.ExceptionInformation[0] == 8 ? "execute" : "read";
+        if (mem::Base() && guest < (1ull << 32)) LOGE("crash: %s of guest %08llX", op, guest);
+        else LOGE("crash: %s of host %llX", op, a);
+    }
+    // a function's weak wrapper usually follows its body, so the one above is the likelier home
+    const X86FuncMapping *below = nullptr, *above = nullptr;
+    for (const X86FuncMapping* m = X86FuncMappings; m->host; m++) {
+        uint64_t h = uint64_t(m->host);
+        if (h <= rip && (!below || h > uint64_t(below->host))) below = m;
+        if (h > rip && (!above || h < uint64_t(above->host))) above = m;
+    }
+    if (below && above) LOGE("crash: host code between sub_%08X and sub_%08X", below->guest, above->guest);
+    LOGE("crash: rax %llX rbx %llX rcx %llX rdx %llX rsi %llX rdi %llX rbp %llX rsp %llX", c.Rax, c.Rbx, c.Rcx, c.Rdx,
+         c.Rsi, c.Rdi, c.Rbp, c.Rsp);
+    LOGE("crash: r8 %llX r9 %llX r10 %llX r11 %llX r12 %llX r13 %llX r14 %llX r15 %llX", c.R8, c.R9, c.R10, c.R11, c.R12,
+         c.R13, c.R14, c.R15);
+    kernel::Thread* t = kernel::Current();
+    if (t && t->ctx) {
+        LOGE("crash: guest thread %X", t->id);
+        kernel::LogGuestStack(*t->ctx, 256);
+    } else {
+        LOGE("crash: host thread %lu", GetCurrentThreadId());
+    }
+}
+
 // crash dump in CrashDumps beside the exe
 LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
+    if (e) LogCrash(e);
+    logx::Flush();
     auto dir = ExeDir() / "CrashDumps";
     CreateDirectoryW(dir.c_str(), nullptr);
     SYSTEMTIME t;
@@ -46,12 +117,15 @@ LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
     swprintf(name, 64, L"SCDA.%04u.%02u.%02u_%02u.%02u.%02u.dmp", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     HANDLE f = CreateFileW((dir / name).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return EXCEPTION_CONTINUE_SEARCH;
+    CollectGuestRanges();
     MINIDUMP_EXCEPTION_INFORMATION info{GetCurrentThreadId(), e, FALSE};
+    MINIDUMP_CALLBACK_INFORMATION callback{DumpCallback, nullptr};
     MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), f,
                       MINIDUMP_TYPE(MiniDumpWithDataSegs | MiniDumpWithHandleData | MiniDumpWithThreadInfo |
                                     MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory),
-                      e ? &info : nullptr, nullptr, nullptr);
+                      e ? &info : nullptr, nullptr, &callback);
     CloseHandle(f);
+    LOGE("crash: dump %ls, %zu guest ranges", name, g_dump_count);
     logx::Flush();
     return EXCEPTION_CONTINUE_SEARCH;
 }
