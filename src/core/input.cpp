@@ -122,11 +122,14 @@ bool g_wiggle = false;
 std::chrono::steady_clock::time_point g_wiggle_time;
 
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
-// these land the game's axis on 0.31 0.48 0.66 0.83 1.0: 0.31 is SCCT PC's slowest (its AxisMod floor), and
-// below 0.3 some states (gun drawn) do not move at all.
-constexpr float kSpeeds[] = {0.517f, 0.638f, 0.759f, 0.879f, 1.0f};
+// these land the game's axis on 0.2 0.48 0.66 0.83 1.0: 0.2 is SCCT PC's slowest (its AxisMod floor). On foot a
+// push of at most m_gentleForce (0.3) away from the facing walks backwards instead of turning; aiming moves only
+// past it, so there the slowest step is 0.31.
+constexpr float kSpeeds[] = {0.44f, 0.638f, 0.759f, 0.879f, 1.0f};
+constexpr float kSlowestTargeting = 0.517f;
 constexpr float kDeadZone = 0.3f;
 std::atomic<int> g_speed{4};
+std::atomic<bool> g_targeting{false};
 
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
 
@@ -365,7 +368,7 @@ void Keyboard(Pad& p) {
     int x = move[3] - move[2], y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
     bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
-    float v = full ? 1.0f : kSpeeds[g_speed];
+    float v = full ? 1.0f : g_speed == 0 && g_targeting ? kSlowestTargeting : kSpeeds[g_speed];
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -663,6 +666,10 @@ void SetNetSession(bool net) {
 
 void SetInteractReloads(bool on) {
     g_interact_reloads = on;
+}
+
+void SetTargeting(bool on) {
+    g_targeting = on;
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
