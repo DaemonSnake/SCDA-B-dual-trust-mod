@@ -38,6 +38,9 @@ public:
     virtual void RecordLate(uint32_t) {}
     virtual void Flush() = 0;
     virtual void SetGamma(const uint8_t* ramp /*3 x 256*/) = 0;
+    // ambient occlusion from the depth of the scene so far, multiplied into its colour. p: 1 / the projection's x and y
+    // scale, its x and y centre, then view z = p[4] / (ndc depth - p[5])
+    virtual void Occlusion(const State&, const float /*p*/[6]) {}
 
     // the XDK's fences and busy checks against the render thread; a backend that draws at once is never behind
     virtual uint32_t Fence() { return ++fence_; }

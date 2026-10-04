@@ -223,7 +223,7 @@ void Changed(bool display) {
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion
 };
 
 using rows::Kind;
@@ -243,6 +243,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kHdr, "HDR RENDERING"},
     {Kind::Value, kToneMapping, "TONE MAPPING"},
     {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
+    {Kind::Value, kAmbientOcclusion, "AMBIENT OCCLUSION"},
     {Kind::Value, kMsaa, "ANTI-ALIASING"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
@@ -360,6 +361,10 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             std::snprintf(text, sizeof(text), "%s", OnOff(on));
             break;
         }
+        case kAmbientOcclusion:
+            Flip(s.ambient_occlusion, step);
+            std::snprintf(text, sizeof(text), "%s", OnOff(s.ambient_occlusion));
+            break;
         case kSkipIntros:
             Flip(s.skip_intros, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));

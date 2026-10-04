@@ -117,6 +117,13 @@ void SetComplex(uint32_t rs, uint32_t v) {
 gpu::State& State() { return g_state; }
 std::recursive_mutex& Lock() { return g_lock; }
 
+void Occlusion(const float* m) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (!g_backend || m[11] != 1.0f || m[15] != 0.0f || !m[0] || !m[5]) return;
+    const float p[6] = {1 / m[0], 1 / m[5], m[8], m[9], m[14], m[10]};
+    g_backend->Occlusion(g_state, p);
+}
+
 }  // namespace d3d
 
 using namespace d3d;

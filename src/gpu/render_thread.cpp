@@ -40,7 +40,7 @@ constexpr uint32_t kHeaderRing = 1u << 20;  // guest memory for header copies; a
 
 enum class WaitFor : uint8_t { ReadBack, Resource, Fence, Flush, Copy, Frame, Count };
 
-enum class Op : uint8_t { State, Draw, Clear, Copy, Present, Sync, RecordLate, Flush, Gamma };
+enum class Op : uint8_t { State, Draw, Clear, Copy, Present, Sync, RecordLate, Flush, Gamma, Occlusion };
 
 struct Cmd {
     Op op;
@@ -201,6 +201,16 @@ public:
         Cmd c{Op::Gamma};
         c.data = Put(ramp, 768);
         cur_->cmds.push_back(c);
+    }
+
+    void Occlusion(const State& s, const float p[6]) override {
+        SendState(s);
+        Cmd c{Op::Occlusion};
+        c.data = Put(p, 6 * sizeof(float));
+        cur_->cmds.push_back(c);
+        Use(s.rt.header);
+        Use(s.zs.header);
+        Written(s.rt);
     }
 
     uint32_t Fence() override { return uint32_t(cur_->id); }
@@ -410,6 +420,12 @@ private:
             case Op::RecordLate: inner_->RecordLate(c.a); break;
             case Op::Flush: inner_->Flush(); break;
             case Op::Gamma: inner_->SetGamma(data); break;
+            case Op::Occlusion: {
+                float p[6];
+                std::memcpy(p, data, sizeof(p));
+                inner_->Occlusion(state_, p);
+                break;
+            }
         }
     }
 

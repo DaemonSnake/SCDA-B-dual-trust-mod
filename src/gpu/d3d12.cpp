@@ -136,6 +136,73 @@ float4 tone(O i) : SV_Target {
 }
 )";
 
+// from the scene's depth: occlusion pass, then a blur across and one down that multiplies it into the colour
+const char* kAoHlsl = R"(
+cbuffer A : register(b1) { float4 proj; float4 zp; float4 vp; float4 opt; };
+#ifdef MS
+Texture2DMS<float> depth : register(t0);
+float Raw(int2 p) { return depth.Load(p, 0); }
+#else
+Texture2D<float> depth : register(t0);
+float Raw(int2 p) { return depth.Load(int3(p, 0)); }
+#endif
+Texture2D<float2> ao : register(t1);
+float4 vs(uint id : SV_VertexID) : SV_Position { return float4(float2((id << 1) & 2, id & 2) * float2(2, -2) + float2(-1, 1), 0, 1); }
+// view space position of a pixel. proj: 1 / scale xy, centre xy; zp: z = x / (depth - y); vp: viewport in pixels
+float3 View(float2 px) {
+    int2 p = clamp(int2(px), int2(vp.xy), int2(vp.xy + vp.zw) - 1);
+    float z = zp.x / (Raw(p) - zp.y);
+    float2 ndc = (p + 0.5 - vp.xy) / vp.zw * float2(2, -2) + float2(-1, 1);
+    return float3((ndc - proj.zw) * proj.xy * z, z);
+}
+static const float kDither[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+// opt: world radius, most pixels it may span; out: occlusion, view z
+float2 occlusion(float4 pos : SV_Position) : SV_Target {
+    float3 c = View(pos.xy);
+    float2 rad = opt.x * 0.5 * vp.zw / (proj.xy * c.z);
+    float span = max(rad.x, rad.y);
+    if (span < 1) return float2(1, c.z);
+    // normal from the nearer neighbour each way: no bend over depth edges
+    float3 l = View(pos.xy - float2(1, 0)), r = View(pos.xy + float2(1, 0));
+    float3 u = View(pos.xy - float2(0, 1)), d = View(pos.xy + float2(0, 1));
+    float3 dx = abs(r.z - c.z) < abs(c.z - l.z) ? r - c : c - l;
+    float3 dy = abs(d.z - c.z) < abs(c.z - u.z) ? d - c : c - u;
+    float3 n = normalize(cross(dx, dy));
+    float k = min(1, opt.y / span), R = opt.x * k;
+    int2 cell = int2(pos.xy) & 3;
+    float turn = kDither[cell.y * 4 + cell.x] * (6.2831853 / 16), a = 0;
+    for (int i = 0; i < 16; i++) {
+        float f = (i + 0.5) / 16, t = i * 2.3999632 + turn;
+        float3 v = (View(pos.xy + float2(cos(t), sin(t)) * rad * (k * f)) - c) / R;
+        float vv = dot(v, v), w = max(1 - vv, 0);
+        a += w * w * w * max((dot(v, n) - 0.05) / (vv + 0.01), 0);
+    }
+    return float2(max(1 - a * 0.25, 0), c.z);
+}
+// opt.zw: step; 5 taps average the 4 pixel dither, depth edges left out
+float Smooth(float2 pos, out float z) {
+    int2 p = int2(pos), lo = int2(vp.xy), hi = int2(vp.xy + vp.zw) - 1;
+    z = ao.Load(int3(p, 0)).y;
+    float sum = 0, n = 0;
+    for (int i = -2; i <= 2; i++) {
+        float2 s = ao.Load(int3(clamp(p + i * int2(opt.zw), lo, hi), 0));
+        float w = (abs(i) == 2 ? 0.5 : 1) * saturate(2 - abs(s.y - z) / (z * 0.02));
+        sum += s.x * w;
+        n += w;
+    }
+    return sum / n;
+}
+float2 occlusion_blur(float4 pos : SV_Position) : SV_Target {
+    float z, a = Smooth(pos.xy, z);
+    return float2(a, z);
+}
+float4 occlusion_apply(float4 pos : SV_Position) : SV_Target {
+    float z;
+    return float4(Smooth(pos.xy, z).xxx, 1);
+}
+)";
+constexpr float kAoRadius = 80.0f;  // world units, the engine's are cm
+
 float Bits(uint32_t v) {
     float f;
     std::memcpy(&f, &v, 4);
@@ -299,6 +366,7 @@ public:
     void RecordLate(uint32_t data) override;
     void Flush() override;
     void SetGamma(const uint8_t* ramp) override;
+    void Occlusion(const State& s, const float p[6]) override;
 
 private:
     struct Frame {
@@ -414,6 +482,10 @@ private:
     D3D12_RESOURCE_STATES bloom_state_[2] = {}, expo_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
     uint32_t post_rtv_ = 0, bloom_w_ = 0, bloom_h_ = 0;
     bool expo_fresh_ = true;
+    // ambient occlusion: the raw pass and its first blur, each with view z beside it
+    ComPtr<ID3D12Resource> ao_[2];
+    D3D12_RESOURCE_STATES ao_state_[2] = {};
+    uint32_t ao_w_ = 0, ao_h_ = 0;
     std::chrono::steady_clock::time_point expo_t_ = std::chrono::steady_clock::now();
     // one frame capture: every draw in a text file, each target as the frame leaves it, the textures it read
     FILE* cap_ = nullptr;
@@ -513,7 +585,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     };
     srv_inc_ = heap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCount, true, srv_heap_);
     smp_inc_ = heap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerCount, true, smp_heap_);
-    rtv_inc_ = heap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + 3, false, rtv_heap_);
+    rtv_inc_ = heap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + 5, false, rtv_heap_);
     post_rtv_ = kRtvCount + kFrames;
     dsv_inc_ = heap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvCount, false, dsv_heap_);
     heap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, true, ui_heap_);
@@ -1178,6 +1250,121 @@ void D3D12Backend::Resolve(Target& t) {
     Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     float pt[8] = {kHeadroom, tone_ ? 1.0f : 0.0f, 0.6f, 0};
     Post("tone", t.fmt, Cpu(rtv_heap_.Get(), t.view, rtv_inc_), t.w, t.h, in, fmt, pt, -1, t.samples);
+}
+
+// p: 1 / the projection's x and y scale, its x and y centre, then view z = p[4] / (ndc depth - p[5])
+void D3D12Backend::Occlusion(const State& s, const float p[6]) {
+    Target* rt = GetTarget(s.rt, false, false);
+    Target* ds = GetTarget(s.zs, true, false);
+    // the frame's own scene only, views drawn to smaller targets are left
+    if (!rt || !ds || rt->gw != guest_w_ || rt->gh != guest_h_ || ds->w != rt->w || ds->h != rt->h || ds->samples != rt->samples) return;
+    const auto& v = s.viewport;
+    float sc = float(rt->w) / rt->gw, zr = v.max_z - v.min_z;
+    D3D12_RECT rect{std::clamp<LONG>(LONG(v.x * sc), 0, rt->w), std::clamp<LONG>(LONG(v.y * sc), 0, rt->h),
+                    std::clamp<LONG>(LONG((v.x + v.w) * sc), 0, rt->w), std::clamp<LONG>(LONG((v.y + v.h) * sc), 0, rt->h)};
+    if (rect.right <= rect.left || rect.bottom <= rect.top || zr <= 0) return;
+    const DXGI_FORMAT fmt = DXGI_FORMAT_R16G16_FLOAT;
+    auto rtv = [&](int i) { return Cpu(rtv_heap_.Get(), post_rtv_ + 3 + i, rtv_inc_); };
+    if (!ao_[1] || ao_w_ != rt->w || ao_h_ != rt->h) {
+        D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC td{};
+        td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        td.Width = ao_w_ = rt->w;
+        td.Height = ao_h_ = rt->h;
+        td.DepthOrArraySize = td.MipLevels = 1;
+        td.Format = fmt;
+        td.SampleDesc.Count = 1;
+        td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        for (int i = 0; i < 2; i++) {
+            if (ao_[i]) frames_[frame_ % kFrames].garbage.push_back(ao_[i]);
+            ao_[i].Reset();
+            ao_state_[i] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, ao_state_[i], nullptr, IID_PPV_ARGS(&ao_[i])))) return;
+            dev_->CreateRenderTargetView(ao_[i].Get(), nullptr, rtv(i));
+        }
+    }
+    if (cap_) {
+        CapStep(s.rt);
+        fprintf(cap_, "%04u occlusion rt %08X ds %08X\n", cap_i_++, s.rt.data, s.zs.data);
+    }
+    LOG_FIRST(1, "d3d12: ambient occlusion %ux%u, %u samples, projection %.4f %.4f, view z %.6f / (depth - %.8f)", rt->w, rt->h, ds->samples,
+              1 / p[0], 1 / p[1], p[4], p[5]);
+    float c[16] = {p[0], p[1], p[2], p[3], p[4] * zr, v.min_z + p[5] * zr, 0, 0,
+                   float(rect.left), float(rect.top), float(rect.right - rect.left), float(rect.bottom - rect.top),
+                   kAoRadius, 0.15f * float(rect.bottom - rect.top), 0, 0};
+    D3D12_VIEWPORT vp{0, 0, float(rt->w), float(rt->h), 0, 1};
+    // depth: the scene's, read by the first pass; src: the pass before; multiply: onto the scene
+    auto pass = [&](const char* entry, DXGI_FORMAT out, uint32_t samples, bool multiply, D3D12_CPU_DESCRIPTOR_HANDLE rh,
+                    ID3D12Resource* depth, ID3D12Resource* src, float step_x, float step_y) {
+        bool ms = depth && ds->samples > 1;
+        auto& pso = blit_psos_[Hash(entry, std::strlen(entry), uint64_t(out) | uint64_t(ms) << 32 | uint64_t(samples) << 40)];
+        if (!pso) {
+            std::string text = std::string(ms ? "#define MS 1\n" : "") + kAoHlsl;
+            uint64_t h;
+            ID3DBlob* vs = Compile(text, "vs", "vs_5_0", h);
+            ID3DBlob* ps = Compile(text, entry, "ps_5_0", h);
+            if (!vs || !ps) return false;
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC d{};
+            d.pRootSignature = root_.Get();
+            d.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
+            d.PS = {ps->GetBufferPointer(), ps->GetBufferSize()};
+            auto& b = d.BlendState.RenderTarget[0];
+            b.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+            if (multiply) {
+                // the alpha the game's blends read stays
+                b.BlendEnable = TRUE;
+                b.SrcBlend = b.SrcBlendAlpha = D3D12_BLEND_ZERO;
+                b.DestBlend = D3D12_BLEND_SRC_COLOR;
+                b.DestBlendAlpha = D3D12_BLEND_ONE;
+                b.BlendOp = b.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+            }
+            d.SampleMask = UINT_MAX;
+            d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+            d.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+            d.RasterizerState.DepthClipEnable = TRUE;
+            d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            d.NumRenderTargets = 1;
+            d.RTVFormats[0] = out;
+            d.SampleDesc.Count = samples;
+            if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return false;
+        }
+        uint32_t slot = SrvSlots(4);
+        for (int i = 0; i < 4; i++) {
+            ID3D12Resource* r = i == 0 ? depth : i == 1 ? src : nullptr;
+            D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = !r ? kBgra : i ? fmt : DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            sv.ViewDimension = r && ms ? D3D12_SRV_DIMENSION_TEXTURE2DMS : D3D12_SRV_DIMENSION_TEXTURE2D;
+            sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            if (sv.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2D) sv.Texture2D.MipLevels = 1;
+            dev_->CreateShaderResourceView(r, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        }
+        c[14] = step_x;
+        c[15] = step_y;
+        Alloc cb = Upload(256, 256);
+        std::memcpy(cb.cpu, c, sizeof(c));
+        cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
+        cl_->RSSetViewports(1, &vp);
+        cl_->RSSetScissorRects(1, &rect);
+        cl_->SetPipelineState(pso.Get());
+        cl_->SetGraphicsRootConstantBufferView(0, cb.gpu);
+        cl_->SetGraphicsRootConstantBufferView(1, cb.gpu);
+        cl_->SetGraphicsRootDescriptorTable(2, Gpu(srv_heap_.Get(), slot, srv_inc_));
+        cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), BlitSamplers(), smp_inc_));
+        cl_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        cl_->DrawInstanced(3, 1, 0, 0);
+        return true;
+    };
+    bound_rt_ = bound_ds_ = nullptr;
+    Transition(ds->res.Get(), ds->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(ao_[0].Get(), ao_state_[0], D3D12_RESOURCE_STATE_RENDER_TARGET);
+    if (!pass("occlusion", fmt, 1, false, rtv(0), ds->res.Get(), nullptr, 0, 0)) return;
+    Transition(ao_[0].Get(), ao_state_[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(ao_[1].Get(), ao_state_[1], D3D12_RESOURCE_STATE_RENDER_TARGET);
+    if (!pass("occlusion_blur", fmt, 1, false, rtv(1), nullptr, ao_[0].Get(), 1, 0)) return;
+    Transition(ao_[1].Get(), ao_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    pass("occlusion_apply", rt->fmt, rt->samples, true, Cpu(rtv_heap_.Get(), rt->view, rtv_inc_), nullptr, ao_[1].Get(), 0, 1);
+    rt->drawn = true;
 }
 
 void D3D12Backend::TakeBuilt() {

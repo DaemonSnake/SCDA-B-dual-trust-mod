@@ -20,7 +20,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Display Mode** - Allows you to change between Fullscreen, Borderless and Windowed modes.
 - **Resolution** - Lists every mode your monitor reports and defaults to the desktop mode, replacing the 640x480 lock.
 - **Render Resolution** - Renders the game at 20% to 200% of the output resolution, for supersampling or downscaling, independent of the window size.
-- **Field of View** - Sets the horizontal field of view from 45 to 140 degrees, 75 being the game's own.
+- **Field of View** - Sets the horizontal field of view during gameplay from 45 to 140 degrees, 75 being the game's own. Cutscenes, scopes, gadget views and lock picking keep the original.
 - **Max Frame Rate** - Caps the frame rate at your monitor's refresh rate, at a value you pick, or removes the cap, replacing the console's 30 FPS limiter.
 - **V-Sync** - Enables V-Sync, reducing tearing.
 - **FPS Counter** - Shows the frame rate on screen.
@@ -49,6 +49,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **HDR Rendering** - Enables shader model 3 HDR rendering.
 - **Tone Mapping** - Enables shader model 3 tone mapping.
 - **HQ Soft Shadows** - Enables shader model 3 soft shadows
+- **Ambient Occlusion** - Adds screen space ambient occlusion, soft contact shadows where surfaces meet.
 
 ### Mouse and Keyboard
 - **Keyboard Support** - Fully supports keyboard and mouse input.
