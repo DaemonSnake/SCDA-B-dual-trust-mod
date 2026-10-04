@@ -12,6 +12,7 @@ using namespace kernel;
 namespace {
 
 constexpr uint32_t kMovieBink = 0x88;  // Bink: +0 width, +4 height
+constexpr uint32_t kBinkPaused = 0xFC;
 thread_local bool g_wide_movie = false;
 
 bool Wide(uint32_t movie) {
@@ -21,14 +22,30 @@ bool Wide(uint32_t movie) {
 
 }  // namespace
 
+// The viewport draw (sub_001CDA8A) skips every frame its movie is not due on, menus included, which held the main
+// menu to the 30 fps of its background movie. It is told the movie is due, and a movie that is not draws held.
+X86_EXTERN_FUNC(GUEST_ORIG(BinkWait));
+X86_FUNC(GUEST(BinkWait)) {
+    if (R32(ctx.esp) == 0x1CDDB9) {
+        ctx.eax = 0;
+        ctx.esp += 8;
+        return;
+    }
+    GUEST_ORIG(BinkWait)(ctx, base);
+}
+
 X86_EXTERN_FUNC(__imp__sub_002E6D5B);
+X86_EXTERN_FUNC(__imp__sub_002E708A);
 X86_FUNC(sub_002E6D5B) {
-    g_wide_movie = Wide(R32(ctx.esp + 4));
-    __imp__sub_002E6D5B(ctx, base);
+    uint32_t movie = R32(ctx.esp + 4), bink = movie ? R32(movie + kMovieBink) : 0;
+    g_wide_movie = Wide(movie);
+    if (bink && !R32(bink + kBinkPaused) && CallGuest(ctx, SYM(BinkWait), {bink}))
+        __imp__sub_002E708A(ctx, base);
+    else
+        __imp__sub_002E6D5B(ctx, base);
     g_wide_movie = false;
 }
 
-X86_EXTERN_FUNC(__imp__sub_002E708A);
 X86_FUNC(sub_002E708A) {
     g_wide_movie = Wide(R32(ctx.esp + 4));
     __imp__sub_002E708A(ctx, base);
