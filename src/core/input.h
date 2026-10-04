@@ -58,8 +58,11 @@ enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
-// in a menu: whole wheel notches since the last call, up positive (a high resolution wheel's part notches add up)
+// in a menu or the focused interaction list: whole wheel notches since the last call, up positive (a high
+// resolution wheel's part notches add up)
 int TakeMenuWheel();
+// the HUD's interaction list is focused: the wheel steps it instead of the walking speed
+void SetInteractionList(bool focused);
 // the directions the move keys push port 0's stick (up, down, left, right as bits 0-3), whatever the walking speed
 uint32_t StickKeys();
 // keys the game side acts on itself, once per press in play

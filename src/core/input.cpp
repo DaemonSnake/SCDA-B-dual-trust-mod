@@ -71,6 +71,7 @@ std::atomic<int> g_view{0};
 std::atomic<float> g_zoom_speed{0.0f};
 std::atomic<int> g_wheel{0};
 std::atomic<int> g_menu_wheel{0};  // wheel delta in a menu not yet taken, WHEEL_DELTA a notch
+std::atomic<bool> g_list{false};  // SetInteractionList
 std::atomic<uint16_t> g_tap{0};
 std::atomic<uint64_t> g_tap_until{0};
 constexpr uint64_t kTapMs = 80;
@@ -570,8 +571,8 @@ void OnRawInput(void* handle) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
     }
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && g_menu) g_menu_wheel += SHORT(m.usButtonData);
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu) {
+    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
+    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu && !g_list) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
         if (View view = View(g_view.load()); view == View::Eev || view == View::StickyCamera) g_wheel += notch;
@@ -654,6 +655,10 @@ void SetView(View view, float zoom_speed) {
 }
 
 int TakeWheel() { return g_wheel.exchange(0); }
+
+void SetInteractionList(bool focused) {
+    if (g_list.exchange(focused) != focused) g_menu_wheel = 0;
+}
 
 int TakeMenuWheel() {
     int notches = g_menu_wheel / WHEEL_DELTA;
