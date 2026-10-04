@@ -137,14 +137,17 @@ float4 tone(O i) : SV_Target {
 )";
 
 // from the scene's depth: occlusion pass, then a blur across and one down that multiplies it into the colour
+// stencil bit 0 is the world, the sky is drawn where it is clear and counts as the far plane
 const char* kAoHlsl = R"(
 cbuffer A : register(b1) { float4 proj; float4 zp; float4 vp; float4 opt; };
 #ifdef MS
 Texture2DMS<float> depth : register(t0);
-float Raw(int2 p) { return depth.Load(p, 0); }
+Texture2DMS<uint2> stencil : register(t2);
+float Raw(int2 p) { return stencil.Load(p, 0).g & 1 ? depth.Load(p, 0) : 1; }
 #else
 Texture2D<float> depth : register(t0);
-float Raw(int2 p) { return depth.Load(int3(p, 0)); }
+Texture2D<uint2> stencil : register(t2);
+float Raw(int2 p) { return stencil.Load(int3(p, 0)).g & 1 ? depth.Load(int3(p, 0)) : 1; }
 #endif
 Texture2D<float2> ao : register(t1);
 float4 vs(uint id : SV_VertexID) : SV_Position { return float4(float2((id << 1) & 2, id & 2) * float2(2, -2) + float2(-1, 1), 0, 1); }
@@ -1330,12 +1333,12 @@ void D3D12Backend::Occlusion(const State& s, const float p[6]) {
         }
         uint32_t slot = SrvSlots(4);
         for (int i = 0; i < 4; i++) {
-            ID3D12Resource* r = i == 0 ? depth : i == 1 ? src : nullptr;
+            ID3D12Resource* r = i == 1 ? src : i == 3 ? nullptr : depth;
             D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-            sv.Format = !r ? kBgra : i ? fmt : DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            sv.Format = !r ? kBgra : i == 1 ? fmt : i ? DXGI_FORMAT_X24_TYPELESS_G8_UINT : DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
             sv.ViewDimension = r && ms ? D3D12_SRV_DIMENSION_TEXTURE2DMS : D3D12_SRV_DIMENSION_TEXTURE2D;
             sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            if (sv.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2D) sv.Texture2D.MipLevels = 1;
+            if (sv.ViewDimension == D3D12_SRV_DIMENSION_TEXTURE2D) sv.Texture2D.MipLevels = 1, sv.Texture2D.PlaneSlice = r && i == 2;
             dev_->CreateShaderResourceView(r, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
         }
         c[14] = step_x;
