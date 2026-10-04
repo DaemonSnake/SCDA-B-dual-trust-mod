@@ -33,6 +33,7 @@ struct PixelKey {
     uint32_t alphakill = 0;  // bit per stage
     uint32_t flat = 0, two_sided = 0;
     uint32_t proj = 0;       // fixed function: bit per stage sampled at coordinates divided by w
+    uint32_t quad = 0;       // a screen quad: QuadHlsl
     bool operator==(const PixelKey& o) const;
 };
 
@@ -53,6 +54,7 @@ struct FixedKey {
 FixedKey MakeFixedKey(const State& s);
 std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode = 0, const FixedKey& f = {});
 std::string PixelHlsl(const PixelKey& k);
+std::string QuadHlsl(std::string s);
 
 // the constant buffer layout both stages share, register b1
 struct DrawConstants {

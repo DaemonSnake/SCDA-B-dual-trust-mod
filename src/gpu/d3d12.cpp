@@ -1518,6 +1518,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     if (prog && !s.vs->hash) s.vs->hash = Hash(s.vs->program.data(), s.vs->program.size() * 4) | 1;
     uint64_t vkey = Hash(&a.decode, 8, prog ? s.vs->hash ^ a.regs : Hash(&s.vs_handle, 4, a.regs | 0x10000));
     if (!prog && a.pretransformed) vkey ^= 0x5A5A;
+    // up to a quad with no depth test: it may be a pass over the whole target, see QuadHlsl
+    bool quad = count <= 6 && !s.rs[kRsZEnable];
+    if (quad) vkey ^= 0xC3C30000;
     FixedKey fk;
     if (!prog) {
         fk = MakeFixedKey(s);
@@ -1529,7 +1532,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         vh = vit->second;
     } else {
         std::string src = prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk);
-        vh = Register(std::move(src), "main", "vs_5_0");
+        vh = Register(quad ? QuadHlsl(std::move(src)) : src, "main", "vs_5_0");
         vs_src_[vkey] = vh;
     }
     TexInfo info[4];
@@ -1539,6 +1542,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // textures may have recorded copies that unbound the targets
     if (!BindTargets(s)) return;
     PixelKey pk = MakePixelKey(s, info);
+    pk.quad = quad;
     uint64_t pkh = Hash(&pk, sizeof(pk));
     uint64_t ph;
     auto pit = vs_src_.find(pkh ^ 0x9E3779B97F4A7C15ull);
@@ -1780,7 +1784,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             }
             fprintf(cap_, "     %s\n", name);
         };
-        dump("vs", vkey, prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk));
+        std::string src = prog ? VertexProgramHlsl(s.vs->program, a.regs, a.decode) : FixedVertexHlsl(a.regs, a.pretransformed, a.decode, fk);
+        dump("vs", vkey, quad ? QuadHlsl(std::move(src)) : src);
         dump("ps", pkh, PixelHlsl(pk));
     }
 
