@@ -142,7 +142,7 @@ struct Target {
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
     KeyEvent event = KeyEvent::None;
 };
-// the console key: the host opens it, the pad never sees it
+// host keys: the console and push to talk, the pad never sees them; the console is the first
 constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
@@ -171,6 +171,7 @@ constexpr Target kStoryActions[] = {
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
+    {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
 };
 // Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
 constexpr Target kVersusActions[] = {
@@ -191,6 +192,7 @@ constexpr Target kVersusActions[] = {
     {{"help", "HELP", "F1"}, 4},
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
+    {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
 };
 constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 constexpr std::span<const Target> kActions =

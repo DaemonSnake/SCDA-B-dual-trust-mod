@@ -50,13 +50,14 @@ constexpr uint32_t kLinkUp = 0x01 | 0x02 | 0x08;          // active, 100 Mbps, f
 constexpr uint32_t kXnAddrEthernet = 0x02 | 0x04;         // ethernet, static address
 constexpr DWORD kUdpConnReset = 0x9800000C;  // SIO_UDP_CONNRESET: off, or a send to a closed port fails the next recv
 constexpr int kLoopbackInstances = 8;
-constexpr uint16_t kVoicePort = 1010;  // the game's own voice socket: where it sends, the voice link follows
+constexpr uint32_t kVdpProtocol = 254;  // IPPROTO_VDP: game data and voice in one datagram
 
 struct Socket {
     SOCKET s = INVALID_SOCKET;
     bool udp = false;
     bool nonblocking = false;  // the guest's FIONBIO; the host socket is always nonblocking
     uint16_t port = 0;         // bound, network order
+    bool vdp = false;          // the voice link follows the game's VDP sends (co-op: its voice socket; versus: the game's)
 };
 
 struct Span {
@@ -74,6 +75,13 @@ std::mutex g_lock;
 std::unordered_map<uint32_t, Socket> g_sockets;
 uint32_t g_next_socket = 0x100;
 std::vector<PendingRecv> g_pending;
+// peer address -> the VDP socket and port the game last sent to it, for the voice link's packets
+struct VdpRoute {
+    uint32_t sock;
+    uint16_t port;
+};
+std::mutex g_route_lock;
+std::unordered_map<uint32_t, VdpRoute> g_routes;
 
 std::once_flag g_init;
 int g_instance = 0;
@@ -214,8 +222,8 @@ int Recv(uint32_t sock, SOCKET s, const std::vector<Span>& spans, uint32_t from,
             if (err != WSAEWOULDBLOCK) LOG_FIRST(20, "xnet: recv %X failed (%d)", sock, err);
             return -1;
         }
-        // the voice link shares the game's voice socket; its packets never reach the game
-        if (!audio::TakeVoiceLinkPacket(src.sin_addr.s_addr, src.sin_port, buf.data(), n)) break;
+        // the voice link shares the game's VDP sockets; its packets never reach the game
+        if (!audio::TakeVoiceLinkPacket(src.sin_addr.s_addr, buf.data(), n)) break;
     }
     int done = 0;
     for (const Span& sp : spans) {
@@ -278,8 +286,13 @@ int SendOnce(SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
 int Send(uint32_t sock, SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
     int n = SendOnce(s, data, len, to);
     if (n < 0) LOG_FIRST(20, "xnet: send %X failed (%d)", sock, WSAGetLastError());
-    else if (to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).port == htons(kVoicePort))
+    else if (to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).vdp) {
+        {
+            std::lock_guard<std::mutex> lock(g_route_lock);
+            g_routes[to->sin_addr.s_addr] = {sock, to->sin_port};
+        }
         audio::VoiceSent(to->sin_addr.s_addr);
+    }
     return n;
 }
 
@@ -363,20 +376,23 @@ void Random(uint32_t va, uint32_t n) {
 
 namespace xnet {
 
-// the voice link's packets go out of the game's own voice socket, so they reach a peer wherever its voice does
+// the voice link's packets go out of the socket the game sends its VDP on, to the port it sends to, so they reach a
+// peer wherever the game's own voice does
 bool SendVoiceLink(uint32_t address, const void* data, int len) {
-    SOCKET s = INVALID_SOCKET;
+    VdpRoute route;
     {
-        std::lock_guard<std::mutex> lock(g_lock);
-        for (const auto& [id, socket] : g_sockets)
-            if (socket.port == htons(kVoicePort)) s = socket.s;
+        std::lock_guard<std::mutex> lock(g_route_lock);
+        auto it = g_routes.find(address);
+        if (it == g_routes.end()) return false;
+        route = it->second;
     }
-    if (s == INVALID_SOCKET) return false;
+    Socket k = Find(route.sock);
+    if (k.s == INVALID_SOCKET) return false;
     sockaddr_in to{};
     to.sin_family = AF_INET;
-    to.sin_port = htons(kVoicePort);
+    to.sin_port = route.port;
     to.sin_addr.s_addr = address;
-    return SendOnce(s, static_cast<const uint8_t*>(data), len, &to) >= 0;
+    return SendOnce(k.s, static_cast<const uint8_t*>(data), len, &to) >= 0;
 }
 
 void CloseSockets() {
@@ -485,7 +501,7 @@ HLE_STDCALL(XNetDnsRelease, 1) {
     return 0;
 }
 
-static uint32_t AddSocket(SOCKET s, bool udp) {
+static uint32_t AddSocket(SOCKET s, bool udp, bool vdp = false) {
     u_long on = 1;
     ::ioctlsocket(s, FIONBIO, &on);
     if (udp) {
@@ -496,7 +512,7 @@ static uint32_t AddSocket(SOCKET s, bool udp) {
     std::lock_guard<std::mutex> lock(g_lock);
     uint32_t id = g_next_socket;
     g_next_socket += 4;
-    g_sockets[id] = {s, udp, false, 0};
+    g_sockets[id] = {s, udp, false, 0, vdp};
     return id;
 }
 
@@ -508,7 +524,7 @@ HLE_STDCALL(socket, 3) {
     if (!udp && type != SOCK_STREAM) return Fail(WSAESOCKTNOSUPPORT);
     SOCKET s = ::socket(AF_INET, int(type), udp ? IPPROTO_UDP : IPPROTO_TCP);
     if (s == INVALID_SOCKET) return Fail(HostError());
-    return AddSocket(s, udp);
+    return AddSocket(s, udp, udp && a[2] == kVdpProtocol);
 }
 HLE_STDCALL(closesocket, 1) {
     std::lock_guard<std::mutex> lock(g_lock);

@@ -41,7 +41,7 @@ struct Settings {
     uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::string microphone;                // recording device by name, empty the system default
-    bool push_to_talk = false;             // co-op voice only while the whistle key is held
+    bool push_to_talk = false;             // voice only while the push to talk key is held
     bool hide_hud = false;                 // debug: the HUD layer's Magma pages are not drawn in a level
     Port players[2] = {{true, 0}, {false, 1}};  // guest ports 0 and 1; 2 and 3 stay empty
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default

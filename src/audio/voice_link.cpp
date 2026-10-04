@@ -1,7 +1,8 @@
-// The wideband voice link beside the game's own voice. While the game sends its 8 kHz Voxware voice to a peer, a
-// 16 kHz Opus copy of the same microphone goes to that peer over the game's own voice socket (UDP 1010), and the peer
+// The wideband voice link beside the game's own voice. While the game sends VDP (game data with its 8 kHz Voxware
+// voice) to a peer, a 16 kHz Opus copy of the same microphone goes to that peer over the same socket, and the peer
 // plays it in place of the game's. The game's path stays whole, so voice activation, muting and guards hearing the
-// player are still the game's.
+// player are still the game's. Versus is client and server: a client's game only sends to the host, so whoever
+// receives a talker's own packets passes them on to its other peers, marked relayed, and relayed ones go no further.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -10,6 +11,7 @@
 #include <deque>
 #include <map>
 #include <mutex>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -32,8 +34,9 @@ namespace {
 constexpr int kRate = 16000, kFrame = 320;  // 20 ms
 constexpr int kBitrate = 16000, kComplexity = 10;
 constexpr char kMagic[4] = {'S', 'C', 'D', 'V'};
-constexpr uint8_t kVersion = 1;
-constexpr size_t kHeader = 8;  // magic, version, 0, sequence
+constexpr uint8_t kVersion = 2;
+constexpr size_t kHeader = 12;  // magic, version, flags, sequence, talker
+constexpr uint8_t kRelayed = 1;
 constexpr size_t kMaxPayload = 1276;
 // a peer the game sent voice to this recently is sent ours; ours heard this recently mutes the game's
 constexpr int64_t kSendHoldMs = 300, kHeardHoldMs = 400, kTalkerTimeoutMs = 10000;
@@ -67,15 +70,27 @@ std::atomic<bool> g_stop{false};
 std::atomic<int64_t> g_heard{0};
 std::atomic<bool> g_running{false};
 std::atomic<bool> g_mic_open{true};
-// packets the game's voice socket took for the link, by sender address and port
+std::atomic<uint32_t> g_self{0};  // this talker's id, new each start
+// packets the game's sockets took for the link, with the address they came from
 struct Incoming {
-    uint64_t from;
+    uint32_t from;
     std::vector<uint8_t> bytes;
 };
 std::mutex g_in_lock;
 std::deque<Incoming> g_in;
 std::mutex g_peers_lock;
 std::map<uint32_t, int64_t> g_peers;  // address -> the game's last voice send to it
+
+uint32_t Talker32(const uint8_t* b) { return uint32_t(b[8] | b[9] << 8 | b[10] << 16 | uint32_t(b[11]) << 24); }
+
+// the peers the game sent VDP to lately
+std::vector<uint32_t> Peers(int64_t now) {
+    std::vector<uint32_t> out;
+    std::lock_guard lock(g_peers_lock);
+    for (const auto& [address, at] : g_peers)
+        if (now - at < kSendHoldMs) out.push_back(address);
+    return out;
+}
 
 bool Before(uint16_t a, uint16_t b) { return int16_t(a - b) < 0; }
 
@@ -159,14 +174,15 @@ void Run(std::string microphone) {
     SDL_AudioDeviceID playback = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
     if (playback) SDL_ResumeAudioDevice(playback);
     else LOGE("voice link: no playback device: %s", SDL_GetError());
-    std::map<uint64_t, Talker*> talkers;  // by sender address and port
-    std::vector<uint32_t> sending;
+    std::map<uint32_t, Talker*> talkers;  // by talker id
     uint16_t sequence = 0;
     int16_t pcm[kFrame];
     uint8_t packet[kHeader + kMaxPayload];
     std::memcpy(packet, kMagic, 4);
     packet[4] = kVersion;
     packet[5] = 0;
+    uint32_t self = g_self;
+    for (int i = 0; i < 4; i++) packet[8 + i] = uint8_t(self >> (8 * i));
     std::deque<Incoming> in;
     while (!g_stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -176,10 +192,17 @@ void Run(std::string microphone) {
             in.swap(g_in);
         }
         for (; !in.empty(); in.pop_front()) {
-            const Incoming& packet_in = in.front();
+            Incoming& packet_in = in.front();
+            std::vector<uint8_t>& b = packet_in.bytes;
+            uint32_t address = packet_in.from, talker = Talker32(b.data());
+            if (talker == self) continue;
+            if (!(b[5] & kRelayed)) {
+                b[5] |= kRelayed;
+                for (uint32_t peer : Peers(now))
+                    if (peer != address) xnet::SendVoiceLink(peer, b.data(), int(b.size()));
+            }
             if (!playback) continue;
-            uint32_t address = uint32_t(packet_in.from >> 16);
-            Talker*& t = talkers[packet_in.from];
+            Talker*& t = talkers[talker];
             if (!t) {
                 auto made = new Talker;
                 made->decoder = opus_decoder_create(kRate, 1, &error);
@@ -190,13 +213,12 @@ void Run(std::string microphone) {
                     if (made->stream) SDL_DestroyAudioStream(made->stream);
                     if (made->decoder) opus_decoder_destroy(made->decoder);
                     delete made;
-                    talkers.erase(packet_in.from);
+                    talkers.erase(talker);
                     continue;
                 }
                 t = made;
-                LOGI("voice link: hearing %s", Ip(address).c_str());
+                LOGI("voice link: hearing talker %08X from %s", talker, Ip(address).c_str());
             }
-            const std::vector<uint8_t>& b = packet_in.bytes;
             uint16_t seq = uint16_t(b[6] | b[7] << 8);
             std::lock_guard lock(t->lock);
             t->last = now;
@@ -214,7 +236,7 @@ void Run(std::string microphone) {
                 ++it;
                 continue;
             }
-            LOGI("voice link: %s silent, dropped", Ip(uint32_t(it->first >> 16)).c_str());
+            LOGI("voice link: talker %08X silent, dropped", it->first);
             Destroy(it->second);
             it = talkers.erase(it);
         }
@@ -228,13 +250,7 @@ void Run(std::string microphone) {
             if (bytes <= 0) continue;
             packet[6] = uint8_t(seq);
             packet[7] = uint8_t(seq >> 8);
-            sending.clear();
-            {
-                std::lock_guard lock(g_peers_lock);
-                for (const auto& [address, at] : g_peers)
-                    if (now - at < kSendHoldMs) sending.push_back(address);
-            }
-            for (uint32_t address : sending) xnet::SendVoiceLink(address, packet, int(kHeader) + bytes);
+            for (uint32_t address : Peers(now)) xnet::SendVoiceLink(address, packet, int(kHeader) + bytes);
         }
     }
     for (auto& [key, t] : talkers) Destroy(t);
@@ -252,6 +268,7 @@ void StartVoiceLink(const std::string& microphone) {
     g_stop = false;
     g_heard = 0;
     g_running = true;
+    g_self = std::random_device{}() | 1;
     g_worker = std::thread(Run, microphone);
     LOGI("voice link: started");
 }
@@ -277,7 +294,7 @@ void VoiceSent(uint32_t address) {
     if (added) LOGI("voice link: the game talks to %s", Ip(address).c_str());
 }
 
-bool TakeVoiceLinkPacket(uint32_t address, uint16_t port, const uint8_t* data, int bytes) {
+bool TakeVoiceLinkPacket(uint32_t address, const uint8_t* data, int bytes) {
     if (bytes <= int(kHeader) || std::memcmp(data, kMagic, 4)) return false;
     if (data[4] != kVersion) {
         LOG_FIRST(4, "voice link: dropped a version %u packet from %s, both players need the same build", data[4], Ip(address).c_str());
@@ -285,7 +302,7 @@ bool TakeVoiceLinkPacket(uint32_t address, uint16_t port, const uint8_t* data, i
     }
     if (!g_running) return true;
     std::lock_guard lock(g_in_lock);
-    if (g_in.size() < kMaxIncoming) g_in.push_back({uint64_t(address) << 16 | port, std::vector<uint8_t>(data, data + bytes)});
+    if (g_in.size() < kMaxIncoming) g_in.push_back({address, std::vector<uint8_t>(data, data + bytes)});
     return true;
 }
 
