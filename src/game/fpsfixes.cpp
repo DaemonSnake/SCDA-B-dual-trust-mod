@@ -58,7 +58,7 @@ constexpr uint32_t kOwner = 0x5C, kVerts = 0x94, kCount = 0x98, kSmoothedStep = 
 constexpr uint32_t kVertSize = 0x48, kVertPos = 4;
 constexpr uint32_t kLevel = 0xF4, kDeltaSeconds = 0x3F4;  // owner's LevelInfo
 constexpr uint32_t kAttachments = 0xC8, kBounds = 0xCC;   // vtable
-constexpr float kClothStep = 1.0f / 30, kMaxDelta = 0.05f;
+constexpr float kFixedStep = 1.0f / 30, kMaxDelta = 0.05f;
 
 struct Cloth {
     std::vector<float> back, front, shown, now;  // last two steps, the blend drawn, the vertices as found
@@ -76,7 +76,26 @@ void Write(uint32_t body, const std::vector<float>& v) {
     for (size_t i = 0; i < v.size(); i += 3, pos += kVertSize) std::memcpy(HostPtr(pos), &v[i], 12);
 }
 
+// A texture with no MaxFrameRate moves on a frame of its animation every tick.
+constexpr uint32_t kMaxFrameRate = 0xAC, kAccumulator = 0xB0;  // UTexture
+
 }  // namespace
+
+// UTexture::Tick, thiscall(DeltaSeconds)
+X86_EXTERN_FUNC(__imp__sub_001DDA92);
+X86_FUNC(sub_001DDA92) {
+    float delta = GF(ctx.esp + 4);
+    float& time = G<float>(ctx.ecx + kAccumulator);
+    if (G<float>(ctx.ecx + kMaxFrameRate) == 0 && delta > 0) {
+        time += delta;
+        if (time < kFixedStep) {
+            ctx.esp += 8;
+            return;
+        }
+        time = std::min(time - kFixedStep, kFixedStep);
+    }
+    __imp__sub_001DDA92(ctx, base);
+}
 
 // UESoftBody::Update, thiscall
 X86_EXTERN_FUNC(__imp__sub_0025E82D);
@@ -97,9 +116,9 @@ X86_FUNC(sub_0025E82D) {
     Write(body, c.front);
     ctx.esp += 4;
     if (delta > 0) c.time += std::min(delta, kMaxDelta);
-    for (; c.time >= kClothStep; c.time -= kClothStep) {
+    for (; c.time >= kFixedStep; c.time -= kFixedStep) {
         float frame = delta;
-        delta = G<float>(body + kSmoothedStep) = kClothStep;
+        delta = G<float>(body + kSmoothedStep) = kFixedStep;
         ctx.ecx = body;
         ctx.esp -= 4;
         W32(ctx.esp, ret);
@@ -108,7 +127,7 @@ X86_FUNC(sub_0025E82D) {
         c.back.swap(c.front);
         Read(body, c.front);
     }
-    float blend = c.time / kClothStep;
+    float blend = c.time / kFixedStep;
     for (size_t i = 0; i < n; i++) c.shown[i] = c.back[i] + blend * (c.front[i] - c.back[i]);
     Write(body, c.shown);
     ctx.ecx = body;
