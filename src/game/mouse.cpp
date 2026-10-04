@@ -179,18 +179,21 @@ bool Point(uint32_t& point) {
 // true while a menu takes the input. The cursor acts only when act: in a synced session the lockstep carries the pad,
 // and a focus moved, a list row picked or a key tapped here changes the menus on this machine alone (a click opening
 // Objectives here only, the next B closing the OPSAT on the other machine, dropped the session).
+bool Menu(Game& g, bool act) {
     uint32_t top = InputPage(g.viewport);
     if (top && R32(top + 0x14) == kQuickInventory) return false;
-    // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu
+    // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu. P_Trust and
+    // P_Videos are OPSAT pages on the HUD layer: menus all the same, P_Trust with nothing to point at
     uint32_t layer = top ? R32(top + 0x1C) : 0, focus = top ? R32(top + 0x24) : 0;
-    uint32_t page = layer == kHudLayer || !focus ? 0 : top;
+    bool opsat = top && std::ranges::find(kOpsatPages, R32(top + 0x14)) != std::end(kOpsatPages);
+    uint32_t page = (layer == kHudLayer && !opsat) || !focus ? 0 : top;
     uint32_t begin = page ? R32(page + 8) : 0, end = page ? R32(page + 0xC) : 0;
     if (end < begin || end - begin > 4 * 512) begin = end = 0;
     uint32_t focusable = 0, hovered = 0, focused = 0;
     uint32_t point = g_point, clicks = input::Clicks();
     // a new page starts from where the cursor rests, only movement or a click after it acts
     bool fresh = top != g_page;
-    bool moved = Point(point) && point != g_point && !fresh, clicked = clicks != g_clicks && !fresh;
+    bool moved = Point(point) && point != g_point && !fresh && act, clicked = clicks != g_clicks && !fresh && act;
     g_point = point;
     g_clicks = clicks;
     W32(g.scratch, point);
@@ -209,7 +212,7 @@ bool Point(uint32_t& point) {
         LOGI("mouse: input page %08X id %08X layer %u focus %08X, %u focusable, %s", top, top ? R32(top + 0x14) : 0,
              layer, focus, focusable, page ? "menu" : "not a menu");
     }
-    if (!focusable) return false;
+    if (!focusable) return page && opsat;
     if (focused && R32(focused + 4) == kEventsCatcher) {
         if (clicked) Tap(g, kJoyA);
         return true;
