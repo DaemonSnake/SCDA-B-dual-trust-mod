@@ -60,6 +60,9 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **Rebinding** - Every action can be rebound from the Mouse and Keyboard page.
 - **Custom Menu Cursor** - Put a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
 
+### Controller
+- **Rebinding** - The controller's buttons can be swapped around from the Controller page. The defaults are the console's layout, and menus keep the stock buttons.
+
 ### General
 - **Skip Intro** - Skips the intro logo's.
 - **Boot Splash** - Put a `SplinterCell4Logo.png` (or `.bmp`) beside the exe for a splash screen at launch.

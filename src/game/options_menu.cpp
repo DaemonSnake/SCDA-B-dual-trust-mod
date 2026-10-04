@@ -1,7 +1,7 @@
-// RECOMP SETTINGS and MOUSE AND KEYBOARD under Shadow Calibration in the options menu. Each opens the Display page
-// (P_Video) with the F10 panel's rows in its list until B: A opens the list of a row's values (an on / off row flips)
-// or rebinds; a range (no list) steps on Left, Right and A. RECOMP SETTINGS first lists its sections (the F10 headings named here) on
-// P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
+// RECOMP SETTINGS, MOUSE AND KEYBOARD and CONTROLLER under Shadow Calibration in the options menu. Each opens the
+// Display page (P_Video) with the F10 panel's rows in its list until B: A opens the list of a row's values (an on / off
+// row flips) or rebinds; a range (no list) steps on Left, Right and A. RECOMP SETTINGS first lists its sections (the
+// F10 headings named here) on P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -56,12 +56,15 @@ constexpr uint32_t kItems = 0x60, kRowsShown = 0x9A, kSelection = 0x9C, kItemSiz
 // instance: +0x18 bit 0 visible, +0x4C flags
 constexpr uint32_t kVisible = 0x18, kFlags = 0x4C;
 constexpr uint32_t kLeft = 0x25, kRight = 0x27, kEscape = 0x1B;
-const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard"};
+const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Controller"};
+constexpr int kCaptionCount = int(std::size(kCaptions));
 const std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
 
 // the F10 panel's upper case in the game's title case: "DISPLAY MODE" as "Display Mode", "SPACE/ENTER" as "Space/Enter"
 std::string Title(std::string_view text) {
-    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"}, kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA"};
+    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"};
+    constexpr std::string_view kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA",
+                                          "LB", "RB", "LT", "RT", "LS", "RS"};
     std::string out;
     size_t i = 0;
     while (i < text.size()) {
@@ -70,6 +73,7 @@ std::string Title(std::string_view text) {
         std::string word(text.substr(i, end - i));
         bool digit = word.find_first_of("0123456789") != std::string::npos;
         if (word == "HZ") word = "Hz";
+        else if (word == "D-PAD") word = "D-Pad";
         else if (word == "MS") word = "ms";
         else if (!digit && std::find(std::begin(kKeep), std::end(kKeep), word) == std::end(kKeep)) {
             bool small = !out.empty() && std::find(std::begin(kSmall), std::end(kSmall), word) != std::end(kSmall);
@@ -105,8 +109,8 @@ constexpr uint32_t kListY = 0x12;
 constexpr int16_t kListTop = 116;
 // P_Video's own (options.mgm): before that page has been shown the list's y is still 0, so it is not read back
 constexpr int16_t kStockListY = 205;
-// only MOUSE AND KEYBOARD, the long page, starts under the titles; the RECOMP SETTINGS sections keep the stock place
-int16_t ListTop() { return g_take.mode == 1 ? kListTop : kStockListY; }
+// the long pages (MOUSE AND KEYBOARD, CONTROLLER) start under the titles; the RECOMP SETTINGS sections keep the stock place
+int16_t ListTop() { return g_take.mode >= 1 ? kListTop : kStockListY; }
 uint8_t g_validate[2] = {};
 bool g_validate_saved = false, g_restore = false;
 // P_Video's upper title (L_Text, "OPTIONS"): RECOMP SETTINGS shows its name there and the section's below
@@ -179,7 +183,8 @@ void Refresh(X86Context& ctx) {
     for (size_t i = 0; i < g_take.rows.size(); i++) {
         const app::rows::Row* r = g_take.rows[i];
         std::string label = Title(r ? r->label : "RESTORE DEFAULTS"), value;
-        if (r) value = Title(g_capture == int(i) ? std::string("PRESS A KEY") : app::rows::Value(*r));
+        const char* prompt = r && r->kind == app::rows::Kind::PadBind ? "PRESS A BUTTON" : "PRESS A KEY";
+        if (r) value = Title(g_capture == int(i) ? std::string(prompt) : app::rows::Value(*r));
         ctx.ecx = g_take.list;
         if (!two) {
             CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide(r ? label + "  " + value : label)});
@@ -266,7 +271,8 @@ void Fill(X86Context& ctx, int select = 0) {
     } else {
         for (size_t i = 0; i < count; i++) {
             if (page[i].kind == Kind::Heading && !g_take.rows.empty()) g_take.rows.push_back(&kGap);
-            if (page[i].kind == Kind::Value || page[i].kind == Kind::Bind) g_take.rows.push_back(&page[i]);
+            if (page[i].kind == Kind::Value || page[i].kind == Kind::Bind || page[i].kind == Kind::PadBind)
+                g_take.rows.push_back(&page[i]);
         }
         g_take.rows.push_back(&kGap);
         g_take.rows.push_back(nullptr);
@@ -583,14 +589,17 @@ void MenuTick(X86Context& ctx) {
     }
     g_take.last_row = row;
     if (g_capture < 0) return;
-    int vk = input::PressedKey();
+    // a controller row takes any controller button, Escape cancels either
+    const app::rows::Row* r = g_take.rows[size_t(g_capture)];
+    bool pad = r && r->kind == app::rows::Kind::PadBind;
+    int vk = input::PressedKey(), button = pad ? input::PressedPadButton() : -1;
     if (!g_armed) {
-        g_armed = !vk;
+        g_armed = !vk && button < 0;
         return;
     }
-    if (!vk) return;
-    const app::rows::Row* r = g_take.rows[size_t(g_capture)];
-    if (vk != kEscape && r) input::Bind(size_t(r->id), vk);
+    if (button >= 0) input::BindPad(size_t(r->id), button);
+    else if (vk && !pad && vk != kEscape && r) input::Bind(size_t(r->id), vk);
+    else if (vk != kEscape) return;
     StopCapture();
     Refresh(ctx);
     Sound(ctx, g_take.owner);
@@ -610,7 +619,7 @@ X86_FUNC(sub_001A53B5) {
     g_first = count;
     ctx.ecx = list;
     for (const char* caption : kCaptions) CallGuest(ctx, kAddItem, {Wide(caption), 0});
-    G<uint8_t>(list + kRowsShown) = uint8_t(count + 2);
+    G<uint8_t>(list + kRowsShown) = uint8_t(count + kCaptionCount);
     CallGuest(ctx, kLayout, {});
     if (g_restore) RestoreStock(ctx, menu);
     g_restore = false;
@@ -631,7 +640,7 @@ X86_FUNC(sub_001A4161) {
         ctx.esp += 8;
         return;
     }
-    if (ours_list && g_take.mode < 0 && g_first >= 0 && R32(instance + 8) == list && row >= g_first && row < g_first + 2 &&
+    if (ours_list && g_take.mode < 0 && g_first >= 0 && R32(instance + 8) == list && row >= g_first && row < g_first + kCaptionCount &&
         IsPage(ctx, owner, kOptionsName)) {
         if (row == g_first) {
             uint32_t page = R32(menu + kOptionsPage);
@@ -643,7 +652,7 @@ X86_FUNC(sub_001A4161) {
             g_sections.title = PageChild(page, kTitleId);
             Sound(ctx, owner);
         } else {
-            Enter(ctx, menu, 1);
+            Enter(ctx, menu, row - g_first);
         }
         ctx.ecx = menu + kListener;
         G<uint8_t>(owner + kTaken) = 1;

@@ -51,6 +51,7 @@ struct Settings {
     bool push_to_talk = false;             // voice only while the push to talk key is held
     Port players[2] = {{true, 0}, {false, 1}};  // guest ports 0 and 1; 2 and 3 stay empty
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
+    std::map<std::string, std::string> pad_buttons;  // controller action id to button name, absent is the stock one
 };
 
 Settings& Get();
@@ -106,12 +107,13 @@ void DrawWatermark(X86Context& ctx);
 // the hide HUD key: the HUD layer's Magma pages are not drawn in a level
 inline std::atomic<bool> g_hide_hud{false};
 
-// option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard
+// option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard,
+// 2 controller
 namespace rows {
-enum class Kind { Heading, Value, Bind, Text };
+enum class Kind { Heading, Value, Bind, PadBind, Text };
 struct Row {
     Kind kind;
-    int id;  // a bind row's input action
+    int id;  // a bind row's input action, a pad bind row's input pad action
     const char* label;
 };
 const Row* Page(int page, size_t* count);

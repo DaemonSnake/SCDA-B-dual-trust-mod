@@ -275,6 +275,17 @@ const std::vector<Row>& InputRows() {
     return list;
 }
 
+const std::vector<Row>& PadRows() {
+    static const std::vector<Row> list = [] {
+        std::vector<Row> out;
+        size_t count = 0;
+        const input::Action* actions = input::PadActions(&count);
+        for (size_t i = 0; i < count; i++) out.push_back({Kind::PadBind, int(i), actions[i].label});
+        return out;
+    }();
+    return list;
+}
+
 // steps the value first when step is not zero; a copy of the settings only reads what a step gives
 std::string RowText(int id, int step, Settings& s = Get()) {
     char text[64] = "";
@@ -423,6 +434,10 @@ std::string KeyText(std::string keys) {
 }
 
 void RestoreDefaults(int page) {
+    if (page == 2) {
+        input::ResetPadBindings();
+        return;
+    }
     if (page == 1) {
         Settings& s = Get();
         s.mouse_sensitivity = Settings{}.mouse_sensitivity;
@@ -435,6 +450,7 @@ void RestoreDefaults(int page) {
     Get().mouse_sensitivity = keep.mouse_sensitivity;
     Get().invert_mouse = keep.invert_mouse;
     Get().keys = keep.keys;
+    Get().pad_buttons = keep.pad_buttons;
     Changed(true);
 }
 
@@ -443,14 +459,24 @@ std::atomic<int> g_capture{-1};
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = 0;
-const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "LEVEL SELECT"};
-constexpr int kLevelsPage = 2;
-// the level select only where the game side has levels to open
-int PageCount() { return game::Levels().empty() ? kLevelsPage : int(std::size(kPages)); }
+const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER", "LEVEL SELECT"};
+constexpr int kControllerPage = 2, kLevelsPage = 3;
+// the controller page where the game has pad actions (not Versus), the level select where it has levels to open
+bool PageShown(int page) {
+    size_t pads = 0;
+    input::PadActions(&pads);
+    return page == kControllerPage ? pads > 0 : page != kLevelsPage || !game::Levels().empty();
+}
+
+int StepPage(int page, int step) {
+    do page = StepIndex(page, step, int(std::size(kPages)));
+    while (!PageShown(page));
+    return page;
+}
 
 // the DataXb\LMaps folders; Menu is the main menu
 // label left, keys right; Enter or a click starts the capture
-bool BindRow(const char* label, const std::string& keys, bool capturing) {
+bool BindRow(const char* label, const std::string& keys, bool capturing, const char* prompt) {
     const ImGuiStyle& style = ImGui::GetStyle();
     float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
     float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
@@ -462,7 +488,7 @@ bool BindRow(const char* label, const std::string& keys, bool capturing) {
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    std::string value = capturing ? std::string("PRESS A KEY") : keys;
+    std::string value = capturing ? std::string(prompt) : keys;
     float value_x = row_x + row_w - block_w + row_h + style.ItemSpacing.x;
     ImGui::SetCursorPos(ImVec2(value_x + std::max((value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
     ImGui::AlignTextToFramePadding();
@@ -475,16 +501,18 @@ bool BindRow(const char* label, const std::string& keys, bool capturing) {
     return pressed;
 }
 
-// Escape cancels, any other bindable key or mouse button binds
+// Escape cancels, any other bindable key or mouse button binds; on the controller page any controller button
 void PollCapture() {
     if (g_capture < 0) return;
-    int vk = input::PressedKey();
+    bool pad = g_page == kControllerPage;
+    int vk = input::PressedKey(), button = pad ? input::PressedPadButton() : -1;
     if (!g_capture_armed) {
-        g_capture_armed = !vk;
+        g_capture_armed = !vk && button < 0;
         return;
     }
-    if (!vk) return;
-    if (vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk);
+    if (button >= 0) input::BindPad(size_t(g_capture.load()), button);
+    else if (vk && !pad && vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk);
+    else if (vk != VK_ESCAPE) return;
     g_capture = -1;
     g_capture_done = ImGui::GetFrameCount();
 }
@@ -590,8 +618,9 @@ void DrawRows(int page) {
             MicrophoneRow(r.label);
         } else if (r.kind == Kind::Value) {
             if (int step = OptionRow(r.label, RowText(r.id, 0).c_str())) RowText(r.id, step);
-        } else if (r.kind == Kind::Bind) {
-            if (BindRow(r.label, rows::Value(r), g_capture == r.id) && g_capture < 0 &&
+        } else if (r.kind == Kind::Bind || r.kind == Kind::PadBind) {
+            const char* prompt = r.kind == Kind::Bind ? "PRESS A KEY" : "PRESS A BUTTON";
+            if (BindRow(r.label, rows::Value(r), g_capture == r.id, prompt) && g_capture < 0 &&
                 ImGui::GetFrameCount() > g_capture_done + 1) {
                 g_capture = r.id;
                 g_capture_armed = false;
@@ -648,7 +677,7 @@ void DrawPanel() {
         ImGui::TextUnformatted(title);
         ImGui::Separator();
         if (int step = OptionRow("PAGE", kPages[g_page])) {
-            g_page = StepIndex(g_page, step, PageCount());
+            g_page = StepPage(g_page, step);
             g_capture = -1;
         }
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
@@ -658,9 +687,11 @@ void DrawPanel() {
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        ImGui::TextUnformatted(g_capture >= 0            ? "Press a key or mouse button to bind, Escape cancels"
-                               : g_page == kLevelsPage ? "Up and Down select, Enter or a click loads the level, Escape closes"
-                                                       : "Up and Down select, Left and Right change, Enter rebinds, Escape closes");
+        const char* hint = "Up and Down select, Left and Right change, Enter rebinds, Escape closes";
+        if (g_capture >= 0) hint = g_page == kControllerPage ? "Press a controller button to bind, Escape cancels"
+                                                             : "Press a key or mouse button to bind, Escape cancels";
+        else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
+        ImGui::TextUnformatted(hint);
         ImGui::PopStyleColor();
         float bw = em * 8;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2, 0.0f));
@@ -705,9 +736,10 @@ namespace rows {
 
 // the game thread asks too, the F10 panel draws under the same lock
 const Row* Page(int page, size_t* count) {
-    if (page == 1) {
-        *count = InputRows().size();
-        return InputRows().data();
+    if (page == 1 || page == 2) {
+        const std::vector<Row>& list = page == 1 ? InputRows() : PadRows();
+        *count = list.size();
+        return list.data();
     }
     *count = std::size(kSettingsRows);
     return kSettingsRows;
@@ -716,6 +748,7 @@ const Row* Page(int page, size_t* count) {
 std::string Value(const Row& row) {
     std::lock_guard lock(UiLock());
     if (row.kind == Kind::Bind) return KeyText(input::Binding(size_t(row.id)));
+    if (row.kind == Kind::PadBind) return KeyText(input::PadBinding(size_t(row.id)));
     return row.kind == Kind::Heading ? std::string() : RowText(row.id, 0);
 }
 

@@ -106,8 +106,19 @@ const Action* Actions(size_t* count);
 std::string Binding(size_t action);
 void Bind(size_t action, int vk);
 void ResetBindings();
-void LoadBindings();  // after the settings load
+void LoadBindings();  // after the settings load, the controller's too
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
+// The controller's buttons by action, for every controller: each action is one of the console pad's controls,
+// pressed in play by the physical button bound to it (defaults: the stock one's name, empty for quick save and quick
+// load, which have none); menus keep the stock buttons. A button another action has changes places with the one
+// rebound; quick save or load bound again to its own button comes off it.
+const Action* PadActions(size_t* count);
+std::string PadBinding(size_t action);
+void BindPad(size_t action, int button);
+void ResetPadBindings();
+// a controller button held now on any controller, -1 for none: 0-7 A B X Y RB LB LT RT, 8-15 the Pad::buttons bits,
+// 16 a PlayStation controller's touchpad
+int PressedPadButton();
 bool ConsoleKey(int vk);     // the console action is bound to this key
 bool HostKey(KeyEvent event, int vk);  // that event's action is bound to this key and no key capture wants it
 bool ConsoleChar(unsigned c);  // the character a console key types, kept out of the console's line
