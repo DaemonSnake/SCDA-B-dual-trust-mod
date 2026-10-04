@@ -318,6 +318,9 @@ Held g_held[std::size(kEventPrompts)];  // game thread
 
 namespace game {
 
+// text.cpp
+std::string KeyNames(std::initializer_list<const char*> ids) { return Keys(ids); }
+
 // hud.cpp, the bar's element draw
 void EventPrompts(X86Context& ctx, uint32_t bar) {
     bool keyboard = input::KeyboardActive();
