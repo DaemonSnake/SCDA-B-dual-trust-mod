@@ -33,7 +33,7 @@ bool TakeMouse(float& dx, float& dy);
 
 // a game menu takes the input: the cursor is free and the mouse buttons stop firing
 void SetMenu(bool menu);
-// the title screen, which only Start gets past: Enter and the interact key press it there
+// the title screen, which only Start gets past: Enter, the interact key and a left click press it there
 void SetTitleScreen(bool title);
 // the pause menu, which Start closes and B does not: the pause key stays Start there
 void SetPauseMenu(bool pause);

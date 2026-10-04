@@ -370,6 +370,7 @@ void Keyboard(Pad& p) {
         p.analog[0] = 0xFF;
         if (g_title) p.buttons |= kStart;
     }
+    if (g_title && g_press_counts) p.buttons |= kStart;
     if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs)
         p.buttons |= kStart;
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
