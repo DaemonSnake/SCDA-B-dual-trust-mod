@@ -18,9 +18,11 @@ using namespace kernel;
 
 namespace game {
 bool OnStack(uint32_t page);  // options_menu.cpp
+std::u16string KeyWording(std::u16string text);  // text.cpp
 }
 
 X86_EXTERN_FUNC(__imp__sub_002C64E0);  // Magma element draw (thiscall instance), hooked in hud.cpp
+X86_EXTERN_FUNC(sub_002C64E0);
 
 namespace {
 
@@ -52,6 +54,7 @@ constexpr uint32_t kComboIcon = 0xAAA53D32, kComboGlow = 0xEA7CB115, kComboName 
 // widget: +0x10 left, +0x12 right, +0x14 top, +0x16 bottom (page units, in its area), an area instance's +0x10 x,
 // +0x1C its children; vtable +8 Draw
 constexpr uint32_t kRect = 0x10, kChildren = 0x1C, kDraw = 0x08;
+constexpr uint32_t kTextWidget = 0x568290;  // vtable
 constexpr int kCharWidth = 10;  // Title_18 capitals, page units
 // after a name wider than its icon, so the next arrow sits midway; names sit this much higher to line up with the arrows
 constexpr int kNameGap = 12, kNameRaise = 4;
@@ -314,6 +317,28 @@ struct Held {
 };
 Held g_held[std::size(kEventPrompts)];  // game thread
 
+// a caption right aligned against its icon, some with more text after the icon: the message box and the mission's
+// end "Press (A) To Continue", the training video's "Skip Video (start)" and its "Press (button)"
+struct Hint {
+    uint32_t text, image, after;
+};
+constexpr Hint kHints[] = {
+    {game::magma::Id("L_Press"), game::magma::Id("I_Button"), game::magma::Id("L_Continue")},
+    {game::magma::Id("text_skip"), game::magma::Id("bouton_skip"), 0},
+    {game::magma::Id("text"), game::magma::Id("bouton"), 0},
+};
+// the icon as it last came to draw: its key and sides
+struct Seen {
+    uint32_t tick = 0;
+    std::string key;
+    int l = 0, r = 0;
+};
+Seen g_seen[std::size(kHints)];  // game thread
+uint32_t g_tick = 3;  // past a hint never seen
+bool g_hinting = false;
+constexpr int kTextChar2 = 15;           // Text_16, twice a character's width in page units
+constexpr int kIconGap = 4, kWordGap = 7;  // a caption's end to its icon, between words
+
 }  // namespace
 
 namespace game {
@@ -418,8 +443,71 @@ bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     return true;
 }
 
+// hud.cpp, any element about to draw. On the keyboard a text naming the pad's buttons draws with the bound keys
+// in their place and keeps its own, so it follows the device: true when drawn here.
+bool WordingElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
+    static bool drawing = false;
+    uint32_t widget = R32(instance + 8);
+    if (drawing || !widget || R32(widget) != kTextWidget || !(G<uint8_t>(instance + 0x18) & 1) ||
+        R32(widget + 0x2C + 0x14) > 0x200 || !input::KeyboardActive() || !Block())
+        return false;
+    std::u16string text = ReadText(widget), keys = KeyWording(text);
+    if (keys == text) return false;
+    WriteText(ctx, widget, keys);
+    drawing = true;
+    ctx.ecx = instance;
+    sub_002C64E0(ctx, base);
+    drawing = false;
+    WriteText(ctx, widget, text);
+    return true;
+}
+
+// hud.cpp, any element about to draw. On the keyboard a hint's icon goes and its key joins the caption, which
+// ends where the icon did; with text after the icon the two close up around the key, centred as before: true when
+// handled here.
+bool HintElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
+    uint32_t id = R32(instance + 4), widget = R32(instance + 8);
+    if (g_hinting || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !input::KeyboardActive()) return false;
+    for (size_t i = 0; i < std::size(kHints); i++) {
+        const Hint& h = kHints[i];
+        Seen& s = g_seen[i];
+        if (id == h.image) {
+            uint32_t material = R32(widget + 0x3C);
+            std::string key = material ? Label(R32(material + 4), input::InMenu(), 0) : std::string();
+            if (key.empty()) return false;
+            s = {g_tick, key, int16_t(R16(widget + kRect)), int16_t(R16(widget + kRect + 2))};
+            ctx.esp += 4;
+            return true;
+        }
+        bool after = h.after && id == h.after;
+        if ((id != h.text && !after) || g_tick - s.tick > 2 || !Block()) continue;
+        std::u16string text = ReadText(widget);
+        if (text.empty()) return false;
+        int w = int(s.key.size() + 3) * kTextChar2 / 2, grow = h.after ? (w - (s.r - s.l)) / 2 : 0;
+        int end = h.after ? s.l - kIconGap - grow + w : s.r;  // of the caption with its key
+        int l = int16_t(R16(widget + kRect)), r = int16_t(R16(widget + kRect + 2));
+        uint32_t sides = R32(widget + kRect);
+        W16(widget + kRect, uint16_t(int16_t(after ? end + kWordGap : l - w)));
+        W16(widget + kRect + 2, uint16_t(int16_t(after ? r + end + kWordGap - l : end)));
+        if (!after) {
+            std::u16string line = text + u" (";
+            for (char c : s.key) line += char16_t(uint8_t(c));
+            WriteText(ctx, widget, line + u")");
+        }
+        g_hinting = true;
+        ctx.ecx = instance;
+        sub_002C64E0(ctx, base);
+        g_hinting = false;
+        if (!after) WriteText(ctx, widget, text);
+        W32(widget + kRect, sides);
+        return true;
+    }
+    return false;
+}
+
 // game thread, every input update
 void PromptsTick(X86Context& ctx) {
+    g_tick++;
     int keyboard = input::KeyboardActive();
     if (keyboard == g_keyboard) return;
     bool first = g_keyboard < 0;

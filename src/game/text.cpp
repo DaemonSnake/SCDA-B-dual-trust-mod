@@ -2,26 +2,27 @@
 // co-op button, its page titles and the lobby all read [COMMON] MainTitleLan). Every language gets the English text.
 // The storage messages never show while the hard disk reports its fixed free space; their "Select OK to free %i
 // blocks" tail went to the dashboard, so it is dropped.
-// On keyboard and mouse the English tutorial text names the bound keys in place of the pad's buttons.
+// On keyboard and mouse the English tutorial text names the bound keys in place of the pad's buttons, as it is
+// drawn (prompts.cpp), so it follows the device.
 #include <algorithm>
 #include <initializer_list>
 #include <string>
 #include <string_view>
 
-#include "core/input.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
 
 namespace game {
 std::string KeyNames(std::initializer_list<const char*> ids);  // prompts.cpp
+std::u16string KeyWording(std::u16string text);
 }
 
 namespace {
 
 // Localize(section, key, package, ...), cdecl, returns one of its own TCHAR buffers (0x400 characters)
 struct Text {
-    std::u16string_view key, text;
+    std::u16string_view key, text, section;
 };
 constexpr Text kTexts[] = {
     {u"MainTitleLan", u"LAN"},
@@ -29,12 +30,14 @@ constexpr Text kTexts[] = {
     {u"ProfileErrorCreateMsg", u"Your PC doesn't have enough free storage to save a profile."},
     {u"ErrorSavingMsg", u"Your PC doesn't have enough free storage to save the checkpoint."},
     {u"SavedMissingSpaceMsg", u"Your PC doesn't have enough free storage to save the checkpoints."},
+    // the game has these two the wrong way round
+    {u"HowToUseMe", u"USE: Press right on the D-pad.", u"THERMO"},
+    {u"HowToUseMe", u"USE: Press left on the D-pad.", u"NIGHTVISION"},
 };
 
-// applied in order. {action} is its key, @ is press or click by the key after it. A section limits one to it:
-// the game's own text has the two visions' directions swapped
+// applied in order. {action} is its key, @ is press or click by the key after it
 struct Swap {
-    std::string_view from, to, section;
+    std::string_view from, to;
 };
 constexpr Swap kSwaps[] = {
     {"press X to make noise or A to release gas", "@ {alt_fire} to make noise or {fire} to release gas"},
@@ -58,8 +61,8 @@ constexpr Swap kSwaps[] = {
     {"rotate the left thumbstick", "press {move}"},
     {"move the left thumbstick around its periphery", "press {move}"},
     {"left thumbstick", "{move}"},
-    {"press left on the D-pad", "@ {next_vision}", "THERMO"},
-    {"press right on the D-pad", "@ {previous_vision}", "NIGHTVISION"},
+    {"press left on the D-pad", "@ {previous_vision}"},
+    {"press right on the D-pad", "@ {next_vision}"},
     {"press on the left D-pad", "@ {previous_vision}"},
     {"press up on the D-pad", "@ {goggles}"},
     {"press up on the directional pad", "@ {goggles}"},
@@ -82,11 +85,12 @@ constexpr Swap kSwaps[] = {
     {"X to equip", "{scope} to equip"},
 };
 
+// letters in either case
 bool Equals(uint32_t text, std::u16string_view want) {
     if (!text) return false;
-    for (size_t i = 0; i <= want.size(); i++)
-        if (R16(text + uint32_t(i) * 2) != (i < want.size() ? want[i] : 0)) return false;
-    return true;
+    for (size_t i = 0; i < want.size(); i++)
+        if ((R16(text + uint32_t(i) * 2) | 0x20) != (want[i] | 0x20)) return false;
+    return !R16(text + uint32_t(want.size()) * 2);
 }
 
 bool Letter(char16_t c) { return (c | 0x20) >= 'a' && (c | 0x20) <= 'z'; }
@@ -116,12 +120,11 @@ std::u16string Expand(std::string_view to, bool upper) {
     return out;
 }
 
-// whole words, the first letter in either case
-std::u16string ToKeys(std::u16string text, std::u16string_view section) {
-    for (const Swap& s : kSwaps) {
-        if (!s.section.empty() && !std::equal(section.begin(), section.end(), s.section.begin(), s.section.end(),
-                                              [](char16_t a, char b) { return (a | 0x20) == (b | 0x20); }))
-            continue;
+}  // namespace
+
+// prompts.cpp, a text about to draw on the keyboard. Whole words, the first letter in either case
+std::u16string game::KeyWording(std::u16string text) {
+    for (const Swap& s : kSwaps)
         for (size_t at = 0; at + s.from.size() <= text.size(); at++) {
             size_t end = at + s.from.size();
             if ((at && Letter(text[at - 1])) || (end < text.size() && Letter(text[end]))) continue;
@@ -132,32 +135,17 @@ std::u16string ToKeys(std::u16string text, std::u16string_view section) {
             text.replace(at, s.from.size(), to);
             at += to.size() - 1;
         }
-    }
     return text;
 }
 
-std::u16string Read(uint32_t text) {
-    std::u16string out;
-    for (uint32_t i = 0; text && i < 0x3FF && R16(text + i * 2); i++) out += char16_t(R16(text + i * 2));
-    return out;
-}
-
-}  // namespace
-
 X86_EXTERN_FUNC(__imp__sub_00070FC9);
 X86_FUNC(sub_00070FC9) {
-    uint32_t key = R32(ctx.esp + 8);
-    std::u16string section = Read(R32(ctx.esp + 4)), text;
+    uint32_t section = R32(ctx.esp + 4), key = R32(ctx.esp + 8);
+    const Text* found = nullptr;
     for (auto& t : kTexts)
-        if (Equals(key, t.key)) text = t.text;
+        if (Equals(key, t.key) && (t.section.empty() || Equals(section, t.section))) found = &t;
     __imp__sub_00070FC9(ctx, base);
-    if (!ctx.eax) return;
-    if (text.empty() && input::KeyboardActive()) {
-        std::u16string was = Read(ctx.eax);
-        text = ToKeys(was, section);
-        if (text == was) return;
-    }
-    if (text.empty()) return;
-    text.resize(std::min<size_t>(text.size(), 0x3FF));
+    if (!found || !ctx.eax) return;
+    std::u16string_view text = found->text;
     for (size_t i = 0; i <= text.size(); i++) W16(ctx.eax + uint32_t(i) * 2, i < text.size() ? text[i] : 0);
 }
