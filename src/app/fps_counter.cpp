@@ -23,6 +23,8 @@ constexpr uint32_t kManager = 0x3D8D74, kViewport = 0x38, kCanvas = 0x64;
 // font: vtable +8 Draw, +0x10 Width(text) in font pixels (solo)
 constexpr uint32_t kName = 0x08, kFontSize = 0x49, kPages = 0x478, kDraw = 0x08, kWidth = 0x10;
 constexpr int kSize = 12, kMargin = 8;  // page units
+// versus draws its pages 1.1 wide about the centre: page x 29 is the screen's left side
+constexpr int kLeft = kVersus ? 29 : 0;
 
 // the body text font, else any font with its page textures made
 uint32_t Font() {
@@ -74,8 +76,12 @@ void app::DrawFps(X86Context& ctx) {
     if (!screen) return;
     char text[32];
     std::snprintf(text, sizeof text, "FPS: %.1f", double(g_fps.load()));
-    Text(ctx, text, kMargin, int16_t(R16(screen + kPageHeight)) - kMargin - kSize, kSize, 0xFFFFFFFFu, true, false);
+    Text(ctx, text, kLeft + kMargin, int16_t(R16(screen + kPageHeight)) - kMargin - kSize, kSize, 0xFFFFFFFFu, true, false);
 }
 
 // mirrors the button legend: its text starts 80 in on baseline 46, size 16, grey B0
-void app::DrawWatermark(X86Context& ctx) { Text(ctx, "XBE Recomp V1", 560, 46, 16, 0xFFB0B0B0u, false, true); }
+void app::DrawWatermark(X86Context& ctx) {
+    char text[32];
+    std::snprintf(text, sizeof text, "XBE Recomp V%d", kVersion);
+    Text(ctx, text, 560, 46, 16, 0xFFB0B0B0u, false, true);
+}
