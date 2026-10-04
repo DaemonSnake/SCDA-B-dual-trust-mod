@@ -34,6 +34,9 @@ namespace input {
 namespace {
 
 std::atomic<bool> g_blocked{false}, g_menu{false};
+// the cursor points at something in play (a keypad): free and counting clicks as in a menu, nothing else of one
+std::atomic<bool> g_pointer{false};
+bool Pointing() { return g_menu || g_pointer; }
 // keys held while the game had no focus (the focusing click, Escape closing the options) wait for release
 std::atomic<bool> g_settle{false};
 // a click that opened or closed a menu must not reach the game, the mouse buttons wait for release; keys stay held
@@ -384,7 +387,7 @@ void Keyboard(Pad& p) {
     if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
         !Down(VK_XBUTTON2))
         g_settle_mouse = false;
-    bool no_mouse = menu || g_settle_mouse;
+    bool no_mouse = menu || g_pointer || g_settle_mouse;
     bool camera = View(g_view.load()) == View::StickyCamera && !menu;
     View view = View(g_view.load());
     bool keypad = view == View::Keypad && !menu;
@@ -707,7 +710,7 @@ void OnRawInput(void* handle) {
         ri.header.dwType != RIM_TYPEMOUSE || !Active())
         return;
     // only the clip: settling would drop a held key that keeps a menu open (quick inventory)
-    if (g_menu) ClipCursor(nullptr);
+    if (Pointing()) ClipCursor(nullptr);
     else Clip();
     const RAWMOUSE& m = ri.data.mouse;
     if (m.lLastX || m.lLastY || m.usButtonFlags) g_keyboard_ms = NowMs();
@@ -724,10 +727,10 @@ void OnRawInput(void* handle) {
     }
 }
 
-void OnPress() { g_press_counts = Active() && g_menu; }
+void OnPress() { g_press_counts = Active() && Pointing(); }
 
 void OnClick() {
-    if (g_press_counts.exchange(false) && Active() && g_menu) g_clicks++;
+    if (g_press_counts.exchange(false) && Active() && Pointing()) g_clicks++;
 }
 
 void SkipPromptShown() { g_skip_ms = NowMs(); }
@@ -739,7 +742,7 @@ void ReleaseCursor() {
 
 bool TakeMouse(float& dx, float& dy) {
     int x = g_dx.exchange(0), y = g_dy.exchange(0);
-    if ((!x && !y) || !Active() || g_menu) return false;
+    if ((!x && !y) || !Active() || Pointing()) return false;
     const app::Settings& s = app::Get();
     dx = float(x) * s.mouse_sensitivity;
     dy = float(s.invert_mouse ? -y : y) * s.mouse_sensitivity;
@@ -782,6 +785,16 @@ void SetMenu(bool menu) {
 }
 
 bool InMenu() { return g_menu; }
+
+void SetPointer(bool on) {
+    if (g_pointer.exchange(on) != on) {
+        if (on) ClipCursor(nullptr);
+        g_settle_mouse = true;
+        RefreshCursor();
+    }
+}
+
+bool Pointer() { return g_pointer; }
 
 void MovieFrame() {
     uint64_t now = NowMs();

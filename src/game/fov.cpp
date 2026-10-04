@@ -26,6 +26,10 @@ constexpr uint32_t kCinActor = 0x200000, kBlockInput = 0x40;
 
 uint32_t g_view = 0, g_state = 0;  // the frame's scene node and controller state
 float g_scale = 1.0f;              // what the frame's view was widened by
+// the frame's node: +0x10C WorldToScreen (FMatrix, rows of 4), which FSceneNode::Project (sub_00285726) applies
+constexpr uint32_t kWorldToScreen = 0x10C;
+float g_world_to_screen[16] = {};
+bool g_projection = false;
 
 // player controller states
 bool Gameplay(uint32_t state) {
@@ -109,8 +113,29 @@ X86_FUNC(sub_002898CB) {
         if (scale) fov = std::atan(std::tan(fov * kHalf) * s) / kHalf;
         if (scale && from == kFrameView) g_scale = s;
     }
+    uint32_t node = ctx.ecx;
     __imp__sub_002898CB(ctx, base);
+    // the node lives only through the frame, the matrix is kept for the input update
+    if (from == kFrameView) {
+        for (uint32_t i = 0; i < 16; i++) g_world_to_screen[i] = GF(node + kWorldToScreen + i * 4);
+        g_projection = true;
+    }
 }
+
+namespace game {
+
+// The frame's view: a world point to -1..1 across the shown frame, y up, where the held-up models are drawn (grown
+// by the widened view's scale, as d3d::ViewScale draws them); false behind the camera or before the first frame.
+bool ProjectModel(const float point[3], float& x, float& y) {
+    const float* m = g_world_to_screen;
+    float w = point[0] * m[3] + point[1] * m[7] + point[2] * m[11] + m[15];
+    if (!g_projection || w <= 0.0f) return false;
+    x = (point[0] * m[0] + point[1] * m[4] + point[2] * m[8] + m[12]) / w * g_scale;
+    y = (point[0] * m[1] + point[1] * m[5] + point[2] * m[9] + m[13]) / w * g_scale;
+    return true;
+}
+
+}  // namespace game
 
 // FDynamicActor::Render(scene node, ...), thiscall ret 0x20; +0 actor, +4 local to world. Every pass of the frame's
 // view draws a model at the game's angle: same depth, its picture grown about the screen centre. Shadow maps and

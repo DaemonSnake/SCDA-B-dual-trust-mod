@@ -165,9 +165,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
+                bool pointing = (input::InMenu() || input::Pointer()) && !input::Movie() && input::KeyboardActive();
                 SetCursor(MenuOpen() || ConsoleOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512))
-                          : input::InMenu() && !input::Movie() && input::KeyboardActive() ? static_cast<HCURSOR>(MenuCursor())
-                                                               : nullptr);
+                          : pointing                  ? static_cast<HCURSOR>(MenuCursor())
+                                                      : nullptr);
                 return TRUE;
             }
             break;
