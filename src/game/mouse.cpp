@@ -42,9 +42,12 @@ constexpr uint32_t kNetA = 0xC8, kNetB = 0xCC, kNetC = 0xDC;
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;
 constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
 
-// manager: +0x3C contexts, +0x40 count; context: +0x14 draw stack, +0x18 input stack;
+// manager: +0x3C contexts, +0x40 count; context: +0x14 draw stack, +0x18 input stack, +0x1C id;
 // stack: +4 begin, +8 end of {page, flags}; screen: +0x84 width, +0x86 height
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668;
+// a player's menus go to its own context (co-op's second player: id 2): viewport +0x70 menus interaction, its +0x3C
+// menus manager, its +0x0C context id (sub_0028FD7E)
+constexpr uint32_t kMenusInteraction = 0x70, kMenusManager = 0x3C, kManagerContext = 0x0C, kContextId = 0x1C;
 // page: +8 instances begin, +0xC end, +0x14 id, +0x1C layer (100 HUD, the base default), +0x24 focused; instance: +8 widget, +0x18 bit 0 visible, +0x4C flags (2 enabled, 8 focused),
 // vtable +0xC Focus, +0x10 Unfocus; widget: vtable +0xC type, +0x10 GetBounds(short rect[4] left right top bottom)
 // list: +0x3C up arrow, +0x50 down arrow, +0x7C up arrow rect, +0x8C down arrow rect, +0x9C selection
@@ -87,17 +90,24 @@ void Tap(Game& g, uint32_t key) {
     Event(g, key, kRelease, 1.0f);
 }
 
-uint32_t InputPage() {
+// the top of the viewport's own context's input stack, else of the first context that has one
+uint32_t InputPage(uint32_t viewport) {
     uint32_t m = R32(kMagma);
     uint32_t list = m ? R32(m + 0x3C) : 0, count = m ? R32(m + 0x40) : 0;
     if (!list || count > 16) return 0;
+    uint32_t interaction = R32(viewport + kMenusInteraction);
+    uint32_t manager = interaction ? R32(interaction + kMenusManager) : 0;
+    uint32_t id = manager ? R32(manager + kManagerContext) : 0;
+    uint32_t first = 0;
     for (uint32_t i = 0; i < count; i++) {
         uint32_t context = R32(list + i * 4);
         uint32_t stack = context ? R32(context + 0x18) : 0;
         uint32_t begin = stack ? R32(stack + 4) : 0, end = stack ? R32(stack + 8) : 0;
-        if (begin && end > begin && end - begin <= 8 * 64) return R32(end - 8);
+        if (!begin || end <= begin || end - begin > 8 * 64) continue;
+        if (R32(context + kContextId) == id) return R32(end - 8);
+        if (!first) first = R32(end - 8);
     }
-    return 0;
+    return first;
 }
 
 // a hidden widget can be enabled too: Load Game keeps its save list, taller than the mission list, under it
@@ -140,7 +150,7 @@ bool Point(uint32_t& point) {
 
 // true while a menu takes the input
 bool Menu(Game& g) {
-    uint32_t top = InputPage();
+    uint32_t top = InputPage(g.viewport);
     if (top && R32(top + 0x14) == kQuickInventory) return false;
     // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu
     uint32_t layer = top ? R32(top + 0x1C) : 0, focus = top ? R32(top + 0x24) : 0;
@@ -212,7 +222,7 @@ X86_FUNC(sub_0004B525) {
     bool menu = Menu(g);
     input::SetMenu(menu);
     for (int n = input::TakeMenuWheel(); menu && n; n += n > 0 ? -1 : 1) Tap(g, n > 0 ? kAnalogUp : kAnalogDown);
-    uint32_t top = InputPage();
+    uint32_t top = InputPage(viewport);
     uint32_t page = top ? R32(top + 0x14) : 0;
     bool reconnect = page == kMsgBox && (int32_t(R32(viewport + kPlayer1Port)) == -1 ||
                                          (R32(client + kViewportCount) > 1 && int32_t(R32(viewport + kPlayer2Port)) == -1));
