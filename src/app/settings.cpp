@@ -71,7 +71,9 @@ void Load() {
     s.msaa = t["msaa"].value_or(s.msaa);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.shadow_resolution = std::min(t["shadow_resolution"].value_or(s.shadow_resolution), 8192u);
-    s.shadow_distance = std::min(t["shadow_distance"].value_or(s.shadow_distance), 64u);
+    // 0 was the old UNLIMITED, now the furthest
+    uint32_t shadow_distance = t["shadow_distance"].value_or(s.shadow_distance);
+    s.shadow_distance = shadow_distance ? std::min(shadow_distance, 8u) : 8u;
     s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
     s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
     s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);

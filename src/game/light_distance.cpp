@@ -1,6 +1,5 @@
 // Lights fade out and switch off past their TurnOffDistance, and their shadows fade out between ShadowsTurnOffStart
-// and ShadowsTurnOffDistance. The shadow distance setting scales all three; 0 keeps lights and shadows on at any
-// distance.
+// and ShadowsTurnOffDistance. The shadow distance setting scales all three.
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -25,8 +24,6 @@ constexpr uint32_t kName = 0x20;
 constexpr uint32_t kTurnOffDistance = 0x29C;  // +0x2A0 TurnOffDistancePercentageFadeIn is a fraction of it
 constexpr uint32_t kShadowsTurnOffStart = 0x2A4;
 constexpr uint32_t kShadowsTurnOffDistance = 0x2A8;
-// the shadow fade is only recomputed while the distance is not 0, so "never" puts it out of reach instead
-constexpr float kNever = 1e30f;
 constexpr size_t kPrune = 4096;
 
 // the map's distances, and what was last written; an entry stands while the object at its address still matches
@@ -45,8 +42,8 @@ void SetF(uint32_t va, float f) { std::memcpy(HostPtr(va), &f, 4); }
 void Write(uint32_t light, Light& l, float scale) {
     bool shadows = l.shadows_distance > 0.0f;
     l.written[0] = l.turn_off * scale;
-    l.written[1] = !shadows ? l.shadows_start : scale ? l.shadows_start * scale : kNever;
-    l.written[2] = !shadows ? l.shadows_distance : scale ? l.shadows_distance * scale : kNever * 2.0f;
+    l.written[1] = shadows ? l.shadows_start * scale : l.shadows_start;
+    l.written[2] = shadows ? l.shadows_distance * scale : l.shadows_distance;
     SetF(light + kTurnOffDistance, l.written[0]);
     SetF(light + kShadowsTurnOffStart, l.written[1]);
     SetF(light + kShadowsTurnOffDistance, l.written[2]);
@@ -69,8 +66,7 @@ void Update() {
     g_scale = scale;
     Forget();
     for (auto& [light, l] : g_lights) Write(light, l, g_scale);
-    if (g_scale) LOGI("shadow distance: x%g, %zu lights in play", g_scale, g_lights.size());
-    else LOGI("shadow distance: unlimited, %zu lights in play", g_lights.size());
+    LOGI("shadow distance: x%g, %zu lights in play", g_scale, g_lights.size());
 }
 
 void Track(uint32_t light) {

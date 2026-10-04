@@ -42,7 +42,7 @@ const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
 const char* const kMsaaNames[] = {"OFF", "2x", "4x", "8x"};
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
-constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8, 0};
+constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
@@ -348,8 +348,7 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         }
         case kShadowDistance: {
             uint32_t scale = kShadowDistances[StepTable(kShadowDistances, s.shadow_distance, step)];
-            if (scale) std::snprintf(text, sizeof(text), scale == 1 ? "%ux (DEFAULT)" : "%ux", scale);
-            else std::snprintf(text, sizeof(text), "UNLIMITED");
+            std::snprintf(text, sizeof(text), scale == 1 ? "%ux (DEFAULT)" : "%ux", scale);
             break;
         }
         case kShaderModel:
