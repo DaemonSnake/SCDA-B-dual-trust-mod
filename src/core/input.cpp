@@ -375,7 +375,9 @@ void Keyboard(Pad& p) {
                 if (Down(vk)) return;
         for (int vk : kArrows)
             if (Down(vk)) return;
-        if (Down(VK_BACK)) return;
+        // Enter and Backspace act in menus bound or not: an Enter that just came off interact in a capture would
+        // otherwise press A on the row and start another
+        if (Down(VK_BACK) || Down(VK_RETURN)) return;
         g_settle = false;
     }
     if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
@@ -383,6 +385,7 @@ void Keyboard(Pad& p) {
         g_settle_mouse = false;
     bool no_mouse = menu || g_settle_mouse;
     bool camera = View(g_view.load()) == View::StickyCamera && !menu;
+    bool back = g_opsat || (View(g_view.load()) == View::BackOut && !menu);
     int move[4] = {};
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
@@ -414,7 +417,7 @@ void Keyboard(Pad& p) {
         if (b == -1) {
             int button = kActions[i].button;
             b = camera                    ? Remapped(kCameraRemap, button)
-                : g_opsat               ? Remapped(kOpsatRemap, button)
+                : back                  ? Remapped(kOpsatRemap, button)
                 : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
                                         : button;
             g_down_as[i] = b < 0 ? -1 : b + 1;
