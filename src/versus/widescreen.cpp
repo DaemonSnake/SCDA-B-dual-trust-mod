@@ -9,6 +9,7 @@
 
 #include "app/app.h"
 #include "core/log.h"
+#include "gpu/backend.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -34,6 +35,9 @@ constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_interatt")};
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
+// the canvas is drawn 1.1 wide about its centre (10:11 pixels): this share of a page is off each screen side
+constexpr float kOff = 1.0f / 22;
+constexpr uint32_t kPicture = 256;  // a material this big both ways is a picture, smaller ones are fills
 
 enum class Mode { Stretch, Left, Centre, Right, Fill };
 
@@ -55,17 +59,30 @@ float Width() {
     return vp ? float(int(R32(vp + 0x9C))) : 0.0f;
 }
 
-// corners: 4 x {x, y, z}
-void Place(float* c, Mode mode, float w) {
+// corners: 4 x {x, y, z}; true when a side was pulled out. Left and Right keep the distance to the screen side
+bool Place(float* c, Mode mode, float w) {
     float lo = std::min({c[0], c[3], c[6], c[9]}), hi = std::max({c[0], c[3], c[6], c[9]});
-    bool wide = hi - lo >= kMinWidth;
+    bool fill = mode == Mode::Fill && hi - lo >= kMinWidth, pulled = false;
+    float offset = w * (mode == Mode::Left ? kOff / 4 : mode == Mode::Right ? 0.25f - kOff / 4 : 0.125f);
     for (int i = 0; i < 12; i += 3) {
         float& x = c[i];
         if (mode == Mode::Stretch) continue;
-        if (mode == Mode::Fill && wide && x <= kSlack) x = -1.0f;
-        else if (mode == Mode::Fill && wide && x >= w - kSlack) x = w + 1.0f;
-        else x = x * 0.75f + w * (mode == Mode::Left ? 0.0f : mode == Mode::Right ? 0.25f : 0.125f);
+        if (fill && (x <= kSlack || x >= w - kSlack)) x = x <= kSlack ? -1.0f : w + 1.0f, pulled = true;
+        else x = x * 0.75f + offset;
     }
+    return pulled;
+}
+
+// the quad's material (sixth argument), sizes from its vtable +0x68 / +0x6C
+bool Picture(X86Context& ctx) {
+    uint32_t material = R32(ctx.esp + 0x18), ecx = ctx.ecx;
+    if (!material) return false;
+    ctx.ecx = material;
+    uint32_t width = CallGuest(ctx, R32(R32(material) + 0x68), {});
+    ctx.ecx = material;
+    uint32_t height = CallGuest(ctx, R32(R32(material) + 0x6C), {});
+    ctx.ecx = ecx;
+    return width >= kPicture && height >= kPicture;
 }
 
 }  // namespace
@@ -163,8 +180,59 @@ X86_FUNC(sub_001231E0) {
     }
     float placed[12];
     std::memcpy(placed, c, sizeof c);
-    Place(placed, g_replay ? g_mode : Mode::Fill, w);
+    // a picture keeps its shape (menu backgrounds), only fills reach the screen sides
+    if (Place(placed, g_replay ? g_mode : Mode::Fill, w) && !g_replay && Picture(ctx)) {
+        std::memcpy(placed, c, sizeof c);
+        Place(placed, Mode::Centre, w);
+    }
     std::memcpy(&G<float>(corners), placed, sizeof placed);
     __imp__sub_001231E0(ctx, base);
     std::memcpy(&G<float>(corners), c, sizeof c);
+}
+
+// Loading pictures are 640x480 drawn straight into the frame buffer: Present shows them 4:3 until the next frame's
+// draws. Boot: device, splash.raw into the back buffer, Swap
+X86_EXTERN_FUNC(__imp__sub_00011BE0);
+X86_FUNC(sub_00011BE0) {
+    gpu::g_splash = true;
+    __imp__sub_00011BE0(ctx, base);
+}
+
+// boot progress: splash.raw and the bar, Swap
+X86_EXTERN_FUNC(__imp__sub_00012F90);
+X86_FUNC(sub_00012F90) {
+    gpu::g_in_splash++;
+    __imp__sub_00012F90(ctx, base);
+    gpu::g_in_splash--;
+}
+
+namespace {
+bool g_to_splash = false;  // splash.raw follows the fade out
+}
+
+// render interface: fades the frame on screen out, Swaps of its own
+X86_EXTERN_FUNC(__imp__sub_001F0820);
+X86_FUNC(sub_001F0820) {
+    gpu::g_in_splash++;
+    __imp__sub_001F0820(ctx, base);
+    gpu::g_in_splash--;
+    if (g_to_splash) gpu::g_splash = true;
+}
+
+// render interface: that fade out, then splash.raw fades in and stays up
+X86_EXTERN_FUNC(__imp__sub_001F0D10);
+X86_FUNC(sub_001F0D10) {
+    g_to_splash = true;
+    gpu::g_in_splash++;
+    __imp__sub_001F0D10(ctx, base);
+    gpu::g_in_splash--;
+    g_to_splash = false;
+}
+
+// render interface: the kept picture and the load bar, Swap
+X86_EXTERN_FUNC(__imp__sub_001F1240);
+X86_FUNC(sub_001F1240) {
+    gpu::g_in_splash++;
+    __imp__sub_001F1240(ctx, base);
+    gpu::g_in_splash--;
 }
