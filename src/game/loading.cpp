@@ -526,3 +526,24 @@ void game::loading::BothBuffers(X86Context& ctx, uint32_t ri) {
     ctx.eax = 1;
     ctx.esp += 4 + 0x10;
 }
+
+// ShowScreen's copy of the back buffer into its 640x480 texture (D3DXLoadSurfaceFromSurface called from 0x2E625A,
+// stdcall, 8 arguments), the frame it then fades to: after a load or a save the first frames showed at that size.
+// The frame is copied on the GPU into a surface of its own, and the texture (ShowScreen's frame +0x44) reads that.
+X86_EXTERN_FUNC(__imp__sub_004AE0A7);
+X86_FUNC(sub_004AE0A7) {
+    if (R32(ctx.esp) != 0x2E625F) return __imp__sub_004AE0A7(ctx, base);
+    static uint32_t copy = 0;
+    uint32_t back = R32(ctx.esp + 0x10);
+    if (!copy) {
+        uint32_t size = R32(back + 0x10), bytes = ((size >> 24 & 0xFF) + 1) * 64 * ((size >> 12 & 0xFFF) + 1);
+        copy = mem::AllocSystem(24);
+        std::memcpy(HostPtr(copy), HostPtr(back), 24);
+        W32(copy + 4, mem::PhysicalFromVirtual(mem::AllocContiguous(bytes, 0, 0xFFFFFFFF, 0x1000)));
+        W32(copy + 8, 0);
+    }
+    CallGuest(ctx, SYM(D3DDevice_CopyRects), {back, 0, 0, copy, 0});
+    W32(ctx.ebp + kPictureHeader + 4, R32(copy + 4));
+    ctx.eax = 0;
+    ctx.esp += 4 + 0x20;
+}
