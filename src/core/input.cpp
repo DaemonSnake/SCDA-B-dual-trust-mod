@@ -745,9 +745,15 @@ void WaitForPress() {
     LOGI("input: the wait ended by %s %X", pad ? "pad button" : "key", pad ? pressed - 0x100 : pressed);
 }
 
-bool Pressed() {
+bool PressReleased() {
     static PressWatch w;
-    return NewPress(w) != 0;
+    static int pressed = 0;
+    if (int p = NewPress(w); p && !pressed) pressed = p;
+    if (!pressed) return false;
+    bool down = pressed >= 0x100 ? (w.pad_held >> (pressed - 0x100) & 1) != 0 : w.held[size_t(pressed)];
+    if (down) return false;
+    pressed = 0;
+    return true;
 }
 
 bool SkipKeyReleased() {

@@ -427,7 +427,8 @@ X86_FUNC(sub_002E65A4) {
 
 // The controller layout screen (loading screen vtable +0x34 sub_00038C3F, thiscall) shows controllerN.tga and polls
 // vtable +0x40 (sub_000367E4 -> sub_0004B46F, A or Start let go on any pad, the movies' skip check) until it answers.
-// It says "press A"; any key, click or pad button answers here, as on the mission picture.
+// It says "press A"; any key, click or pad button answers here, as on the mission picture. Like A, on its release:
+// the mission's intro movie starts within half a second and polls the same check, so a key still down there skipped it.
 namespace {
 bool g_controls_screen = false;  // game thread
 }  // namespace
@@ -442,14 +443,32 @@ X86_FUNC(sub_00038C3F) {
 X86_EXTERN_FUNC(__imp__sub_000367E4);
 X86_FUNC(sub_000367E4) {
     __imp__sub_000367E4(ctx, base);
-    if (!ctx.eax && g_controls_screen && input::Pressed()) ctx.eax = 1;
+    bool answer = g_controls_screen && input::PressReleased();
+    if (!ctx.eax && answer) ctx.eax = 1;
 }
 
 // the movies' skip check (thiscall viewport), A or Start let go on any pad; the keyboard's usual confirm and back
-// keys skip too
+// keys skip too. The front end video loop calls it once before the first frame, and a button down then (the press
+// that started the movie: Enter is A and Start on the title page) is hidden until let go, or its release skipped it.
+namespace {
+// the check's last state per port, 0x2C apart: +0 A (analog), +0xC Start (0 or 0xFF)
+constexpr uint32_t kSkipState = 0x5E76EC, kSkipPort = 0x2C, kSkipStart = 0x0C, kSkipPorts = 4;
+constexpr uint32_t kMovieFirstCheck = 0x39908;  // return address of sub_000398DA's first call
+uint32_t g_held_at_start = 0;                   // bit port * 2 + (0 A, 1 Start)
+}  // namespace
+
 X86_EXTERN_FUNC(__imp__sub_0004B46F);
 X86_FUNC(sub_0004B46F) {
+    bool first = R32(ctx.esp) == kMovieFirstCheck;
     __imp__sub_0004B46F(ctx, base);
+    for (uint32_t i = 0; i < kSkipPorts * 2; i++) {
+        uint8_t& state = G<uint8_t>(kSkipState + i / 2 * kSkipPort + i % 2 * kSkipStart);
+        bool down = state >= 0x32;
+        if (first && down) g_held_at_start |= 1u << i;
+        if (!(g_held_at_start >> i & 1)) continue;
+        if (down) state = 0;
+        else g_held_at_start &= ~(1u << i);
+    }
     if (!ctx.eax && input::SkipKeyReleased()) ctx.eax = 1;
 }
 

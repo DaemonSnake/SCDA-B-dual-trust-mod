@@ -79,8 +79,8 @@ void TapButtons(uint16_t buttons);
 
 // blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
 void WaitForPress();
-// the same press, polled: one went down since the last call (the first call only notes what is held)
-bool Pressed();
+// the same press, polled: one went down and has come up again (the first call only notes what is held)
+bool PressReleased();
 // Shift, Enter, Space or Escape let go in the game window, once per press; only a press seen going down counts, so
 // the key that started a movie does not skip it
 bool SkipKeyReleased();
