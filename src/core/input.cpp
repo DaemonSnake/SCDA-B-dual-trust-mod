@@ -852,6 +852,8 @@ bool PadConnected(int slot) {
     return ReadPad(slot, g);
 }
 
+bool NetSession() { return g_net; }
+
 void SetNetSession(bool net) {
     if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
 }

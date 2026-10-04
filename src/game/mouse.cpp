@@ -176,8 +176,9 @@ bool Point(uint32_t& point) {
     return true;
 }
 
-// true while a menu takes the input
-bool Menu(Game& g) {
+// true while a menu takes the input. The cursor acts only when act: in a synced session the lockstep carries the pad,
+// and a focus moved, a list row picked or a key tapped here changes the menus on this machine alone (a click opening
+// Objectives here only, the next B closing the OPSAT on the other machine, dropped the session).
     uint32_t top = InputPage(g.viewport);
     if (top && R32(top + 0x14) == kQuickInventory) return false;
     // the HUD stays on the input stack through play with nothing focused, its widgets are not a menu
@@ -248,13 +249,13 @@ X86_FUNC(sub_0004B525) {
     Game g{ctx, engine, viewport, (esp - 0x40) & ~0xFu};
     ctx.esp = g.scratch - 0x10;
     game::MenuPlace(ctx);
-    bool menu = Menu(g);
-    input::SetMenu(menu);
     bool net = (R32(engine + kNetA) && R32(engine + kNetB)) || R32(engine + kNetC);
+    bool menu = Menu(g, !net);
+    input::SetMenu(menu);
     // a synced session's lockstep carries the pad, not these taps
     bool list = !menu && !net && game::InteractionListFocused();
     input::SetInteractionList(list);
-    for (int n = input::TakeMenuWheel(); (menu || list) && n; n += n > 0 ? -1 : 1)
+    for (int n = input::TakeMenuWheel(); (menu || list) && !net && n; n += n > 0 ? -1 : 1)
         Tap(g, n > 0 ? kAnalogUp : kAnalogDown);
     uint32_t top = InputPage(viewport);
     uint32_t page = top ? R32(top + 0x14) : 0;

@@ -79,6 +79,7 @@ enum class KeyEvent { None, Whistle, SidekickCommand, QuickSave, QuickLoad, Relo
 // A synced co-op session. Its lockstep carries the pad, not what the game side calls on its own, so there the
 // sidekick key holds the black button (co-op action) and whistle is off.
 void SetNetSession(bool net);
+bool NetSession();
 // aiming with nothing to interact with, where the pad's A reloads: the keyboard's interact key leaves A alone, the
 // reload key reloads (in a synced session it holds A, as the pad would)
 void SetInteractReloads(bool on);
