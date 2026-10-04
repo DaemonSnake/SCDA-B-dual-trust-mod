@@ -32,19 +32,19 @@ struct Settings {
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
     uint32_t msaa = 0;               // samples a pixel of the scene, 0 off
-    uint32_t shadow_resolution = 0;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
+    uint32_t shadow_resolution = 512;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
     uint32_t shadow_distance = 1;    // lights and their shadows turn off this many times further away, 0 never
-    uint32_t shader_model = 3;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
-    bool hdr_rendering = true;
-    bool tone_mapping = true;
-    bool hq_soft_shadows = true;
+    uint32_t shader_model = 1;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
+    bool hdr_rendering = false;
+    bool tone_mapping = false;
+    bool hq_soft_shadows = false;
     bool ambient_occlusion = false;  // screen space, from the scene's depth
     bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
-    uint32_t coop_tick_rate = 0;           // co-op step frequency, Hz; 0 is the game's 22
-    uint32_t coop_input_delay_floor = 50;  // ms, the game's 50
+    uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
+    uint32_t coop_input_delay_floor = 0;   // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::string microphone;                // recording device by name, empty the system default
     bool push_to_talk = false;             // voice only while the push to talk key is held
