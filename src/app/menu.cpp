@@ -39,6 +39,8 @@ constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
+constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
+const char* const kMsaaNames[] = {"OFF", "2x MSAA", "4x MSAA", "8x MSAA"};
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8, 0};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
@@ -221,7 +223,7 @@ void Changed(bool display) {
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa
 };
 
 using rows::Kind;
@@ -240,6 +242,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kHdr, "HDR RENDERING"},
     {Kind::Value, kToneMapping, "TONE MAPPING"},
     {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
+    {Kind::Value, kMsaa, "ANTI-ALIASING"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
     {Kind::Value, kShadowDistance, "SHADOW DISTANCE"},
@@ -322,6 +325,9 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             break;
         case kAniso:
             std::snprintf(text, sizeof(text), "%s", kAnisoNames[StepTable(kAnisoValues, s.aniso, step)]);
+            break;
+        case kMsaa:
+            std::snprintf(text, sizeof(text), "%s", kMsaaNames[StepTable(kMsaaValues, s.msaa, step)]);
             break;
         case kShadowResolution: {
             uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];

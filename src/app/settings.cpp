@@ -66,6 +66,7 @@ void Load() {
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
+    s.msaa = t["msaa"].value_or(s.msaa);
     s.shadow_resolution = std::min(t["shadow_resolution"].value_or(s.shadow_resolution), 8192u);
     s.shadow_distance = std::min(t["shadow_distance"].value_or(s.shadow_distance), 64u);
     s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
@@ -103,6 +104,7 @@ void Save() {
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
+                  {"msaa", int64_t(s.msaa)},
                   {"shadow_resolution", int64_t(s.shadow_resolution)},
                   {"shadow_distance", int64_t(s.shadow_distance)},
                   {"shader_model", int64_t(s.shader_model)},
