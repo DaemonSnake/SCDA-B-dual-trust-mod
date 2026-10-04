@@ -142,7 +142,7 @@ struct Target {
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
     KeyEvent event = KeyEvent::None;
 };
-// host keys: the console and push to talk, the pad never sees them; the console is the first
+// host keys: the console and push to talk, the pad never sees them
 constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
@@ -167,11 +167,11 @@ constexpr Target kStoryActions[] = {
     {{"goggles", "EMF VISION", "4"}, 8},
     {{"switch_camera", "STICKY CAM VISION", "5"}, 9, true},
     {{"sidekick", "COOP ACTION", "F"}, -1, true, KeyEvent::SidekickCommand},
+    {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
-    {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
 };
 // Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
 constexpr Target kVersusActions[] = {
@@ -201,7 +201,7 @@ constexpr size_t kCount = kActions.size();
 static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");
 constexpr size_t kConsoleAction = [] {
     for (size_t i = 0; i < kCount; i++)
-        if (kActions[i].button == kHostKey) return i;
+        if (kActions[i].button == kHostKey && kActions[i].event == KeyEvent::None) return i;
     return kCount;
 }();
 
