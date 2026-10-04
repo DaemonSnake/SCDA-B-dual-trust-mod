@@ -95,8 +95,8 @@ bool Equals(uint32_t text, std::u16string_view want) {
 
 bool Letter(char16_t c) { return (c | 0x20) >= 'a' && (c | 0x20) <= 'z'; }
 
-// empty when a key is unbound
-std::u16string Expand(std::string_view to, bool upper) {
+// empty when a key is unbound; caps for a text in capitals
+std::u16string Expand(std::string_view to, bool upper, bool caps) {
     std::u16string out;
     size_t verb = std::u16string::npos;
     for (size_t i = 0; i < to.size(); i++) {
@@ -116,21 +116,24 @@ std::u16string Expand(std::string_view to, bool upper) {
             i = end;
         }
     }
-    if (upper && out[0] >= 'a' && out[0] <= 'z') out[0] -= 0x20;
+    for (size_t i = 0; i < (caps ? out.size() : upper); i++)
+        if (out[i] >= 'a' && out[i] <= 'z') out[i] -= 0x20;
     return out;
 }
 
 }  // namespace
 
-// prompts.cpp, a text about to draw on the keyboard. Whole words, the first letter in either case
+// prompts.cpp, a text about to draw on the keyboard. Whole words; small letters match capitals too, as the message
+// box shows its text
 std::u16string game::KeyWording(std::u16string text) {
+    bool caps = std::none_of(text.begin(), text.end(), [](char16_t c) { return c >= 'a' && c <= 'z'; });
+    auto same = [](char p, char16_t c) { return c == char16_t(p) || (p >= 'a' && p <= 'z' && c == char16_t(p - 0x20)); };
     for (const Swap& s : kSwaps)
         for (size_t at = 0; at + s.from.size() <= text.size(); at++) {
             size_t end = at + s.from.size();
             if ((at && Letter(text[at - 1])) || (end < text.size() && Letter(text[end]))) continue;
-            if ((text[at] | 0x20) != (s.from[0] | 0x20) || !std::equal(s.from.begin() + 1, s.from.end(), text.begin() + at + 1))
-                continue;
-            std::u16string to = Expand(s.to, text[at] < 'a');
+            if (!std::equal(s.from.begin(), s.from.end(), text.begin() + at, same)) continue;
+            std::u16string to = Expand(s.to, text[at] < 'a', caps);
             if (to.empty()) continue;
             text.replace(at, s.from.size(), to);
             at += to.size() - 1;

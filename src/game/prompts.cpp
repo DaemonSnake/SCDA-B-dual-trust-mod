@@ -55,6 +55,8 @@ constexpr uint32_t kComboIcon = 0xAAA53D32, kComboGlow = 0xEA7CB115, kComboName 
 // +0x1C its children; vtable +8 Draw
 constexpr uint32_t kRect = 0x10, kChildren = 0x1C, kDraw = 0x08;
 constexpr uint32_t kTextWidget = 0x568290;  // vtable
+// Magma screen: +0x7C the text given to the text being drawn in place of its own (a list row's)
+constexpr uint32_t kScreen = 0x6A6668, kGivenText = 0x7C, kMaxWording = 0x300;
 constexpr int kCharWidth = 10;  // Title_18 capitals, page units
 // after a name wider than its icon, so the next arrow sits midway; names sit this much higher to line up with the arrows
 constexpr int kNameGap = 12, kNameRaise = 4;
@@ -444,21 +446,33 @@ bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
 }
 
 // hud.cpp, any element about to draw. On the keyboard a text naming the pad's buttons draws with the bound keys
-// in their place and keeps its own, so it follows the device: true when drawn here.
+// in their place, given to the draw the way a list gives a row its text, so what is kept follows the device: true
+// when drawn here.
 bool WordingElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     static bool drawing = false;
-    uint32_t widget = R32(instance + 8);
-    if (drawing || !widget || R32(widget) != kTextWidget || !(G<uint8_t>(instance + 0x18) & 1) ||
-        R32(widget + 0x2C + 0x14) > 0x200 || !input::KeyboardActive() || !Block())
+    static uint32_t buffer = 0;
+    uint32_t widget = R32(instance + 8), screen = R32(kScreen);
+    if (drawing || !widget || !screen || R32(widget) != kTextWidget || !(G<uint8_t>(instance + 0x18) & 1) ||
+        !input::KeyboardActive())
         return false;
-    std::u16string text = ReadText(widget), keys = KeyWording(text);
-    if (keys == text) return false;
-    WriteText(ctx, widget, keys);
+    uint32_t given = R32(screen + kGivenText);
+    if (!given && R32(widget + 0x2C + 0x14) > 0x200) return false;
+    std::u16string text = given ? std::u16string() : ReadText(widget);
+    for (uint32_t i = 0; given && R16(given + i * 2); i++) {
+        if (i == kMaxWording) return false;
+        text += char16_t(R16(given + i * 2));
+    }
+    std::u16string keys = KeyWording(text);
+    if (keys == text || keys.size() > kMaxWording) return false;
+    if (!buffer) buffer = mem::AllocSystem((kMaxWording + 1) * 2);
+    if (!buffer) return false;
+    for (size_t i = 0; i <= keys.size(); i++) W16(buffer + uint32_t(i) * 2, i < keys.size() ? uint16_t(keys[i]) : 0);
+    W32(screen + kGivenText, buffer);
     drawing = true;
     ctx.ecx = instance;
     sub_002C64E0(ctx, base);
     drawing = false;
-    WriteText(ctx, widget, text);
+    W32(screen + kGivenText, given);
     return true;
 }
 
