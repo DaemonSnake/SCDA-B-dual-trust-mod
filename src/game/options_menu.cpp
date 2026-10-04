@@ -61,7 +61,7 @@ const std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
 
 // the F10 panel's upper case in the game's title case: "DISPLAY MODE" as "Display Mode", "SPACE/ENTER" as "Space/Enter"
 std::string Title(std::string_view text) {
-    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"}, kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA"};
+    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"}, kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA"};
     std::string out;
     size_t i = 0;
     while (i < text.size()) {

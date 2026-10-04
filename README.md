@@ -27,7 +27,8 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 
 ### Graphics
 - **Async Shaders** - New effects are compiled on background threads instead of pausing the game, so one can appear a frame or two late the first time it is seen. Compiled shaders and pipelines are kept in the `shadercache` folder beside the exe and load at once from then on.
-- **Anti-Aliasing** - Smooths geometry edges with 2x, 4x or 8x MSAA, Shader Model 3.0 features included.
+- **MSAA** - Smooths geometry edges with 2x, 4x or 8x MSAA, Shader Model 3.0 features included.
+- **SMAA** - Smooths edges across the whole frame, alpha tested foliage and fences included, and can be combined with MSAA.
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
 - **Shadow Resolution** - Allows you to change the shadow resolution
 
