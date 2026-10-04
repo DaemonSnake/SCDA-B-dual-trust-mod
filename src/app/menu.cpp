@@ -223,7 +223,7 @@ void Changed(bool display) {
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance, kMsaa
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov
 };
 
 using rows::Kind;
@@ -234,6 +234,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kDisplayMode, "DISPLAY MODE"},
     {Kind::Value, kResolution, "RESOLUTION"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
+    {Kind::Value, kFov, "FIELD OF VIEW"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
@@ -309,6 +310,10 @@ std::string RowText(int id, int step, Settings& s = Get()) {
                           out.height * s.render_percent / 100);
             break;
         }
+        case kFov:
+            if (step) s.fov = 45 + uint32_t(StepIndex(std::clamp(int(s.fov), 45, 140) - 45, step, 96));
+            std::snprintf(text, sizeof(text), s.fov == 75 ? "%u (DEFAULT)" : "%u", s.fov);
+            break;
         case kMaxFps: {
             uint32_t cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
             if (cap) std::snprintf(text, sizeof(text), "%u", cap);

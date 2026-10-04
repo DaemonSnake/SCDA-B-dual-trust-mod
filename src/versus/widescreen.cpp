@@ -93,6 +93,8 @@ X86_EXTERN_FUNC(__imp__sub_0011B720);
 X86_FUNC(sub_0011B720) {
     float& x = G<float>(ctx.esp + 0xC);
     if (app::Widescreen() && std::fabs(G<float>(ctx.esp + 0x10) - 4.0f / 3.0f) < 0.01f) x *= 0.75f;
+    if (float s = app::FovScale(); s != 1.0f)
+        for (uint32_t arg : {4u, 8u}) G<float>(ctx.esp + arg) = std::atan(std::tan(G<float>(ctx.esp + arg)) * s);
     __imp__sub_0011B720(ctx, base);
 }
 

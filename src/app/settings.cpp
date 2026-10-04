@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <fstream>
 
 #include <toml++/toml.hpp>
@@ -63,6 +64,7 @@ void Load() {
     s.height = t["height"].value_or(s.height);
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
+    s.fov = std::clamp(t["fov"].value_or(s.fov), 45u, 140u);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
@@ -101,6 +103,7 @@ void Save() {
                   {"height", int64_t(s.height)},
                   {"render_percent", int64_t(s.render_percent)},
                   {"fps_cap", int64_t(s.fps_cap)},
+                  {"fov", int64_t(s.fov)},
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
@@ -157,6 +160,11 @@ bool Widescreen() {
         wide = m.width * 2 >= m.height * 3;
     }
     return wide;
+}
+
+float FovScale() {
+    constexpr float kHalf = 3.14159265f / 360.0f;
+    return std::tan(Get().fov * kHalf) / std::tan(75 * kHalf);
 }
 
 float RenderScale(uint32_t guest_height) {

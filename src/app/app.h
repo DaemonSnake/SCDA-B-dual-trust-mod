@@ -27,6 +27,7 @@ struct Settings {
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
     uint32_t render_percent = 100;   // of the output height
     uint32_t fps_cap = 60;           // 0 unlimited
+    uint32_t fov = 75;               // horizontal degrees on a 4:3 frame, 75 is the game's
     bool fps_counter = false;
     bool vsync = true;
     uint32_t aniso = 0;              // 0 as the game asks
@@ -60,6 +61,8 @@ struct Mode {
 Mode Desktop();
 Mode Output();
 float RenderScale(uint32_t guest_height);
+// tangent of the fov setting's half angle over that of the game's 75 degrees
+float FovScale();
 // the output is 3:2 or wider: the console reports a widescreen TV and the frame is shown 16:9, else 4:3 as on a 4:3 TV
 bool Widescreen();
 
