@@ -40,6 +40,7 @@ constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
+constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8, 0};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
@@ -220,7 +221,7 @@ void Changed(bool display) {
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kHideHud, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2
+    kPlayer1, kPlayer2, kShadowDistance
 };
 
 using rows::Kind;
@@ -241,6 +242,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
+    {Kind::Value, kShadowDistance, "SHADOW DISTANCE"},
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
@@ -327,6 +329,12 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];
             if (size) std::snprintf(text, sizeof(text), size == 512 ? "%u (DEFAULT)" : "%u", size);
             else std::snprintf(text, sizeof(text), "AUTOMATIC");
+            break;
+        }
+        case kShadowDistance: {
+            uint32_t scale = kShadowDistances[StepTable(kShadowDistances, s.shadow_distance, step)];
+            if (scale) std::snprintf(text, sizeof(text), scale == 1 ? "%ux (DEFAULT)" : "%ux", scale);
+            else std::snprintf(text, sizeof(text), "UNLIMITED");
             break;
         }
         case kShaderModel:
