@@ -19,6 +19,7 @@ namespace game {
 void UpdateView(uint32_t viewport);               // views.cpp
 void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
 void KeypadKeys(X86Context& ctx, uint32_t viewport, bool menu, bool net);  // keypad.cpp
+void GoalsTab(X86Context& ctx, uint32_t tab);  // opsat.cpp
 void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
 void MenuTick(X86Context& ctx);     // options_menu.cpp
 void MenuPlace(X86Context& ctx);    // options_menu.cpp
@@ -67,6 +68,10 @@ constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
 constexpr uint32_t kMsgBox = game::magma::Id("P_MsgBox");
 // first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; client +0x34 viewport count
 constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kViewportCount = 0x34;
+// P_Goals' tab buttons Primary, Opposing, Opportunity (names not recovered): not focusable, the pad steps them with
+// Left / Right, so a click on one goes to it
+constexpr uint32_t kGoals = game::magma::Id("P_Goals");
+constexpr uint32_t kGoalsTabs[] = {0xDFFFD221, 0xCE9F9174, 0xF2D85AF3};
 // a hidden button that takes a page's buttons (mission end and review, loadout); the pad cannot move focus off it,
 // a click anywhere presses A on it
 constexpr uint32_t kEventsCatcher = game::magma::Id("B_EventsCatcher");
@@ -132,6 +137,22 @@ bool Inside(Game& g, uint32_t rect) {
     return l < r && t < b && x >= l && x <= r && y >= t && y <= b;
 }
 
+// a click on one of P_Goals' tabs
+bool GoalsTabClick(Game& g, uint32_t page) {
+    uint32_t begin = R32(page + 8), end = R32(page + 0xC);
+    if (!begin || end < begin || end - begin > 4 * 512) return false;
+    for (uint32_t it = begin; it < end; it += 4) {
+        uint32_t instance = R32(it);
+        const uint32_t* tab = instance ? std::ranges::find(kGoalsTabs, R32(instance + 4)) : std::end(kGoalsTabs);
+        if (tab == std::end(kGoalsTabs) || !(G<uint8_t>(instance + 0x18) & 1) || !R32(instance + 8)) continue;
+        Virtual(g.ctx, R32(instance + 8), 0x10, {g.scratch + 8});
+        if (!Inside(g, g.scratch + 8)) continue;
+        game::GoalsTab(g.ctx, uint32_t(tab - std::begin(kGoalsTabs)));
+        return true;
+    }
+    return false;
+}
+
 uint32_t g_page = 0;
 uint32_t g_clicks = 0;
 uint32_t g_point = 0xFFFFFFFF;
@@ -172,6 +193,7 @@ bool Menu(Game& g) {
     g_point = point;
     g_clicks = clicks;
     W32(g.scratch, point);
+    if (clicked && top && R32(top + 0x14) == kGoals && GoalsTabClick(g, top)) return true;
     for (uint32_t it = begin; it < end; it += 4) {
         uint32_t instance = R32(it);
         if (!instance || !Focusable(g, instance)) continue;
