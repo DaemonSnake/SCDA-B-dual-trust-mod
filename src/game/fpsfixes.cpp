@@ -79,7 +79,35 @@ void Write(uint32_t body, const std::vector<float>& v) {
 // A texture with no MaxFrameRate moves on a frame of its animation every tick.
 constexpr uint32_t kMaxFrameRate = 0xAC, kAccumulator = 0xB0;  // UTexture
 
+// The night vision interference of the JBA missions scrolls by a fixed amount every frame.
+constexpr uint32_t kScroll = 0x6A94EC, kViewport = 0x1D0, kViewActor = 0x34;
+constexpr float kScrollStep = 0.005f;
+
 }  // namespace
+
+// night vision pass, thiscall
+X86_EXTERN_FUNC(__imp__sub_002F157B);
+X86_FUNC(sub_002F157B) {
+    float delta = GF(R32(R32(R32(ctx.ecx + kViewport) + kViewActor) + kLevel) + kDeltaSeconds);
+    float& scroll = G<float>(kScroll);
+    float before = scroll;
+    float ahead = scroll += kScrollStep * (1 - std::clamp(delta, 0.0f, kMaxDelta) / kFixedStep);
+    __imp__sub_002F157B(ctx, base);
+    if (scroll == ahead) scroll = before;  // interference off, nothing scrolled
+}
+
+// JBA night vision glitch, thiscall(LevelInfo): rolled once a frame, then 8 frames long
+X86_EXTERN_FUNC(__imp__sub_001F8F9C);
+X86_FUNC(sub_001F8F9C) {
+    static float time;
+    time += std::clamp(GF(R32(ctx.esp + 4) + kDeltaSeconds), 0.0f, kMaxDelta);
+    if (time < kFixedStep) {
+        ctx.esp += 8;
+        return;
+    }
+    time -= kFixedStep;
+    __imp__sub_001F8F9C(ctx, base);
+}
 
 // UTexture::Tick, thiscall(DeltaSeconds)
 X86_EXTERN_FUNC(__imp__sub_001DDA92);
