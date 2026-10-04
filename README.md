@@ -65,6 +65,15 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - **COOP Support** - Allows for online COOP, with a custom join IP.
 - **Versus Support** - The versus mode runs natively: profiles, tutorials and System Link over the LAN.
 
+### System Requirements
+
+**Minimum**
+- **OS** - Windows 10 64 bit.
+- **CPU** - 2 cores with SSE4.2 and POPCNT: Intel Core i3/i5/i7 1st generation (Nehalem) or AMD FX (Bulldozer).
+- **GPU** - Direct3D 12 with feature level 11_0: NVIDIA GeForce GT 630 (Kepler), AMD Radeon HD 7750 or Intel HD Graphics 510 (Skylake).
+- **Memory** - 4 GB.
+- **Storage** - 5 GB for the game files, saves and shader cache.
+
 ### Build
 
 - Install Visual Studio 2022 with **Desktop development with C++**, **C++ Clang tools for Windows** and **C++ CMake tools for Windows** (build.bat offers to add the last two), plus Git.
