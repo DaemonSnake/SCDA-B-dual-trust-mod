@@ -385,7 +385,9 @@ void Keyboard(Pad& p) {
         g_settle_mouse = false;
     bool no_mouse = menu || g_settle_mouse;
     bool camera = View(g_view.load()) == View::StickyCamera && !menu;
-    bool back = g_opsat || (View(g_view.load()) == View::BackOut && !menu);
+    View view = View(g_view.load());
+    bool keypad = view == View::Keypad && !menu;
+    bool back = g_opsat || (view == View::BackOut && !menu) || keypad;
     int move[4] = {};
     uint32_t keys = 0;
     for (size_t i = 0; i < kCount; i++) {
@@ -429,7 +431,7 @@ void Keyboard(Pad& p) {
         else p.buttons |= uint16_t(1u << (b - 8));
         if (b == 0 && g_title) p.buttons |= kStart;
     }
-    if ((Down(VK_BACK) && !g_text) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
     if (menu && Down(VK_RETURN)) {
         p.analog[0] = 0xFF;
@@ -782,6 +784,21 @@ int TakeWheel() { return g_wheel.exchange(0); }
 
 void SetInteractionList(bool focused) {
     if (g_list.exchange(focused) != focused) g_menu_wheel = 0;
+}
+
+int TakeKeypadButton() {
+    // SCCT PC's keypad keys
+    static constexpr std::pair<int, int> kKeys[] = {
+        {VK_NUMPAD1, 0}, {VK_NUMPAD2, 1}, {VK_NUMPAD3, 2}, {VK_NUMPAD4, 3}, {VK_NUMPAD5, 4}, {VK_NUMPAD6, 5},
+        {VK_NUMPAD7, 6}, {VK_NUMPAD8, 7}, {VK_NUMPAD9, 8}, {VK_MULTIPLY, 9}, {VK_BACK, 9}, {VK_DELETE, 9},
+        {VK_NUMPAD0, 10}, {VK_DECIMAL, 11},
+    };
+    static uint32_t held = 0;
+    uint32_t now = 0;
+    for (size_t i = 0; i < std::size(kKeys); i++)
+        now |= uint32_t(Active() && !g_menu && Down(kKeys[i].first)) << i;
+    uint32_t fresh = now & ~std::exchange(held, now);
+    return fresh ? kKeys[std::countr_zero(fresh)].second : -1;
 }
 
 int TakeMenuWheel() {

@@ -18,6 +18,7 @@ using namespace kernel;
 namespace game {
 void UpdateView(uint32_t viewport);               // views.cpp
 void WhistleKeys(X86Context& ctx, uint32_t viewport);  // whistle.cpp
+void KeypadKeys(X86Context& ctx, uint32_t viewport, bool menu, bool net);  // keypad.cpp
 void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu);  // quick_save.cpp
 void MenuTick(X86Context& ctx);     // options_menu.cpp
 void MenuPlace(X86Context& ctx);    // options_menu.cpp
@@ -255,6 +256,7 @@ X86_FUNC(sub_0004B525) {
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
     if (!net) game::WhistleKeys(ctx, viewport);
+    game::KeypadKeys(ctx, viewport, menu, net);
     game::QuickSaveKeys(ctx, viewport, menu);
     if (input::TakeEvent(input::KeyEvent::Reload) && !menu) game::QueueCommand("Reload", game::Route::Player);
     game::RunCommands(ctx, engine, viewport);

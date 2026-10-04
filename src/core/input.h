@@ -54,11 +54,15 @@ bool Movie();
 // A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
 // On a ledge, a narrow ladder or a pipe the move keys push the stick fully: climbing wants aForward past 0.9,
 // which slow walking speeds never reach. Lockpicking turns the move keys into the stick's diagonals. The optic cable,
-// keypads and elevator panels are left with B, which the pause key presses there.
-enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick, BackOut };
+// keypads and elevator panels are left with B, which the pause key presses there; on a keypad Backspace clears the
+// code instead of backing out.
+enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick, BackOut, Keypad };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
+// a keypad button pressed on the numpad since the last call (0-8 the digits 1-9, 9 *, 10 0, 11 #), -1 for none;
+// window active, menu or not
+int TakeKeypadButton();
 // in a menu or the focused interaction list: whole wheel notches since the last call, up positive (a high
 // resolution wheel's part notches add up)
 int TakeMenuWheel();
