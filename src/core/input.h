@@ -37,7 +37,7 @@ void SetMenu(bool menu);
 void SetTitleScreen(bool title);
 // the pause menu, which Start closes and B does not: the pause key stays Start there
 void SetPauseMenu(bool pause);
-// an OPSAT page, which B closes: the pause key and the OPSAT key are B there
+// an OPSAT page, a computer's file list or the hacking device, which B closes: the pause key is B there
 void SetOpsat(bool opsat);
 // the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
 void SetQuickInventory(bool open);
@@ -53,8 +53,9 @@ bool Movie();
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
 // A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
 // On a ledge, a narrow ladder or a pipe the move keys push the stick fully: climbing wants aForward past 0.9,
-// which slow walking speeds never reach. Lockpicking turns the move keys into the stick's diagonals.
-enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick };
+// which slow walking speeds never reach. Lockpicking turns the move keys into the stick's diagonals. The optic cable,
+// keypads and elevator panels are left with B, which the pause key presses there.
+enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick, BackOut };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();

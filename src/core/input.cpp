@@ -96,7 +96,8 @@ std::array<std::atomic<int>, 32> g_down_as{};
 
 // In a menu pause (Escape) backs out as B, except in the pause menu, which only Start closes.
 constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
-// In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too.
+// In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too; so on a computer's file list, the
+// hacking device, the optic cable and keypads, which B leaves, as Escape does on SCCT PC.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
 std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false}, g_text{false};
 std::mutex g_chars_lock;

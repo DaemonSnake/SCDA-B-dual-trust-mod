@@ -38,6 +38,11 @@ constexpr uint32_t kOpsatPages[] = {
     game::magma::Id("P_PDA"),      game::magma::Id("P_Trust"),     game::magma::Id("P_Videos"),
 };
 
+// no menus to the mouse, which B leaves, and Escape does as on SCCT PC: a computer's file list (computer.mgm) and
+// the hacking device's help and legend (hud.mgm, name not recovered)
+constexpr uint32_t kComputer = game::magma::Id("P_Computer");
+constexpr uint32_t kHacking = 0xE62F87FD;
+
 // engine: UXboxViewport::UpdateInput takes the synced input when +0xC8 and +0xCC or +0xDC are set
 constexpr uint32_t kNetA = 0xC8, kNetB = 0xCC, kNetC = 0xDC;
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;
@@ -235,7 +240,8 @@ X86_FUNC(sub_0004B525) {
     input::SetTitleScreen(page == game::magma::Id("P_Start") || reconnect);
     input::SetPauseMenu(page == game::magma::Id("P_Pause") || reconnect);
     input::SetQuickInventory(page == kQuickInventory);
-    input::SetOpsat(page && std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages));
+    input::SetOpsat(page && (std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages) || page == kComputer ||
+                             page == kHacking));
     game::UpdateView(viewport);
     game::MenuTick(ctx);
     game::PromptsTick(ctx);
