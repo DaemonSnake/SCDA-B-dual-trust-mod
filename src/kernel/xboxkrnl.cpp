@@ -925,8 +925,10 @@ KERNEL_EXPORT(4, AvSetSavedDataAddress, 1) {
 }
 KERNEL_EXPORT(3, AvSetDisplayMode, 6) { return 0; }
 KERNEL_EXPORT(2, AvSendTVEncoderOption, 4) {
-    // AV_QUERY_AV_CAPABILITIES: component (HDTV) pack, NTSC-M, 60 Hz
-    if (a[3]) W32(a[3], a[1] == 6 ? 0x00400104 : 0);
+    // AV_QUERY_AV_CAPABILITIES: component (HDTV) pack, NTSC-M, 60 Hz, plus the user's video flags as the kernel adds
+    // them. D3D lists widescreen modes only when these say widescreen, and the game fits movies anamorphically only
+    // in a widescreen mode.
+    if (a[3]) W32(a[3], a[1] == 6 ? 0x00400104 | VideoFlags() : 0);
     return 0;
 }
 KERNEL_EXPORT(46, HalReadWritePCISpace, 6) {
