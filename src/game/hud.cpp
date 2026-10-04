@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "app/app.h"
 #include "game/loading.h"
@@ -106,6 +107,7 @@ constexpr float kLeft = 0.0f, kCentre = 0.125f, kRight = 0.25f, kNone = -1.0f;
 float g_offset = kCentre;
 Mode g_mode = Mode::Centre;
 const Page* g_page = nullptr;
+uint32_t g_drawing = 0;  // the Magma page drawing
 bool g_hud_seen = false, g_decided = false;
 bool g_in_level = false;  // P_hud was drawn last frame
 bool g_sniper_seen = false, g_scope = false;  // P_Sniper drawn this frame, and last frame
@@ -294,12 +296,18 @@ X86_FUNC(sub_002BE990) {
         return;
     }
     const Page* saved = g_page;
+    uint32_t drawing = std::exchange(g_drawing, ctx.ecx);
     g_page = nullptr;
     for (auto& p : kPages)
         if (p.id == id) g_page = &p;
     Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
+    g_drawing = drawing;
     if (id == Crc32("P_OnlineOffline")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
+}
+
+namespace game {
+uint32_t DrawingPage() { return g_drawing; }
 }
 
 // Magma element draw, children come back through here: the first listed or placed element decides. On menu

@@ -18,6 +18,9 @@ using namespace kernel;
 
 namespace game {
 bool OnStack(uint32_t page);  // options_menu.cpp
+uint32_t StackOwner(uint32_t page);  // options_menu.cpp
+uint32_t DrawingPage();  // hud.cpp
+uint32_t KeyboardPlayer();  // mouse.cpp
 std::u16string KeyWording(std::u16string text);  // text.cpp
 }
 
@@ -338,6 +341,12 @@ struct Seen {
 Seen g_seen[std::size(kHints)];  // game thread
 uint32_t g_tick = 3;  // past a hint never seen
 bool g_hinting = false;
+
+// keyboard legends while the keyboard is in use; in split screen only in the keyboard's player's menus and HUD
+bool Keyboard(uint32_t page) {
+    uint32_t player = game::KeyboardPlayer(), owner = player && page ? game::StackOwner(page) : 0;
+    return input::KeyboardActive() && (!owner || owner == player);
+}
 constexpr int kTextChar2 = 15;           // Text_16, twice a character's width in page units
 constexpr int kIconGap = 4, kWordGap = 7;  // a caption's end to its icon, between words
 
@@ -350,7 +359,7 @@ std::string KeyNames(std::initializer_list<const char*> ids) { return Keys(ids);
 
 // hud.cpp, the bar's element draw
 void EventPrompts(X86Context& ctx, uint32_t bar) {
-    bool keyboard = input::KeyboardActive();
+    bool keyboard = Keyboard(game::DrawingPage());
     uint32_t element = bar ? R32(bar + 8) : 0;
     uint32_t box = element ? R32(element + 0x1C) : 0;
     uint32_t skip = box ? Child(ctx, box, kEventPrompts[0].text) : 0;
@@ -401,7 +410,7 @@ bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     if (id == kComboName) g_combo_name = widget;
     if (std::find(std::begin(kComboRows), std::end(kComboRows), id) != std::end(kComboRows)) {
         g_shift_count = 0;
-        if (widget && input::KeyboardActive()) ComboLayout(ctx, widget);
+        if (widget && Keyboard(game::DrawingPage())) ComboLayout(ctx, widget);
         ctx.ecx = instance;  // the row still draws, and the calls above left their own this
         return false;
     }
@@ -415,8 +424,8 @@ bool ComboElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
         W16(widget + kRect + 2, right);
         return true;
     }
-    if (id != kComboIcon || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !g_combo_name || !input::KeyboardActive() ||
-        !Block())
+    if (id != kComboIcon || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !g_combo_name ||
+        !Keyboard(game::DrawingPage()) || !Block())
         return false;
     uint32_t material = R32(widget + 0x3C);
     std::string key = ComboKey(widget);
@@ -453,7 +462,7 @@ bool WordingElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     static uint32_t buffer = 0;
     uint32_t widget = R32(instance + 8), screen = R32(kScreen);
     if (drawing || !widget || !screen || R32(widget) != kTextWidget || !(G<uint8_t>(instance + 0x18) & 1) ||
-        !input::KeyboardActive())
+        !Keyboard(game::DrawingPage()))
         return false;
     uint32_t given = R32(screen + kGivenText);
     if (!given && R32(widget + 0x2C + 0x14) > 0x200) return false;
@@ -481,7 +490,7 @@ bool WordingElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
 // handled here.
 bool HintElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     uint32_t id = R32(instance + 4), widget = R32(instance + 8);
-    if (g_hinting || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !input::KeyboardActive()) return false;
+    if (g_hinting || !widget || !(G<uint8_t>(instance + 0x18) & 1) || !Keyboard(game::DrawingPage())) return false;
     for (size_t i = 0; i < std::size(kHints); i++) {
         const Hint& h = kHints[i];
         Seen& s = g_seen[i];
@@ -546,10 +555,10 @@ X86_EXTERN_FUNC(__imp__sub_002915C1);
 X86_FUNC(sub_002915C1) {
     uint32_t owner = ctx.ecx, page = R32(ctx.esp + 4), actions = R32(ctx.esp + 8), type = R32(ctx.esp + 12);
     if (page && actions && actions != g_block) Remember(owner, page, actions, type);
-    if (page && actions && R32(page + 0x14) == kNameEntry && input::KeyboardActive() && Block())
+    if (page && actions && R32(page + 0x14) == kNameEntry && Keyboard(page) && Block())
         W32(ctx.esp + 8, WithoutY(actions));
     __imp__sub_002915C1(ctx, base);
-    if (!page || !input::KeyboardActive()) return;
+    if (!page || !Keyboard(page)) return;
     uint32_t eax = ctx.eax;
     Relabel(ctx, page, type);
     ctx.eax = eax;

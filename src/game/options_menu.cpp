@@ -524,10 +524,11 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     return true;
 }
 
-bool OnStack(uint32_t page) {
+// the id of the context whose draw or input stack holds the page (a player's menus: its player number), 0 for none
+uint32_t StackOwner(uint32_t page) {
     uint32_t m = R32(0x6A6638);
     uint32_t list = m ? R32(m + 0x3C) : 0, count = m ? R32(m + 0x40) : 0;
-    if (!page || !list || count > 16) return false;
+    if (!page || !list || count > 16) return 0;
     for (uint32_t i = 0; i < count; i++) {
         uint32_t context = R32(list + i * 4);
         for (uint32_t offset : {0x14u, 0x18u}) {
@@ -535,11 +536,13 @@ bool OnStack(uint32_t page) {
             uint32_t begin = stack ? R32(stack + 4) : 0, end = stack ? R32(stack + 8) : 0;
             if (!begin || end < begin || end - begin > 8 * 64) continue;
             for (uint32_t it = begin; it < end; it += 8)
-                if (R32(it) == page) return true;
+                if (R32(it) == page) return R32(context + 0x1C);
         }
     }
-    return false;
+    return 0;
 }
+
+bool OnStack(uint32_t page) { return StackOwner(page) != 0; }
 
 // mouse.cpp: the cursor leaves the selection alone over our blank row, else the pass over it flickers
 bool BlankRow(uint32_t list, int row) {

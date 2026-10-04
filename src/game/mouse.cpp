@@ -71,8 +71,10 @@ constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
 // the message box, among others "Controller Disconnected ... press START": up while a player has lost its port,
 // which only a Start press on a free port claims back, and "choose another controller" when split screen starts
 constexpr uint32_t kMsgBox = game::magma::Id("P_MsgBox");
-// first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; client +0x34 viewport count
-constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kViewportCount = 0x34;
+// first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; any viewport: +0x1F4 the port it reads;
+// client +0x34 viewport count
+constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kReadPort = 0x1F4, kViewportCount = 0x34;
+uint32_t g_keyboard_player = 0;  // split screen: the player on the keyboard's port, else 0
 // P_Goals' tab buttons Primary, Opposing, Opportunity (names not recovered): not focusable, the pad steps them with
 // Left / Right, so a click on one goes to it
 constexpr uint32_t kGoals = game::magma::Id("P_Goals");
@@ -121,7 +123,7 @@ uint32_t InputPage(uint32_t viewport) {
     if (!list || count > 16) return 0;
     uint32_t interaction = R32(viewport + kMenusInteraction);
     uint32_t manager = interaction ? R32(interaction + kMenusManager) : 0;
-    uint32_t id = manager ? R32(manager + kManagerContext) : 0;
+    uint32_t id = g_keyboard_player ? g_keyboard_player : manager ? R32(manager + kManagerContext) : 0;
     uint32_t first = 0;
     for (uint32_t i = 0; i < count; i++) {
         uint32_t context = R32(list + i * 4);
@@ -264,6 +266,22 @@ void PadWheel(int notches) {
 // message list (+0x24: +0x30 entries, +0x34 count, +0x3D shown) has the one up last; an entry's +0 is its id.
 uint32_t g_messages = 0;
 
+// Split screen: the keyboard and mouse act in the update of the viewport reading the keyboard's port and on that
+// player's menus (context id = player number); with one viewport, or the keyboard on no player yet, the first's
+uint32_t KeyboardViewport(uint32_t client, uint32_t first) {
+    uint32_t count = R32(client + kViewportCount), list = R32(client + 0x30);
+    int32_t port = input::KeyboardPort();
+    g_keyboard_player = 0;
+    if (count < 2 || count > 4 || !first || port < 0) return first;
+    g_keyboard_player = int32_t(R32(first + kPlayer1Port)) == port   ? 1
+                        : int32_t(R32(first + kPlayer2Port)) == port ? 2
+                                                                     : 0;
+    for (uint32_t i = 0; g_keyboard_player && i < count; i++)
+        if (uint32_t v = R32(list + i * 4); v && int32_t(R32(v + kReadPort)) == port) return v;
+    g_keyboard_player = 0;
+    return first;
+}
+
 bool ControllerBox() {
     uint32_t count = g_messages ? R32(g_messages + 0x34) : 0;
     if (!count || count > 64 || !G<uint8_t>(g_messages + 0x3D)) return false;
@@ -273,6 +291,10 @@ bool ControllerBox() {
 }
 
 }  // namespace
+
+namespace game {
+uint32_t KeyboardPlayer() { return g_keyboard_player; }
+}
 
 X86_EXTERN_FUNC(__imp__sub_001853BE);
 X86_FUNC(sub_001853BE) {
@@ -287,7 +309,16 @@ X86_FUNC(sub_0004B525) {
     __imp__sub_0004B525(ctx, base);
     uint32_t client = R32(viewport + 0x18);
     uint32_t engine = client ? R32(client + 0x2C) : 0;
-    if (!engine || R32(R32(client + 0x30)) != viewport) return;
+    uint32_t first = client ? R32(R32(client + 0x30)) : 0;
+    if (!engine || viewport != KeyboardViewport(client, first)) return;
+    static uint32_t logged = ~0u;
+    if (g_keyboard_player != logged) {
+        logged = g_keyboard_player;
+        uint32_t interaction = R32(viewport + kMenusInteraction);
+        uint32_t manager = interaction ? R32(interaction + kMenusManager) : 0;
+        LOGI("split: keyboard player %u, viewport %08X (first %08X), its menus context %u", g_keyboard_player, viewport,
+             first, manager ? R32(manager + kManagerContext) : 0);
+    }
     // guest calls go below a scratch block under the caller's stack
     uint32_t esp = ctx.esp;
     Game g{ctx, engine, viewport, (esp - 0x40) & ~0xFu};
@@ -306,8 +337,8 @@ X86_FUNC(sub_0004B525) {
         Tap(g, n > 0 ? kAnalogUp : kAnalogDown);
     uint32_t top = InputPage(viewport);
     uint32_t page = top ? R32(top + 0x14) : 0;
-    bool reconnect = page == kMsgBox && (int32_t(R32(viewport + kPlayer1Port)) == -1 ||
-                                         (R32(client + kViewportCount) > 1 && int32_t(R32(viewport + kPlayer2Port)) == -1) ||
+    bool reconnect = page == kMsgBox && (int32_t(R32(first + kPlayer1Port)) == -1 ||
+                                         (R32(client + kViewportCount) > 1 && int32_t(R32(first + kPlayer2Port)) == -1) ||
                                          ControllerBox());
     input::SetTitleScreen(page == game::magma::Id("P_Start") || reconnect);
     input::SetPauseMenu(page == game::magma::Id("P_Pause") || reconnect);
