@@ -62,7 +62,6 @@ void Zoom(uint32_t controller) {
         g_binoculars = binoculars;
         g_zoom = 0;
         input::SetView(binoculars ? input::View::Eev : input::View::Normal);
-        LOGI("versus mouse: binoculars %s", binoculars ? "up" : "down");
     }
     if (!binoculars) return;
     int notches = input::TakeWheel();
@@ -171,7 +170,6 @@ bool Menu(Ui& u) {
     // a new page starts from where the cursor rests
     bool fresh = top != g_page;
     bool moved = Point(point) && point != g_point && !fresh, clicked = clicks != g_clicks && !fresh;
-    if (fresh) LOGI("versus mouse: input page %08X id %08X focus %08X", top, id, focus);
     g_page = top;
     g_point = point;
     g_clicks = clicks;
@@ -250,5 +248,4 @@ X86_FUNC(sub_0003FB80) {
     float magnitude = std::min(1.0f, std::sqrt(turn * turn + up * up) / kFullStick);
     WriteFloat(controller + kMagnitude, magnitude);
     WriteFloat(controller + kSmoothMagnitude, magnitude);
-    LOG_FIRST(8, "versus mouse: %g %g over %g s", g_dx, g_dy, seconds);
 }

@@ -78,6 +78,7 @@ void Load() {
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
+    s.microphone = t["microphone"].value_or(s.microphone);
     s.hide_hud = t["hide_hud"].value_or(s.hide_hud);
     Port p1 = ParsePort(t["player1"].value_or(PortName(s.players[0])), s.players[0]);
     Port p2 = ParsePort(t["player2"].value_or(PortName(s.players[1])), s.players[1]);
@@ -113,6 +114,7 @@ void Save() {
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
                   {"join_ip", s.join_ip},
+                  {"microphone", s.microphone},
                   {"hide_hud", s.hide_hud},
                   {"player1", PortName(s.players[0])},
                   {"player2", PortName(s.players[1])}};

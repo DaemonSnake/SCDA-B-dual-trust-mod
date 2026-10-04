@@ -54,11 +54,6 @@ std::unique_ptr<Backend> CreateBackend();
 // the same backend driven from a thread of its own: calls return once recorded
 std::unique_ptr<Backend> CreateThreadedBackend(std::unique_ptr<Backend> inner);
 
-// TEMPORARY perf diagnostic: the title's thread recording for the render thread, and waiting on it
-inline std::atomic<uint64_t> g_perf_capture_ns{0}, g_perf_wait_ns{0}, g_perf_waits{0};
-inline std::atomic<uint64_t> g_perf_wait_kind_ns[6];  // read-back, resource, fence, flush, copy, next frame
-inline std::atomic<uint64_t> g_perf_sync_late{0}, g_perf_sync_block{0};  // read-backs the title waited for, by cause
-
 // the pipeline library to disk now: before a quick reboot starts the next process, and at quit
 void SavePipelineCache();
 

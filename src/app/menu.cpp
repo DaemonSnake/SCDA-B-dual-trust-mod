@@ -20,6 +20,7 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "audio/audio.h"
 #include "core/input.h"
 #include "game/console.h"
 
@@ -218,7 +219,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kHideHud, kSensitivity, kInvertMouse,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kHideHud, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2
 };
 
@@ -245,6 +246,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kTickRate, "COOP TICK RATE"},
     {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
     {Kind::Text, kJoinIp, "COOP JOIN IP"},
+    {Kind::Value, kMicrophone, "COOP MICROPHONE"},
     {Kind::Heading, -1, "CONTROLLERS"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
@@ -357,6 +359,8 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         }
         case kJoinIp:
             return s.join_ip;
+        case kMicrophone:
+            return s.microphone.empty() ? "SYSTEM DEFAULT" : s.microphone;
         case kPlayer1:
         case kPlayer2: {
             int player = id == kPlayer1 ? 0 : 1;
@@ -506,6 +510,46 @@ void PlayerRow(const char* label, int player) {
     ImGui::Dummy(ImVec2(row_w, row_h));
 }
 
+// label left, a drop-down list of the recording devices where the value sits, read as it opens
+void MicrophoneRow(const char* label) {
+    Settings& s = Get();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
+    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
+    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    static std::vector<std::string> devices;
+    ImGui::PushID(label);
+    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
+    ImGui::SetNextItemWidth(block_w);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
+    if (ImGui::BeginCombo("##device", RowText(kMicrophone, 0).c_str())) {
+        if (ImGui::IsWindowAppearing()) devices = audio::Microphones();
+        std::vector<std::string> list = devices;
+        list.insert(list.begin(), std::string());
+        if (!s.microphone.empty() && std::find(devices.begin(), devices.end(), s.microphone) == devices.end())
+            list.push_back(s.microphone);
+        for (const std::string& name : list) {
+            bool current = name == s.microphone;
+            std::string text = name.empty() ? "SYSTEM DEFAULT" : name;
+            if (current && !name.empty() && std::find(devices.begin(), devices.end(), name) == devices.end())
+                text += "  (UNPLUGGED)";
+            if (ImGui::Selectable(text.c_str(), current) && !current) {
+                s.microphone = name;
+                Changed(false);
+            }
+            if (current) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+    ImGui::SetCursorPos(ImVec2(row_x, row_y));
+    ImGui::Dummy(ImVec2(row_w, row_h));
+}
+
 void DrawRows(int page) {
     size_t count = 0;
     const Row* list = rows::Page(page, &count);
@@ -515,6 +559,8 @@ void DrawRows(int page) {
             Section(r.label);
         } else if (r.kind == Kind::Value && (r.id == kPlayer1 || r.id == kPlayer2)) {
             PlayerRow(r.label, r.id == kPlayer1 ? 0 : 1);
+        } else if (r.kind == Kind::Value && r.id == kMicrophone) {
+            MicrophoneRow(r.label);
         } else if (r.kind == Kind::Value) {
             if (int step = OptionRow(r.label, RowText(r.id, 0).c_str())) RowText(r.id, step);
         } else if (r.kind == Kind::Bind) {
@@ -684,6 +730,7 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
+    if (row.kind == Kind::Value && row.id == kMicrophone) return false;
     bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
     return !sm3 || Get().shader_model >= 3;
 }

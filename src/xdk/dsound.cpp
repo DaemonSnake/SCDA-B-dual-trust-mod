@@ -47,6 +47,7 @@ struct Voice {
     std::deque<Packet> packets;
     // levels
     float volume = 1, gain_l = 1, gain_r = 1;
+    bool link_voice = false;  // the game's speaker copy of a talker's voice: silent while the voice link plays it
     bool is3d = false;
     float p[3] = {}, min_dist = 1, max_dist = 1e9f;
     // ADPCM block cache
@@ -139,6 +140,10 @@ void Complete(Voice& v, Packet& pk, uint32_t status) {
 }
 
 void Levels(Voice& v, float& l, float& r) {
+    if (v.link_voice && audio::VoiceLinkHeard()) {
+        l = r = 0;
+        return;
+    }
     l = v.gain_l * v.volume;
     r = v.gain_r * v.volume;
     if (!v.is3d) return;
@@ -497,6 +502,15 @@ BUFFER(SetPosition, 5) {
 }
 BUFFER(SetVelocity, 5) { return 0; }
 BUFFER(SetI3DL2Source, 3) { return 0; }
+
+namespace dsound {
+
+void MuteForVoiceLink(uint32_t stream) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (Voice* v = Find(stream)) v->link_voice = true;
+}
+
+}  // namespace dsound
 
 // ---------------------------------------------------------------- streams, the object carries the XDK's own vtable
 

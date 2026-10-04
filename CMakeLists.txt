@@ -13,7 +13,7 @@ set(ZYDIS_BUILD_DOXYGEN OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(zydis GIT_REPOSITORY https://github.com/zyantific/zydis.git GIT_TAG v4.1.1 GIT_SHALLOW TRUE)
 FetchContent_Declare(tomlplusplus GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git GIT_TAG v3.4.0 GIT_SHALLOW TRUE)
 FetchContent_Declare(imgui GIT_REPOSITORY https://github.com/ocornut/imgui.git GIT_TAG v1.91.0 GIT_SHALLOW TRUE)
-# SDL3 for controllers, static so it links into the exe
+# SDL3 for controllers and the headset's audio, static so it links into the exe
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -21,7 +21,15 @@ set(SDL_RENDER OFF CACHE BOOL "" FORCE)
 set(SDL_GPU OFF CACHE BOOL "" FORCE)
 set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(SDL3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.4.16 GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(zydis tomlplusplus imgui SDL3)
+# Opus for the wideband voice link, static, without the stack protector and fortify flags that need GCC's libssp
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_STACK_PROTECTOR OFF CACHE BOOL "" FORCE)
+set(OPUS_FORTIFY_SOURCE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(opus GIT_REPOSITORY https://github.com/xiph/opus.git GIT_TAG v1.5.2 GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(zydis tomlplusplus imgui SDL3 opus)
 
 # x86 to C++ recompiler
 file(GLOB RECOMP_SOURCES CONFIGURE_DEPENDS tools/recomp/*.cpp)
@@ -40,8 +48,10 @@ set(IMGUI_SOURCES
 
 file(GLOB HOST_SOURCES CONFIGURE_DEPENDS src/*/*.cpp)
 list(FILTER HOST_SOURCES EXCLUDE REGEX "/src/(game|versus)/")
-# SDL's headers go to the input code alone (SDL is linked LINK_ONLY), so the generated sources' compile line stays the same
-set_source_files_properties(src/core/input.cpp PROPERTIES INCLUDE_DIRECTORIES ${sdl3_SOURCE_DIR}/include)
+# SDL's and Opus's headers go to the input and voice code alone (both are linked LINK_ONLY), so the generated sources'
+# compile line stays the same
+set_source_files_properties(src/core/input.cpp src/audio/voice.cpp src/audio/voice_link.cpp PROPERTIES
+    INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include;${opus_SOURCE_DIR}/include")
 file(GLOB RECOMP_CONFIGS CONFIGURE_DEPENDS config/*.toml)
 
 # One executable per recompiled image: the image's code from its config (partitions as that config sets them),
@@ -78,7 +88,7 @@ function(scda_image target xbe config partitions game_dir)
     target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
     target_compile_options(${target} PRIVATE -fno-strict-aliasing)
     target_compile_definitions(${target} PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
-    target_link_libraries(${target} PRIVATE tomlplusplus::tomlplusplus $<LINK_ONLY:SDL3::SDL3-static> d3d12 dxgi dxguid d3dcompiler xaudio2 ole32 windowscodecs dbghelp winmm dwmapi ws2_32)
+    target_link_libraries(${target} PRIVATE tomlplusplus::tomlplusplus $<LINK_ONLY:SDL3::SDL3-static> $<LINK_ONLY:opus> d3d12 dxgi dxguid d3dcompiler xaudio2 ole32 windowscodecs dbghelp winmm dwmapi ws2_32)
     # lld keeps the recompiled weak functions overridable by the host ones
     target_link_options(${target} PRIVATE -fuse-ld=lld -g)
 endfunction()

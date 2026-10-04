@@ -4,7 +4,6 @@
 #include <atomic>
 #include <chrono>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "app/app.h"
 #include "gpu/backend.h"
@@ -183,16 +182,6 @@ HLE_STDCALL(D3D_BlockOnResource, 1) {
         uint32_t type = R32(res) & 0x70000;
         if (type == 0x40000 || type == 0x50000) {
             uint32_t data = mem::VirtualFromPhysical(R32(res + 4));
-            // TEMPORARY: who blocks on which surface, once each
-            static std::unordered_set<uint32_t> seen;
-            if (seen.insert(data).second) {
-                uint32_t code[4] = {}, n = 0;
-                for (uint32_t i = 0; i < 32 && n < 4; i++) {
-                    uint32_t v = R32(ctx.esp + i * 4);
-                    if (v >= X86CodeBase && v < X86CodeEnd) code[n++] = v;
-                }
-                LOGI("d3d: BlockOnResource on surface %08X, stack %08X %08X %08X %08X", data, code[0], code[1], code[2], code[3]);
-            }
             g_backend->Sync(data, 0);
         } else {
             g_backend->WaitResource(res);

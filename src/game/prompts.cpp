@@ -327,9 +327,6 @@ void EventPrompts(X86Context& ctx, uint32_t bar) {
     uint32_t skip_text = skip ? R32(skip + 8) : 0;
     bool skippable = skip_text && (G<uint8_t>(skip + 0x18) & 1) && !ReadText(skip_text).empty();
     if (skippable) input::SkipPromptShown();
-    static bool was_skippable = false;
-    if (std::exchange(was_skippable, skippable) != skippable)
-        LOGI("prompts: cinematic skip prompt %s", skippable ? "shown" : "hidden");
     for (size_t i = 0; i < std::size(kEventPrompts); i++) {
         const Prompt& p = kEventPrompts[i];
         Held& h = g_held[i];

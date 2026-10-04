@@ -114,7 +114,6 @@ public:
     bool Init(uint32_t width, uint32_t height) override { return inner_->Init(width, height); }
 
     void Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) override {
-        auto t = Clock::now();
         SendState(s);
         Cmd c{Op::Draw};
         c.a = prim;
@@ -131,11 +130,9 @@ public:
         Use(s.zs.header);
         Written(s.rt);
         if (cur_->cmds.size() >= kBatchCommands) Submit();
-        g_perf_capture_ns += Ns(t);
     }
 
     void Clear(const State& s, uint32_t count, const uint8_t* rects, uint32_t flags, uint32_t color, float z, uint32_t stencil) override {
-        auto t = Clock::now();
         SendState(s);
         Cmd c{Op::Clear};
         c.a = count;
@@ -151,12 +148,10 @@ public:
         Use(s.rt.header);
         Use(s.zs.header);
         if (flags & kClearTarget) Written(s.rt);
-        g_perf_capture_ns += Ns(t);
     }
 
     // rects and points are taken now; the copy itself, CPU or GPU, runs in order like the console's
     void Copy(const Surface& src, const Surface& dst, uint32_t count, uint32_t src_rects, uint32_t dst_points) override {
-        auto t = Clock::now();
         Cmd c{Op::Copy};
         c.a = count;
         c.b = count && src_rects ? Scratch(kernel::HostPtr(src_rects), count * 16) : 0;
@@ -169,11 +164,9 @@ public:
         Use(src.header);
         Use(dst.header);
         Written(dst);
-        g_perf_capture_ns += Ns(t);
     }
 
     void Present(const Surface& front, bool pillarbox) override {
-        auto t = Clock::now();
         Cmd c{Op::Present};
         c.a = pillarbox;
         c.s1 = front;
@@ -181,7 +174,6 @@ public:
         cur_->cmds.push_back(c);
         Use(front.header);
         uint64_t id = Submit();
-        g_perf_capture_ns += Ns(t);
         // the title records one frame while the one before it draws
         Wait(last_present_, WaitFor::Frame, nullptr);
         last_present_ = id;
@@ -246,12 +238,9 @@ private:
         return uint32_t(at);
     }
 
-    void ReadBack(uint32_t data, bool late) {
+    void ReadBack(uint32_t data, bool) {
         // only surfaces the GPU wrote since the last read-back hold anything newer than guest memory
         if (!written_.erase(data)) return;
-        (late ? g_perf_sync_late : g_perf_sync_block)++;
-        if (logged_.insert(uint64_t(data) << 1 | (late ? 1 : 0)).second)
-            LOGI("render thread: read-back of %08X for %s", data, late ? "a NOOVERWRITE lock without a finished copy" : "a lock / BlockOnResource");
         Cmd c{Op::Sync};
         c.a = data;
         cur_->cmds.push_back(c);
@@ -355,7 +344,7 @@ private:
         return id;
     }
 
-    void Wait(uint64_t id, WaitFor kind, const char* why) {
+    void Wait(uint64_t id, WaitFor, const char* why) {
         if (!id || done_.load() >= id) return;
         if (id >= cur_->id) id = Submit();
         auto t = Clock::now();
@@ -363,13 +352,7 @@ private:
             std::unique_lock lock(m_);
             done_cv_.wait(lock, [&] { return done_.load() >= id; });
         }
-        uint64_t ns = Ns(t);
-        g_perf_wait_ns += ns;
-        g_perf_wait_kind_ns[size_t(kind)] += ns;
-        if (why) {
-            g_perf_waits++;
-            LOG_FIRST(32, "render thread: the title waited %.2f ms for a %s", ns / 1e6, why);
-        }
+        if (why) LOG_FIRST(32, "render thread: the title waited %.2f ms for a %s", Ns(t) / 1e6, why);
     }
 
     void Run() {
@@ -454,7 +437,6 @@ private:
     State sent_;  // the state as the render thread will have it
     std::unordered_map<uint32_t, uint64_t> last_use_;
     std::unordered_set<uint32_t> written_;  // surfaces drawn since their last read-back, by data address
-    std::unordered_set<uint64_t> logged_;   // TEMPORARY: read-backs named once, by address and kind
     uint64_t next_id_ = 0, last_present_ = 0;
 
     // the render thread

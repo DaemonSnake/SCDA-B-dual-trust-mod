@@ -118,7 +118,6 @@ X86_FUNC(sub_00157A90) {
             for (size_t i = 0; i < va.size(); i++) va[i] = Guest(kTexts[i].text);
             return va;
         }();
-        LOG_FIRST(16, "versus: text %08X.%08X replaced", t.section, t.key);
         ctx.eax = guest[&t - kTexts];
         ctx.esp += 0x14;
         return;

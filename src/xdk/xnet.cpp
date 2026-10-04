@@ -23,6 +23,7 @@
 #include <random>
 
 #include "app/app.h"
+#include "audio/audio.h"
 #include "xdk/hle.h"
 
 using kernel::HostPtr;
@@ -49,6 +50,7 @@ constexpr uint32_t kLinkUp = 0x01 | 0x02 | 0x08;          // active, 100 Mbps, f
 constexpr uint32_t kXnAddrEthernet = 0x02 | 0x04;         // ethernet, static address
 constexpr DWORD kUdpConnReset = 0x9800000C;  // SIO_UDP_CONNRESET: off, or a send to a closed port fails the next recv
 constexpr int kLoopbackInstances = 8;
+constexpr uint16_t kVoicePort = 1010;  // the game's own voice socket: where it sends, the voice link follows
 
 struct Socket {
     SOCKET s = INVALID_SOCKET;
@@ -270,6 +272,8 @@ int SendOnce(SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
 int Send(uint32_t sock, SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
     int n = SendOnce(s, data, len, to);
     if (n < 0) LOG_FIRST(20, "xnet: send %X failed (%d)", sock, WSAGetLastError());
+    else if (to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).port == htons(kVoicePort))
+        audio::VoiceSent(to->sin_addr.s_addr);
     return n;
 }
 

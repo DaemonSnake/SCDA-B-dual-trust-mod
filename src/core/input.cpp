@@ -651,7 +651,7 @@ void SetNetSession(bool net) {
 }
 
 void SetInteractReloads(bool on) {
-    if (g_interact_reloads.exchange(on) != on) LOGI("input: interact %s", on ? "reloads, held back" : "interacts");
+    g_interact_reloads = on;
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
