@@ -1,20 +1,13 @@
-// The wideband voice link beside the game's own voice. While the game sends its 8 kHz Voxware voice to a peer on UDP
-// 1010, a 16 kHz Opus copy of the same microphone goes to that peer on 1011, and the peer plays it in place of the
-// game's. The game's path stays whole, so voice activation, muting and guards hearing the player are still the game's.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
-
+// The wideband voice link beside the game's own voice. While the game sends its 8 kHz Voxware voice to a peer, a
+// 16 kHz Opus copy of the same microphone goes to that peer over the game's own voice socket (UDP 1010), and the peer
+// plays it in place of the game's. The game's path stays whole, so voice activation, muting and guards hearing the
+// player are still the game's.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <string>
@@ -28,11 +21,14 @@
 #include "audio/audio.h"
 #include "core/log.h"
 
+namespace xnet {
+bool SendVoiceLink(uint32_t address, const void* data, int len);  // xdk/xnet.cpp
+}  // namespace xnet
+
 namespace audio {
 
 namespace {
 
-constexpr uint16_t kPort = 1011;            // the game's voice port, plus one
 constexpr int kRate = 16000, kFrame = 320;  // 20 ms
 constexpr int kBitrate = 16000, kComplexity = 10;
 constexpr char kMagic[4] = {'S', 'C', 'D', 'V'};
@@ -44,7 +40,7 @@ constexpr int64_t kSendHoldMs = 300, kHeardHoldMs = 400, kTalkerTimeoutMs = 1000
 // jitter buffer: playback starts at kTargetFrames, a gap is concealed for at most kMaxConcealed frames, a deeper queue
 // than kMaxQueued drops its oldest
 constexpr int kTargetFrames = 2, kMaxConcealed = 3, kMaxQueued = 10;
-constexpr DWORD kUdpConnReset = 0x9800000C;  // SIO_UDP_CONNRESET: off, or a peer without the link fails the next recv
+constexpr size_t kMaxIncoming = 256;
 const SDL_AudioSpec kSpec{SDL_AUDIO_S16, 1, kRate};
 
 int64_t NowMs() {
@@ -69,6 +65,14 @@ int g_users = 0;
 std::thread g_worker;
 std::atomic<bool> g_stop{false};
 std::atomic<int64_t> g_heard{0};
+std::atomic<bool> g_running{false};
+// packets the game's voice socket took for the link, by sender address and port
+struct Incoming {
+    uint64_t from;
+    std::vector<uint8_t> bytes;
+};
+std::mutex g_in_lock;
+std::deque<Incoming> g_in;
 std::mutex g_peers_lock;
 std::map<uint32_t, int64_t> g_peers;  // address -> the game's last voice send to it
 
@@ -140,31 +144,7 @@ std::string Ip(uint32_t a) {
     return s;
 }
 
-SOCKET OpenSocket() {
-    SOCKET s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (s == INVALID_SOCKET) return s;
-    u_long nonblocking = 1;
-    ::ioctlsocket(s, FIONBIO, &nonblocking);
-    BOOL off = FALSE;
-    DWORD bytes = 0;
-    ::WSAIoctl(s, kUdpConnReset, &off, sizeof(off), nullptr, 0, &bytes, nullptr, nullptr);
-    sockaddr_in at{};
-    at.sin_family = AF_INET;
-    at.sin_port = htons(kPort);
-    // --instance N: the game's sockets are on 127.0.0.N, so this one is too
-    at.sin_addr.s_addr = app::Instance() ? htonl(0x7F000000u | uint32_t(app::Instance())) : htonl(INADDR_ANY);
-    if (::bind(s, reinterpret_cast<sockaddr*>(&at), sizeof(at)) != 0) {
-        LOGW("voice link: bind to %s:%u failed (%d), not heard", Ip(at.sin_addr.s_addr).c_str(), kPort, WSAGetLastError());
-        return s;
-    }
-    LOGI("voice link: on %s:%u", Ip(at.sin_addr.s_addr).c_str(), kPort);
-    return s;
-}
-
 void Run(std::string microphone) {
-    WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
-    SOCKET s = OpenSocket();
     VoiceStream* capture = OpenMicrophone(microphone, kRate, 1);
     int error = OPUS_OK;
     OpusEncoder* encoder = opus_encoder_create(kRate, 1, OPUS_APPLICATION_VOIP, &error);
@@ -186,44 +166,42 @@ void Run(std::string microphone) {
     std::memcpy(packet, kMagic, 4);
     packet[4] = kVersion;
     packet[5] = 0;
+    std::deque<Incoming> in;
     while (!g_stop) {
-        fd_set f;
-        FD_ZERO(&f);
-        FD_SET(s, &f);
-        timeval tv{0, 5000};
-        ::select(0, &f, nullptr, nullptr, &tv);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         int64_t now = NowMs();
-        for (;;) {
-            uint8_t in[kHeader + kMaxPayload];
-            sockaddr_in from{};
-            int len = sizeof(from);
-            int n = ::recvfrom(s, reinterpret_cast<char*>(in), sizeof(in), 0, reinterpret_cast<sockaddr*>(&from), &len);
-            if (n < 0) break;
-            if (n <= int(kHeader) || std::memcmp(in, kMagic, 4) || in[4] != kVersion || !playback) continue;
-            uint64_t key = uint64_t(from.sin_addr.s_addr) << 16 | from.sin_port;
-            Talker*& t = talkers[key];
+        {
+            std::lock_guard lock(g_in_lock);
+            in.swap(g_in);
+        }
+        for (; !in.empty(); in.pop_front()) {
+            const Incoming& packet_in = in.front();
+            if (!playback) continue;
+            uint32_t address = uint32_t(packet_in.from >> 16);
+            Talker*& t = talkers[packet_in.from];
             if (!t) {
                 auto made = new Talker;
                 made->decoder = opus_decoder_create(kRate, 1, &error);
                 made->stream = made->decoder ? SDL_CreateAudioStream(&kSpec, &kSpec) : nullptr;
                 if (!made->stream || !SDL_SetAudioStreamGetCallback(made->stream, Feed, made) ||
                     !SDL_BindAudioStream(playback, made->stream)) {
-                    LOGE("voice link: no playback for %s: %s", Ip(from.sin_addr.s_addr).c_str(), SDL_GetError());
+                    LOGE("voice link: no playback for %s: %s", Ip(address).c_str(), SDL_GetError());
                     if (made->stream) SDL_DestroyAudioStream(made->stream);
                     if (made->decoder) opus_decoder_destroy(made->decoder);
                     delete made;
-                    talkers.erase(key);
+                    talkers.erase(packet_in.from);
                     continue;
                 }
                 t = made;
-                LOGI("voice link: hearing %s", Ip(from.sin_addr.s_addr).c_str());
+                LOGI("voice link: hearing %s", Ip(address).c_str());
             }
-            uint16_t seq = uint16_t(in[6] | in[7] << 8);
+            const std::vector<uint8_t>& b = packet_in.bytes;
+            uint16_t seq = uint16_t(b[6] | b[7] << 8);
             std::lock_guard lock(t->lock);
             t->last = now;
             g_heard = now;
             if (t->playing && Before(seq, t->next)) continue;
-            t->queue[seq].assign(in + kHeader, in + n);
+            t->queue[seq].assign(b.begin() + kHeader, b.end());
         }
         for (auto it = talkers.begin(); it != talkers.end();) {
             int64_t last;
@@ -253,21 +231,13 @@ void Run(std::string microphone) {
                 for (const auto& [address, at] : g_peers)
                     if (now - at < kSendHoldMs) sending.push_back(address);
             }
-            for (uint32_t address : sending) {
-                sockaddr_in to{};
-                to.sin_family = AF_INET;
-                to.sin_port = htons(kPort);
-                to.sin_addr.s_addr = address;
-                ::sendto(s, reinterpret_cast<const char*>(packet), int(kHeader) + bytes, 0, reinterpret_cast<sockaddr*>(&to),
-                         sizeof(to));
-            }
+            for (uint32_t address : sending) xnet::SendVoiceLink(address, packet, int(kHeader) + bytes);
         }
     }
     for (auto& [key, t] : talkers) Destroy(t);
     if (playback) SDL_CloseAudioDevice(playback);
     if (encoder) opus_encoder_destroy(encoder);
     if (capture) Close(capture);
-    if (s != INVALID_SOCKET) ::closesocket(s);
     LOGI("voice link: stopped");
 }
 
@@ -278,14 +248,21 @@ void StartVoiceLink(const std::string& microphone) {
     if (g_users++) return;
     g_stop = false;
     g_heard = 0;
+    g_running = true;
     g_worker = std::thread(Run, microphone);
+    LOGI("voice link: started");
 }
 
 void StopVoiceLink() {
     std::lock_guard lock(g_lock);
     if (g_users == 0 || --g_users) return;
     g_stop = true;
+    g_running = false;
     if (g_worker.joinable()) g_worker.join();
+    {
+        std::lock_guard in(g_in_lock);
+        g_in.clear();
+    }
     g_heard = 0;
     std::lock_guard peers(g_peers_lock);
     g_peers.clear();
@@ -295,6 +272,18 @@ void VoiceSent(uint32_t address) {
     std::lock_guard lock(g_peers_lock);
     auto [it, added] = g_peers.insert_or_assign(address, NowMs());
     if (added) LOGI("voice link: the game talks to %s", Ip(address).c_str());
+}
+
+bool TakeVoiceLinkPacket(uint32_t address, uint16_t port, const uint8_t* data, int bytes) {
+    if (bytes <= int(kHeader) || std::memcmp(data, kMagic, 4)) return false;
+    if (data[4] != kVersion) {
+        LOG_FIRST(4, "voice link: dropped a version %u packet from %s, both players need the same build", data[4], Ip(address).c_str());
+        return true;
+    }
+    if (!g_running) return true;
+    std::lock_guard lock(g_in_lock);
+    if (g_in.size() < kMaxIncoming) g_in.push_back({uint64_t(address) << 16 | port, std::vector<uint8_t>(data, data + bytes)});
+    return true;
 }
 
 bool VoiceLinkHeard() {

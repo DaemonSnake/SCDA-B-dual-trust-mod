@@ -205,11 +205,17 @@ int Recv(uint32_t sock, SOCKET s, const std::vector<Span>& spans, uint32_t from,
     thread_local std::vector<uint8_t> buf(65536);
     sockaddr_in src{};
     int sl = sizeof(src);
-    int n = ::recvfrom(s, reinterpret_cast<char*>(buf.data()), int(buf.size()), 0, reinterpret_cast<sockaddr*>(&src), &sl);
-    if (n < 0) {
-        err = HostError();
-        if (err != WSAEWOULDBLOCK) LOG_FIRST(20, "xnet: recv %X failed (%d)", sock, err);
-        return -1;
+    int n;
+    for (;;) {
+        sl = sizeof(src);
+        n = ::recvfrom(s, reinterpret_cast<char*>(buf.data()), int(buf.size()), 0, reinterpret_cast<sockaddr*>(&src), &sl);
+        if (n < 0) {
+            err = HostError();
+            if (err != WSAEWOULDBLOCK) LOG_FIRST(20, "xnet: recv %X failed (%d)", sock, err);
+            return -1;
+        }
+        // the voice link shares the game's voice socket; its packets never reach the game
+        if (!audio::TakeVoiceLinkPacket(src.sin_addr.s_addr, src.sin_port, buf.data(), n)) break;
     }
     int done = 0;
     for (const Span& sp : spans) {
@@ -356,6 +362,22 @@ void Random(uint32_t va, uint32_t n) {
 }  // namespace
 
 namespace xnet {
+
+// the voice link's packets go out of the game's own voice socket, so they reach a peer wherever its voice does
+bool SendVoiceLink(uint32_t address, const void* data, int len) {
+    SOCKET s = INVALID_SOCKET;
+    {
+        std::lock_guard<std::mutex> lock(g_lock);
+        for (const auto& [id, socket] : g_sockets)
+            if (socket.port == htons(kVoicePort)) s = socket.s;
+    }
+    if (s == INVALID_SOCKET) return false;
+    sockaddr_in to{};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(kVoicePort);
+    to.sin_addr.s_addr = address;
+    return SendOnce(s, static_cast<const uint8_t*>(data), len, &to) >= 0;
+}
 
 void CloseSockets() {
     std::lock_guard<std::mutex> lock(g_lock);
