@@ -7,6 +7,7 @@
 #include <iterator>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -30,12 +31,25 @@ namespace {
 
 std::atomic<bool> g_open{false};
 
-constexpr ImVec4 kPanelBg{0.05f, 0.03f, 0.03f, 0.94f};
-constexpr ImVec4 kBorder{0.88f, 0.84f, 0.76f, 0.80f};
-constexpr ImVec4 kText{0.93f, 0.91f, 0.87f, 1.0f};
-constexpr ImVec4 kHighlight{0.55f, 0.12f, 0.12f, 1.0f};
-constexpr ImVec4 kHeading{0.82f, 0.28f, 0.22f, 1.0f};
-constexpr ImVec4 kDim{0.62f, 0.59f, 0.55f, 1.0f};
+constexpr ImVec4 kPanelBg{0.04f, 0.045f, 0.04f, 0.94f};
+constexpr ImVec4 kBorder{0.57f, 0.62f, 0.51f, 0.85f};
+constexpr ImVec4 kText{0.89f, 0.91f, 0.86f, 1.0f};
+constexpr ImVec4 kHighlight{0.24f, 0.29f, 0.21f, 1.0f};
+constexpr ImVec4 kHeading{0.62f, 0.67f, 0.53f, 1.0f};
+constexpr ImVec4 kDim{0.57f, 0.60f, 0.54f, 1.0f};
+constexpr ImVec4 kTab{0.11f, 0.13f, 0.10f, 1.0f};
+constexpr ImVec4 kTabHovered{0.18f, 0.22f, 0.16f, 1.0f};
+constexpr ImVec4 kButton{0.15f, 0.18f, 0.13f, 1.0f};
+constexpr ImVec4 kButtonHovered{0.32f, 0.38f, 0.27f, 1.0f};  // lighter than the highlight, so it shows on a selected row
+constexpr ImVec4 kLine{0.62f, 0.67f, 0.53f, 0.35f};
+constexpr std::pair<ImGuiCol, ImVec4> kPanelColors[] = {
+    {ImGuiCol_WindowBg, kPanelBg}, {ImGuiCol_Border, kBorder}, {ImGuiCol_Text, kText},
+    {ImGuiCol_Header, kHighlight}, {ImGuiCol_HeaderHovered, kHighlight}, {ImGuiCol_HeaderActive, kHighlight},
+    {ImGuiCol_Button, kButton}, {ImGuiCol_ButtonHovered, kButtonHovered}, {ImGuiCol_ButtonActive, kButtonHovered},
+    {ImGuiCol_FrameBg, kTab}, {ImGuiCol_FrameBgHovered, kTabHovered}, {ImGuiCol_FrameBgActive, kHighlight},
+    {ImGuiCol_ScrollbarGrab, kHighlight}, {ImGuiCol_ScrollbarGrabHovered, kButtonHovered},
+    {ImGuiCol_ScrollbarGrabActive, kHeading}, {ImGuiCol_Separator, kLine}, {ImGuiCol_NavHighlight, kHeading},
+};
 
 constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
@@ -256,7 +270,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Text, kJoinIp, "COOP JOIN IP"},
     {Kind::Value, kMicrophone, "MICROPHONE"},
     {Kind::Value, kPushToTalk, "PUSH TO TALK"},
-    {Kind::Heading, -1, "CONTROLLERS"},
+    {Kind::Heading, -1, "INPUT DEVICES"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
 };
@@ -459,13 +473,45 @@ std::atomic<int> g_capture{-1};
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = 0;
+// on F10 the display mode and resolution wait for Apply, as Windows' display settings do; closing drops them
+std::atomic<bool> g_display_held{false};
+Settings g_display;  // the held display mode and resolution
+
+bool DisplayRow(int id) { return id == kDisplayMode || id == kResolution; }
+
+void HoldDisplay(int id, int step) {
+    const Settings& s = Get();
+    if (!g_display_held) {
+        g_display.display_mode = s.display_mode;
+        g_display.width = s.width;
+        g_display.height = s.height;
+    }
+    RowText(id, step, g_display);
+    g_display_held =
+        g_display.display_mode != s.display_mode || g_display.width != s.width || g_display.height != s.height;
+}
+
+void Apply() {
+    Settings& s = Get();
+    s.display_mode = g_display.display_mode;
+    s.width = g_display.width;
+    s.height = g_display.height;
+    g_display_held = false;
+    Changed(true);
+}
 const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER", "LEVEL SELECT"};
 constexpr int kControllerPage = 2, kLevelsPage = 3;
-// the controller page where the game has pad actions (not Versus), the level select where it has levels to open
+#ifdef NDEBUG
+constexpr bool kLevelSelect = false;
+#else
+constexpr bool kLevelSelect = true;
+#endif
+// the controller page where the game has pad actions (not Versus), the level select in debug builds where the game
+// has levels to open
 bool PageShown(int page) {
     size_t pads = 0;
     input::PadActions(&pads);
-    return page == kControllerPage ? pads > 0 : page != kLevelsPage || !game::Levels().empty();
+    return page == kControllerPage ? pads > 0 : page != kLevelsPage || (kLevelSelect && !game::Levels().empty());
 }
 
 int StepPage(int page, int step) {
@@ -617,7 +663,11 @@ void DrawRows(int page) {
         } else if (r.kind == Kind::Value && r.id == kMicrophone) {
             MicrophoneRow(r.label);
         } else if (r.kind == Kind::Value) {
-            if (int step = OptionRow(r.label, RowText(r.id, 0).c_str())) RowText(r.id, step);
+            bool held = g_display_held && DisplayRow(r.id);
+            if (int step = OptionRow(r.label, RowText(r.id, 0, held ? g_display : Get()).c_str())) {
+                if (DisplayRow(r.id)) HoldDisplay(r.id, step);
+                else RowText(r.id, step);
+            }
         } else if (r.kind == Kind::Bind || r.kind == Kind::PadBind) {
             const char* prompt = r.kind == Kind::Bind ? "PRESS A KEY" : "PRESS A BUTTON";
             if (BindRow(r.label, rows::Value(r), g_capture == r.id, prompt) && g_capture < 0 &&
@@ -651,7 +701,41 @@ void DrawLevels() {
 
 void Defaults() {
     g_capture = -1;
+    if (g_page == 0) g_display_held = false;
     if (g_page != kLevelsPage) RestoreDefaults(g_page);
+}
+
+// one tab a page, as wide as they share the line; LB / RB step them as the game's menus do
+void DrawTabs() {
+    int step = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false) - ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false);
+    // a selection made here shows from the next frame, the tab drawn this one still reads as selected; not under
+    // a bind or on the button that just bound
+    bool set = step && g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1;
+    if (set) g_page = StepPage(g_page, step);
+    int shown = 0;
+    for (int i = 0; i < int(std::size(kPages)); i++) shown += PageShown(i);
+    ImGui::PushStyleColor(ImGuiCol_Tab, kTab);
+    ImGui::PushStyleColor(ImGuiCol_TabHovered, kTabHovered);
+    ImGui::PushStyleColor(ImGuiCol_TabSelected, kHighlight);
+    ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, kHeading);
+    ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
+    if (ImGui::BeginTabBar("##pages")) {
+        float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x * float(shown - 1)) / float(shown);
+        for (int i = 0; i < int(std::size(kPages)); i++) {
+            if (!PageShown(i)) continue;
+            ImGui::SetNextItemWidth(w);
+            if (ImGui::BeginTabItem(kPages[i], nullptr, set && i == g_page ? ImGuiTabItemFlags_SetSelected : 0)) {
+                if (!set && i != g_page) {
+                    g_page = i;
+                    g_capture = -1;
+                }
+                ImGui::EndTabItem();
+            }
+        }
+        ImGui::EndTabBar();
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
 }
 
 void DrawPanel() {
@@ -659,12 +743,7 @@ void DrawPanel() {
     float em = ImGui::GetFontSize();
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(em * 50, em * 32), ImGuiCond_Always);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, kPanelBg);
-    ImGui::PushStyleColor(ImGuiCol_Border, kBorder);
-    ImGui::PushStyleColor(ImGuiCol_Text, kText);
-    ImGui::PushStyleColor(ImGuiCol_Header, kHighlight);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kHighlight);
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, kHighlight);
+    for (const auto& [col, color] : kPanelColors) ImGui::PushStyleColor(col, color);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
@@ -675,11 +754,7 @@ void DrawPanel() {
         const char* title = "SETTINGS";
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title).x) * 0.5f, 0.0f));
         ImGui::TextUnformatted(title);
-        ImGui::Separator();
-        if (int step = OptionRow("PAGE", kPages[g_page])) {
-            g_page = StepPage(g_page, step);
-            g_capture = -1;
-        }
+        DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
         if (g_page == kLevelsPage) DrawLevels();
@@ -687,7 +762,7 @@ void DrawPanel() {
         ImGui::EndChild();
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
-        const char* hint = "Up and Down select, Left and Right change, Enter rebinds, Escape closes";
+        const char* hint = "";
         if (g_capture >= 0) hint = g_page == kControllerPage ? "Press a controller button to bind, Escape cancels"
                                                              : "Press a key or mouse button to bind, Escape cancels";
         else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
@@ -699,11 +774,13 @@ void DrawPanel() {
         ImGui::SameLine();
         if (ImGui::Button("Defaults", ImVec2(bw, 0))) Defaults();
         ImGui::SameLine();
-        if (ImGui::Button("Apply", ImVec2(bw, 0))) Changed(true);
+        ImGui::BeginDisabled(!g_display_held);
+        if (ImGui::Button("Apply", ImVec2(bw, 0))) Apply();
+        ImGui::EndDisabled();
     }
     ImGui::End();
     ImGui::PopStyleVar(4);
-    ImGui::PopStyleColor(6);
+    ImGui::PopStyleColor(int(std::size(kPanelColors)));
 }
 
 }  // namespace
@@ -716,6 +793,7 @@ void ToggleMenu() {
     bool open = !g_open.load(std::memory_order_relaxed);
     g_open.store(open, std::memory_order_relaxed);
     g_capture = -1;
+    g_display_held = false;
     input::SetBlocked(open || ConsoleOpen());
 }
 
