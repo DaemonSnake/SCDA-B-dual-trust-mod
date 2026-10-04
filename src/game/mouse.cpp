@@ -69,7 +69,7 @@ constexpr uint32_t kHudLayer = 100;
 // held open in play and worked with the move keys: the mouse keeps looking around
 constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
 // the message box, among others "Controller Disconnected ... press START": up while a player has lost its port,
-// which only a Start press on a free port claims back
+// which only a Start press on a free port claims back, and "choose another controller" when split screen starts
 constexpr uint32_t kMsgBox = game::magma::Id("P_MsgBox");
 // first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; client +0x34 viewport count
 constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kViewportCount = 0x34;
@@ -259,7 +259,26 @@ void PadWheel(int notches) {
     g_pad_wheel_next = now + kWheelTapGap;
 }
 
+// The controller boxes, sub_001853BE thiscall(lost, show, choice) on the menus manager: message 0x30 / 0x31
+// "reconnect the controller", 0x32 "choose another controller", each answered by Start on a free port. The manager's
+// message list (+0x24: +0x30 entries, +0x34 count, +0x3D shown) has the one up last; an entry's +0 is its id.
+uint32_t g_messages = 0;
+
+bool ControllerBox() {
+    uint32_t count = g_messages ? R32(g_messages + 0x34) : 0;
+    if (!count || count > 64 || !G<uint8_t>(g_messages + 0x3D)) return false;
+    uint32_t entry = R32(R32(g_messages + 0x30) + (count - 1) * 4);
+    uint32_t id = entry ? R32(entry) : 0;
+    return id >= 0x30 && id <= 0x32;
+}
+
 }  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_001853BE);
+X86_FUNC(sub_001853BE) {
+    g_messages = ctx.ecx + 0x24;
+    __imp__sub_001853BE(ctx, base);
+}
 
 // viewport: +0x18 client; client: +0x2C engine, +0x30 viewports; engine vtable +0x78 InputEvent(viewport, key, action, delta)
 X86_EXTERN_FUNC(__imp__sub_0004B525);
@@ -288,7 +307,8 @@ X86_FUNC(sub_0004B525) {
     uint32_t top = InputPage(viewport);
     uint32_t page = top ? R32(top + 0x14) : 0;
     bool reconnect = page == kMsgBox && (int32_t(R32(viewport + kPlayer1Port)) == -1 ||
-                                         (R32(client + kViewportCount) > 1 && int32_t(R32(viewport + kPlayer2Port)) == -1));
+                                         (R32(client + kViewportCount) > 1 && int32_t(R32(viewport + kPlayer2Port)) == -1) ||
+                                         ControllerBox());
     input::SetTitleScreen(page == game::magma::Id("P_Start") || reconnect);
     input::SetPauseMenu(page == game::magma::Id("P_Pause") || reconnect);
     input::SetQuickInventory(page == kQuickInventory);
