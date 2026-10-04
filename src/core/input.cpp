@@ -246,21 +246,22 @@ constexpr std::span<const PadAction> kPadActions =
     kVersus ? std::span<const PadAction>() : std::span<const PadAction>(kStoryPadActions);
 constexpr size_t kPadCount = kPadActions.size();
 constexpr int kPadControls = 16;
-// a PlayStation controller's touchpad click, in a wButtons bit XInput leaves unused
-constexpr WORD kTouchpad = 0x0400;
+// a PlayStation controller's touchpad click on its left or right half, in the two wButtons bits XInput leaves unused
+constexpr WORD kTouchpadLeft = 0x0400, kTouchpadRight = 0x0800;
 // the physical buttons: the console pad's controls in Pad order (0-7 analog, 8-15 the buttons bits), then the
-// touchpad, which presses nothing until bound
-constexpr int kPadButtons = kPadControls + 1;
+// touchpad's halves, which press nothing until bound
+constexpr int kPadButtons = kPadControls + 2;
 const char* const kPadNames[kPadButtons] = {
     "A", "B", "X", "Y", "RB", "LB", "LT", "RT",
     "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT", "START", "BACK", "LS", "RS",
-    "TOUCHPAD",
+    "TOUCHPAD LEFT", "TOUCHPAD RIGHT",
 };
 constexpr WORD kPadMasks[kPadButtons] = {XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
                                          XINPUT_GAMEPAD_RIGHT_SHOULDER, XINPUT_GAMEPAD_LEFT_SHOULDER, 0, 0,
                                          XINPUT_GAMEPAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_DOWN, XINPUT_GAMEPAD_DPAD_LEFT,
                                          XINPUT_GAMEPAD_DPAD_RIGHT, XINPUT_GAMEPAD_START, XINPUT_GAMEPAD_BACK,
-                                         XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB, kTouchpad};
+                                         XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB, kTouchpadLeft,
+                                         kTouchpadRight};
 std::array<int, kPadCount> g_pad_binds{};  // each pad action's physical button, under g_bind_lock
 // what a physical button presses in play: the control (kEventTarget + event for an event) plus one, -1 nothing, 0 its
 // own (no binds loaded, Versus)
@@ -587,11 +588,27 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
         {SDL_GAMEPAD_BUTTON_EAST, XINPUT_GAMEPAD_B},
         {SDL_GAMEPAD_BUTTON_WEST, XINPUT_GAMEPAD_X},
         {SDL_GAMEPAD_BUTTON_NORTH, XINPUT_GAMEPAD_Y},
-        {SDL_GAMEPAD_BUTTON_TOUCHPAD, kTouchpad},
     };
     g = {};
     for (auto [button, mask] : kButtons)
         if (SDL_GetGamepadButton(pad, button)) g.wButtons |= mask;
+    // The touchpad clicks as one button; the half is where the finger was when it went down, kept until let go.
+    // No finger reported counts as the left half.
+    static WORD touch_half[4] = {};
+    if (!SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_TOUCHPAD)) {
+        touch_half[slot] = 0;
+    } else if (!touch_half[slot]) {
+        touch_half[slot] = kTouchpadLeft;
+        for (int f = 0; f < SDL_GetNumGamepadTouchpadFingers(pad, 0); f++) {
+            bool down = false;
+            float x = 0.0f, y = 0.0f;
+            if (SDL_GetGamepadTouchpadFinger(pad, 0, f, &down, &x, &y, nullptr) && down) {
+                touch_half[slot] = x >= 0.5f ? kTouchpadRight : kTouchpadLeft;
+                break;
+            }
+        }
+    }
+    g.wButtons |= touch_half[slot];
     auto trigger = [&](SDL_GamepadAxis axis) { return BYTE(std::max<int>(SDL_GetGamepadAxis(pad, axis), 0) >> 7); };
     g.bLeftTrigger = trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
     g.bRightTrigger = trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
@@ -614,11 +631,11 @@ uint32_t PadHeld(const XINPUT_GAMEPAD& g) {
 
 // The pad binds, in play: menus and the title screen keep the stock buttons. A button presses what it went down as
 // until it comes up, so one held while a menu opens or closes (the black button's picker) keeps its control.
-void Rebind(Pad& p, int port, int slot, bool touchpad) {
+void Rebind(Pad& p, int port, int slot, WORD buttons) {
     uint8_t raw[kPadButtons];
     for (int b = 0; b < 8; b++) raw[b] = p.analog[b];
     for (int b = 8; b < kPadControls; b++) raw[b] = (p.buttons >> (b - 8) & 1) ? 0xFF : 0;
-    raw[kPadControls] = touchpad ? 0xFF : 0;
+    for (int b = kPadControls; b < kPadButtons; b++) raw[b] = (buttons & kPadMasks[b]) ? 0xFF : 0;
     p.buttons = 0;
     std::fill(std::begin(p.analog), std::end(p.analog), uint8_t(0));
     bool held = std::any_of(std::begin(raw), std::end(raw), [](uint8_t v) { return v > XINPUT_GAMEPAD_TRIGGER_THRESHOLD; });
@@ -657,7 +674,8 @@ void ApplyPadBinds() {
 int PadButton(const std::string& name) {
     for (int b = 0; b < kPadButtons; b++)
         if (_stricmp(kPadNames[b], name.c_str()) == 0) return b;
-    return -1;
+    // before the halves the whole touchpad was one button
+    return _stricmp(name.c_str(), "TOUCHPAD") == 0 ? kPadControls : -1;
 }
 
 // the motors run until set again, as XInput's do
@@ -796,7 +814,7 @@ int TakeKeypadButton() {
     static uint32_t held = 0;
     uint32_t now = 0;
     for (size_t i = 0; i < std::size(kKeys); i++)
-        now |= uint32_t(Active() && !g_menu && Down(kKeys[i].first)) << i;
+        now |= uint32_t(Active() && Down(kKeys[i].first)) << i;
     uint32_t fresh = now & ~std::exchange(held, now);
     return fresh ? kKeys[std::countr_zero(fresh)].second : -1;
 }
@@ -1138,7 +1156,7 @@ Pad Poll(int port) {
         p.ly = g.sThumbLY;
         p.rx = g.sThumbRX;
         p.ry = g.sThumbRY;
-        Rebind(p, port, slot, b(kTouchpad));
+        Rebind(p, port, slot, g.wButtons);
         if (keyboard) {
             uint32_t held = p.buttons;
             for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > 30) << (8 + i);

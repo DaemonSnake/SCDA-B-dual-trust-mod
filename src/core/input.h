@@ -122,7 +122,7 @@ std::string PadBinding(size_t action);
 void BindPad(size_t action, int button);
 void ResetPadBindings();
 // a controller button held now on any controller, -1 for none: 0-7 A B X Y RB LB LT RT, 8-15 the Pad::buttons bits,
-// 16 a PlayStation controller's touchpad
+// 16 and 17 a PlayStation controller's touchpad, left and right half
 int PressedPadButton();
 bool ConsoleKey(int vk);     // the console action is bound to this key
 bool HostKey(KeyEvent event, int vk);  // that event's action is bound to this key and no key capture wants it
