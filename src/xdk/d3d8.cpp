@@ -338,6 +338,9 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
     g_presents++;
     // the kept display is shown until the title presents its own
     kernel::SetSavedDataAddress(0);
+    // TEMPORARY: which Swap changed the frame's shape
+    if (gpu::g_splash != gpu::g_shown_splash)
+        LOGI("d3d: frame %u shown %s, Swap from %08X", g_presents.load(), gpu::g_splash ? "4:3" : "full width", R32(ctx.esp));
     gpu::g_shown_splash = gpu::g_splash.load();
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]), gpu::g_shown_splash);
     app::Pace();

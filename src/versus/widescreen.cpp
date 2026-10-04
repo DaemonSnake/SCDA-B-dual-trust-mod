@@ -198,9 +198,11 @@ X86_FUNC(sub_00011BE0) {
     __imp__sub_00011BE0(ctx, base);
 }
 
-// boot progress: splash.raw and the bar, Swap
+// boot progress: splash.raw and the bar, Swap, while the boot device is up (0x384EE4). The frame is that picture
+// whatever was drawn since the last one
 X86_EXTERN_FUNC(__imp__sub_00012F90);
 X86_FUNC(sub_00012F90) {
+    if (R32(0x384EE4)) gpu::g_splash = true;
     gpu::g_in_splash++;
     __imp__sub_00012F90(ctx, base);
     gpu::g_in_splash--;
@@ -210,9 +212,11 @@ namespace {
 bool g_to_splash = false;  // splash.raw follows the fade out
 }
 
-// render interface: fades the frame on screen out, Swaps of its own
+// render interface: fades the frame on screen out, Swaps of its own. It keeps that frame's shape: the frame presenter
+// (sub_001E4C90) calls this after the first frame of a level is drawn, which left the loading picture full width
 X86_EXTERN_FUNC(__imp__sub_001F0820);
 X86_FUNC(sub_001F0820) {
+    gpu::g_splash = gpu::g_shown_splash.load();
     gpu::g_in_splash++;
     __imp__sub_001F0820(ctx, base);
     gpu::g_in_splash--;
@@ -229,9 +233,10 @@ X86_FUNC(sub_001F0D10) {
     g_to_splash = false;
 }
 
-// render interface: the kept picture and the load bar, Swap
+// render interface: the kept picture and the load bar, Swap. The loader's draws in between ended the 4:3
 X86_EXTERN_FUNC(__imp__sub_001F1240);
 X86_FUNC(sub_001F1240) {
+    gpu::g_splash = true;
     gpu::g_in_splash++;
     __imp__sub_001F1240(ctx, base);
     gpu::g_in_splash--;

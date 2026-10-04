@@ -12,6 +12,8 @@ struct X86Context;
 // the host side: window, settings, options menu
 namespace app {
 
+inline constexpr int kVersion = 1;  // release number, the GitHub release tag is V<number>
+
 enum class DisplayMode : uint32_t { Fullscreen, Windowed, Borderless };
 
 // what a player's controller port has plugged in: the keyboard and mouse, a controller, or both
@@ -43,7 +45,6 @@ struct Settings {
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::string microphone;                // recording device by name, empty the system default
     bool push_to_talk = false;             // voice only while the push to talk key is held
-    bool hide_hud = false;                 // debug: the HUD layer's Magma pages are not drawn in a level
     Port players[2] = {{true, 0}, {false, 1}};  // guest ports 0 and 1; 2 and 3 stay empty
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
 };
@@ -96,6 +97,8 @@ inline std::atomic<float> g_fps{0};
 void DrawFps(X86Context& ctx);
 // "XBE Recomp V1" bottom right, from the game mode page draw
 void DrawWatermark(X86Context& ctx);
+// the hide HUD key: the HUD layer's Magma pages are not drawn in a level
+inline std::atomic<bool> g_hide_hud{false};
 
 // option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard
 namespace rows {

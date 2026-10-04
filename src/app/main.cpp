@@ -107,6 +107,15 @@ void ApplyNow() {
     }
 }
 
+// a key went down: the settings panel and hide HUD binds
+bool HostKey(WPARAM wp, LPARAM lp) {
+    if (lp & (1 << 30) || ConsoleOpen()) return false;
+    if (input::HostKey(input::KeyEvent::SettingsPanel, int(wp))) ToggleMenu();
+    else if (!MenuOpen() && input::HostKey(input::KeyEvent::HideHud, int(wp))) g_hide_hud = !g_hide_hud;
+    else return false;
+    return true;
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     {
         std::lock_guard lock(UiLock());
@@ -114,7 +123,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     switch (msg) {
         case WM_KEYDOWN:
-            if (wp == VK_F10) ToggleMenu();
+            if (HostKey(wp, lp)) return 0;
             if (wp == VK_F3) DumpThreads();
             if (wp == VK_ESCAPE && MenuOpen() && !Capturing()) ToggleMenu();
             else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
@@ -174,10 +183,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SetForegroundWindow(hwnd);
             return 0;
         case WM_SYSKEYDOWN:
-            if (wp == VK_F10) {
-                ToggleMenu();
-                return 0;
-            }
+            if (HostKey(wp, lp)) return 0;
             break;
         case WM_CLOSE:
             DestroyWindow(hwnd);

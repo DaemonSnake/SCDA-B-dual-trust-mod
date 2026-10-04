@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/app.h"
 #include "core/input.h"
 #include "game/loading.h"
 #include "gpu/backend.h"
@@ -141,6 +142,7 @@ constexpr Words kWords[] = {{"int", u"PRESS ANY KEY"},
                             {"ita", u"PREMI UN TASTO"},
                             {"esp", u"PULSA UNA TECLA"}};
 std::u16string_view g_press_text;  // the picture ShowScreen is loading waits for a key: its words
+bool g_edges = true;               // the picture ShowScreen is loading is shown 4:3 (the ESRB notice is not)
 bool g_bar_in_picture = false;     // the picture ShowScreen is loading is the kept one: the full bar goes into it
 
 // D:\Default\DataXb\Screens\<language>\<map>_loading<n>.tga
@@ -189,6 +191,14 @@ void PaintBar(uint32_t frame) {
     for (int y = int(kBarY); y < int(kBarY + kBarHeight); y++)
         for (int x = int(kBarX); x < int(kBarX + kBarWidth); x++)
             std::memset(picture + size_t(y) * pitch + size_t(x) * 4, 0, 3);
+}
+
+// A fade to the picture from a full width frame clamps past its sides: black there, like the 4:3 frame's bars
+void PaintEdges(uint32_t frame) {
+    uint32_t pitch = 0;
+    uint8_t* picture = PictureTexels(frame, pitch);
+    for (int y = 0; picture && y < 480; y++)
+        for (int x : {0, 639}) std::memset(picture + size_t(y) * pitch + size_t(x) * 4, 0, 3);
 }
 
 void PressText(uint32_t frame, std::u16string_view text) {
@@ -368,6 +378,7 @@ X86_FUNC(sub_00051673) {
     bool picture = R32(ctx.esp) == kPictureDecoded;
     __imp__sub_00051673(ctx, base);
     if (picture && std::exchange(g_bar_in_picture, false)) PaintBar(ctx.ebp);
+    if (picture && g_edges && app::Widescreen()) PaintEdges(ctx.ebp);
     if (!picture || g_press_text.empty()) return;
     KeepPage();
     PressText(ctx.ebp, std::exchange(g_press_text, {}));
@@ -392,6 +403,7 @@ void game::loading::BeforeShowScreen(X86Context& ctx) {
         std::string path;
         for (uint32_t i = 0; i < n; i++) path += char(std::tolower(wide ? R16(p + i * 2) & 0xFF : G<uint8_t>(p + i)));
         g_press_text = g_mission_load ? WordsFor(path) : std::u16string_view{};
+        g_edges = path.find("esrb") == std::string::npos;
         return;
     }
     const std::string& kept = KeptPicture();
