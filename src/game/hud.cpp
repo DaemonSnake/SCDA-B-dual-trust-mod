@@ -248,6 +248,9 @@ X86_FUNC(sub_002CC260) {
 namespace {
 bool g_esrb = false;     // the ESRB notice is being shown
 bool g_loading = false;  // a loading picture is up, no Magma page drawn since
+bool g_fade = false;     // ShowScreen fades between a 4:3 frame and a full width one
+bool g_new_43 = false;   // the frame it fades to is 4:3
+bool g_old_43 = false;   // the frame it fades from is 4:3, until the fade draws over its memory
 }  // namespace
 
 // Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
@@ -330,6 +333,36 @@ X86_FUNC(sub_002303E8) {
     g_hud_seen = false;
 }
 
+// ShowScreen's fade draw (thiscall(alpha, blend, r, g, b, 1), ret 0x18): one quad, stage 0 the picture, stage 1 the
+// frame on screen (ri +0x5C64, the front buffer's memory, read back once a fade frame is drawn over it). The quad
+// (+4: c67 position, c68 its scale, c70 the uv offset both stages share, c71 / c72 each stage's uv scale) gives both
+// one shape, so a 4:3 picture squeezed a full width frame, and a full width one stretched a 4:3 frame. Such a fade
+// is shown full width, drawn as two halves from the centre, where both u meet: each layer keeps its own width.
+X86_EXTERN_FUNC(__imp__sub_002E5F1F);
+X86_FUNC(sub_002E5F1F) {
+    uint32_t quad = ctx.ecx, ri = R32(quad), old = R32(ri + 0x5C64);
+    float* f = &G<float>(quad + 4);
+    float alpha = GF(ctx.esp + 4);
+    if (!g_fade || !old || f[0] != -1 || f[4] != 2) return __imp__sub_002E5F1F(ctx, base);
+    gpu::g_splash = alpha == 1 && g_new_43;
+    if (alpha == 1) return __imp__sub_002E5F1F(ctx, base);
+    float saved[24];
+    std::memcpy(saved, f, sizeof saved);
+    float half = float(int(R32(ri + 0x4B84))) / 2, wide = half * 4 / 3;
+    float now = g_new_43 || g_esrb ? wide : half, was = g_old_43 ? wide : half;
+    if (R32(old + 4) == R32(R32(ri + 0x4B74) + 4)) g_old_43 = false;
+    f[0] = 0;
+    f[12] = half;
+    for (float side : {1.0f, -1.0f}) {
+        f[4] = side;
+        f[16] = side * now;
+        f[20] = side * was;
+        CallGuest(ctx, 0x2E4D05, {0x2E, R32(ctx.esp + 4), R32(ctx.esp + 0xC), R32(ctx.esp + 0x10), R32(ctx.esp + 0x14)});
+    }
+    std::memcpy(f, saved, sizeof saved);
+    ctx.esp += 4 + 0x18;
+}
+
 // render device ShowScreen(path, persist, fade, clear) (thiscall on the render device): reads the picture's index
 // bytes into the device's cached back buffer (+0x4B74), then fades to it from the front buffer through Swaps of its
 // own. The engine refreshes that cache only after its own Swap, so after an earlier ShowScreen it can be the front
@@ -348,10 +381,15 @@ X86_FUNC(sub_002E5F95) {
     g_esrb = path.find("esrb") != std::string::npos;
     g_loading |= p != 0 || SavedDataAddress();  // no picture: it fades from the display kept through a reboot
     bool splash = gpu::g_splash;
-    if (p) gpu::g_splash = !g_esrb;  // a picture: shown 4:3 by Present
+    // a picture is shown 4:3 by Present, a fade to black as the frame on screen was, anything else as it was drawn
+    g_old_43 = gpu::g_shown_splash;
+    g_new_43 = p ? !g_esrb : G<uint8_t>(ctx.esp + 0x10) ? g_old_43 : splash;
+    gpu::g_splash = g_new_43;
+    g_fade = G<uint8_t>(ctx.esp + 0xC) && !SavedDataAddress() && app::Widescreen() && (g_esrb || g_new_43 != g_old_43);
     gpu::g_in_splash++;
     __imp__sub_002E5F95(ctx, base);
     gpu::g_in_splash--;
+    g_fade = false;
     if (!(ctx.eax & 0xFF)) gpu::g_splash = splash;  // picture not found, nothing drawn
     g_esrb = false;
     game::loading::AfterShowScreen(ctx);

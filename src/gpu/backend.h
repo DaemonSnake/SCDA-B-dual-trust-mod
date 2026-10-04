@@ -60,6 +60,7 @@ void SavePipelineCache();
 // the frame buffer holds a 4:3 picture until a draw from outside it (in_splash: draws that belong to it)
 inline std::atomic<bool> g_splash{false};
 inline std::atomic<int> g_in_splash{0};
+inline std::atomic<bool> g_shown_splash{false};  // the frame on screen was presented 4:3
 
 // F3: save the next frame, every draw and target, under claude-outputs
 inline std::atomic<bool> g_capture{false};
