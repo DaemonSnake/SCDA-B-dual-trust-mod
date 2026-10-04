@@ -81,7 +81,6 @@ void Load() {
     s.join_ip = t["join_ip"].value_or(s.join_ip);
     s.microphone = t["microphone"].value_or(s.microphone);
     s.push_to_talk = t["push_to_talk"].value_or(s.push_to_talk);
-    s.hide_hud = t["hide_hud"].value_or(s.hide_hud);
     Port p1 = ParsePort(t["player1"].value_or(PortName(s.players[0])), s.players[0]);
     Port p2 = ParsePort(t["player2"].value_or(PortName(s.players[1])), s.players[1]);
     // a device sits on one port only
@@ -119,7 +118,6 @@ void Save() {
                   {"join_ip", s.join_ip},
                   {"microphone", s.microphone},
                   {"push_to_talk", s.push_to_talk},
-                  {"hide_hud", s.hide_hud},
                   {"player1", PortName(s.players[0])},
                   {"player2", PortName(s.players[1])}};
     toml::table keys;

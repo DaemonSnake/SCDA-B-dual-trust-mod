@@ -220,7 +220,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kHideHud, kSensitivity, kInvertMouse,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance
 };
 
@@ -253,8 +253,6 @@ constexpr Row kSettingsRows[] = {
     {Kind::Heading, -1, "CONTROLLERS"},
     {Kind::Value, kPlayer1, "PLAYER 1"},
     {Kind::Value, kPlayer2, "PLAYER 2"},
-    {Kind::Heading, -1, "DEBUG"},
-    {Kind::Value, kHideHud, "HIDE HUD"},
 };
 
 const std::vector<Row>& InputRows() {
@@ -381,10 +379,6 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             std::snprintf(text, sizeof(text), "%s", PortText(s.players[player]).c_str());
             break;
         }
-        case kHideHud:
-            Flip(s.hide_hud, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.hide_hud));
-            break;
         case kSensitivity:
             // 0.1 to 5.0 in steps of 0.1
             if (step) {
@@ -645,8 +639,8 @@ void DrawPanel() {
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
         ImGui::TextUnformatted(g_capture >= 0            ? "Press a key or mouse button to bind, Escape cancels"
-                               : g_page == kLevelsPage ? "Up and Down select, Enter or a click loads the level, F10 or Escape closes"
-                                                       : "Up and Down select, Left and Right change, Enter rebinds, F10 or Escape closes");
+                               : g_page == kLevelsPage ? "Up and Down select, Enter or a click loads the level, Escape closes"
+                                                       : "Up and Down select, Left and Right change, Enter rebinds, Escape closes");
         ImGui::PopStyleColor();
         float bw = em * 8;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2, 0.0f));

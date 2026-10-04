@@ -145,7 +145,7 @@ struct Target {
     bool play_only = false;  // a pad button that also moves through menus, pressed only in play
     KeyEvent event = KeyEvent::None;
 };
-// host keys: the console and push to talk, the pad never sees them
+// host keys: the console, push to talk, hide HUD and the settings panel, the pad never sees them
 constexpr int kHostKey = -2;
 constexpr Target kStoryActions[] = {
     {{"move_forward", "MOVE FORWARD", "W"}, 16},
@@ -175,6 +175,8 @@ constexpr Target kStoryActions[] = {
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
+    {{"hide_hud", "HIDE HUD", ""}, kHostKey, false, KeyEvent::HideHud},
+    {{"settings_panel", "SETTINGS PANEL", "F10"}, kHostKey, false, KeyEvent::SettingsPanel},
 };
 // Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
 constexpr Target kVersusActions[] = {
@@ -196,12 +198,17 @@ constexpr Target kVersusActions[] = {
     {{"pause", "PAUSE", "Escape"}, 12},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
     {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
+    {{"settings_panel", "SETTINGS PANEL", "F10"}, kHostKey, false, KeyEvent::SettingsPanel},
 };
 constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 constexpr std::span<const Target> kActions =
     kVersus ? std::span<const Target>(kVersusActions) : std::span<const Target>(kStoryActions);
 constexpr size_t kCount = kActions.size();
-static_assert(kCount <= 27, "the keyboard activity mask holds the actions in bits 0-26");
+static_assert(kCount <= 32 && [] {
+    for (size_t i = 27; i < kCount; i++)
+        if (kActions[i].button != kHostKey) return false;
+    return true;
+}(), "the keyboard activity mask holds the pad actions in bits 0-26");
 constexpr size_t kConsoleAction = [] {
     for (size_t i = 0; i < kCount; i++)
         if (kActions[i].button == kHostKey && kActions[i].event == KeyEvent::None) return i;
@@ -224,7 +231,7 @@ constexpr Name kNames[] = {
     {'S', "S"}, {'T', "T"}, {'U', "U"}, {'V', "V"}, {'W', "W"}, {'X', "X"}, {'Y', "Y"}, {'Z', "Z"},
     {'0', "0"}, {'1', "1"}, {'2', "2"}, {'3', "3"}, {'4', "4"}, {'5', "5"}, {'6', "6"}, {'7', "7"}, {'8', "8"}, {'9', "9"},
     {VK_F1, "F1"}, {VK_F2, "F2"}, {VK_F4, "F4"}, {VK_F5, "F5"}, {VK_F6, "F6"}, {VK_F7, "F7"},
-    {VK_F8, "F8"}, {VK_F9, "F9"}, {VK_F11, "F11"}, {VK_F12, "F12"},
+    {VK_F8, "F8"}, {VK_F9, "F9"}, {VK_F10, "F10"}, {VK_F11, "F11"}, {VK_F12, "F12"},
     {VK_NUMPAD0, "Numpad0"}, {VK_NUMPAD1, "Numpad1"}, {VK_NUMPAD2, "Numpad2"}, {VK_NUMPAD3, "Numpad3"},
     {VK_NUMPAD4, "Numpad4"}, {VK_NUMPAD5, "Numpad5"}, {VK_NUMPAD6, "Numpad6"}, {VK_NUMPAD7, "Numpad7"},
     {VK_NUMPAD8, "Numpad8"}, {VK_NUMPAD9, "Numpad9"}, {VK_ADD, "NumpadPlus"}, {VK_SUBTRACT, "NumpadMinus"},
@@ -284,6 +291,13 @@ bool HeldKeys(KeyEvent event) {
     }
     return std::any_of(keys.begin(), keys.end(), Down);
 }
+bool Bound(KeyEvent event, int vk) {
+    std::lock_guard lock(g_bind_lock);
+    for (size_t i = 0; i < kCount; i++)
+        if (kActions[i].event == event && std::find(g_binds[i].begin(), g_binds[i].end(), vk) != g_binds[i].end()) return true;
+    return false;
+}
+std::atomic<uint64_t> g_capture_ms{0};  // PressedKey
 bool Mouse(int vk) { return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2; }
 
 void Keyboard(Pad& p) {
@@ -703,19 +717,19 @@ uint64_t Pads() {
     return down;
 }
 
-// F10, F3 and the console key belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
+// F3 and the host keys belong to the host; modifiers (Alt+Tab), the Windows keys, Print Screen, the lock
 // keys and the media keys are no answer to "press a key", nor are codes Windows leaves unassigned or reserved: some
 // keyboards' Print Screen comes as 0xFF, and the 0xC1..0xDA block is the pads' own
 bool AnswerKey(int vk) {
     switch (vk) {
-        case VK_F10: case VK_F3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
+        case VK_F3: case VK_SNAPSHOT: case VK_SHIFT: case VK_CONTROL: case VK_MENU:
         case VK_LSHIFT: case VK_RSHIFT: case VK_LCONTROL: case VK_RCONTROL: case VK_LMENU: case VK_RMENU:
         case VK_LWIN: case VK_RWIN: case VK_APPS: case VK_CAPITAL: case VK_NUMLOCK: case VK_SCROLL: case VK_PAUSE:
         case 0x07: case 0x0A: case 0x0B: case 0x0E: case 0x0F: case 0x5E: case 0xE0: case 0xE8: case 0xFF:
             return false;
     }
     if ((vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) || (vk >= 0x88 && vk <= 0x9F) ||
-        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk))
+        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) || Bound(KeyEvent::SettingsPanel, vk))
         return false;
     return Down(vk);
 }
@@ -815,8 +829,9 @@ std::string Binding(size_t action) {
 }
 
 void Bind(size_t action, int vk) {
-    // the console opens from the window's key messages, which mouse buttons do not send
-    if (action >= kCount || !NameOf(vk) || (action == kConsoleAction && Mouse(vk))) return;
+    // the console, hide HUD and the settings panel act on the window's key messages, which mouse buttons do not send
+    if (action >= kCount || !NameOf(vk)) return;
+    if (kActions[action].button == kHostKey && kActions[action].event != KeyEvent::PushToTalk && Mouse(vk)) return;
     {
         std::lock_guard lock(g_bind_lock);
         // a new key joins the action's keys (two at most, the older goes); one it has already comes off, unless it is
@@ -839,6 +854,9 @@ bool ConsoleKey(int vk) {
     const auto& b = g_binds[kConsoleAction];
     return std::find(b.begin(), b.end(), vk) != b.end();
 }
+
+// a key capture polled a moment ago: the key is its answer
+bool HostKey(KeyEvent event, int vk) { return NowMs() - g_capture_ms > 250 && Bound(event, vk); }
 
 bool ConsoleChar(unsigned c) {
     std::lock_guard lock(g_bind_lock);
@@ -865,6 +883,7 @@ void LoadBindings() {
 }
 
 int PressedKey() {
+    g_capture_ms = NowMs();
     for (const Name& n : kNames)
         if (Down(n.vk)) return n.vk;
     return 0;

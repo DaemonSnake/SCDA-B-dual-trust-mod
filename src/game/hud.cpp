@@ -278,13 +278,13 @@ X86_FUNC(sub_002E3011) {
 }
 
 // Magma page draw (thiscall, no arguments); page +0x14 id, +0x1C layer. 100 is the default layer, the HUD's in a
-// level but also the menus' lists, so HIDE HUD only acts while P_hud is up
+// level but also the menus' lists, so the hide HUD key only acts while P_hud is up
 X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == Crc32("P_hud");
     g_loading = false;
-    if (app::Get().hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
+    if (app::g_hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
         ctx.esp += 4;
         return;
     }
