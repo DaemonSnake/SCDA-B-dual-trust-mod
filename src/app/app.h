@@ -93,7 +93,7 @@ void DrawUi();
 inline std::atomic<float> g_fps{0};
 // the frame rate in the game's font, from the image's Magma frame hook
 void DrawFps(X86Context& ctx);
-// "XBE Recomp V1" bottom right, from the solo main menu page draw
+// "XBE Recomp V1" bottom right, from the game mode page draw
 void DrawWatermark(X86Context& ctx);
 
 // option rows shared by the F10 panel and the game's options menu; page 0 recomp settings, 1 mouse and keyboard

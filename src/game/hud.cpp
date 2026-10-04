@@ -294,7 +294,7 @@ X86_FUNC(sub_002BE990) {
         if (p.id == id) g_page = &p;
     Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
-    if (id == Crc32("P_MainMenu")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
+    if (id == Crc32("P_OnlineOffline")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
 }
 
 // Magma element draw, children come back through here: the first listed or placed element decides. On menu
