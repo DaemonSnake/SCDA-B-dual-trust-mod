@@ -77,7 +77,6 @@ std::atomic<int> g_menu_wheel{0};  // wheel delta in a menu not yet taken, WHEEL
 std::atomic<bool> g_list{false};  // SetInteractionList
 std::atomic<uint16_t> g_tap{0};
 std::atomic<uint64_t> g_tap_until{0};
-constexpr uint64_t kTapMs = 80;
 
 // As SCCT's PC sticky camera: a wheel notch zooms 105 degrees a second for one 30 Hz tick. The stick tops out
 // at the camera's zoom speed, so the notch holds it at full for as long as the same angle takes.
@@ -180,7 +179,7 @@ constexpr Target kStoryActions[] = {
     {{"quick_save", "QUICK SAVE", "F5"}, -1, true, KeyEvent::QuickSave},
     {{"quick_load", "QUICK LOAD", "F8"}, -1, true, KeyEvent::QuickLoad},
     {{"console", "CONSOLE", "Backtick"}, kHostKey},
-    {{"hide_hud", "HIDE HUD", ""}, kHostKey, false, KeyEvent::HideHud},
+    {{"hide_hud", "TOGGLE HUD", ""}, kHostKey, false, KeyEvent::HideHud},
     {{"settings_panel", "SETTINGS PANEL", "F10"}, kHostKey, false, KeyEvent::SettingsPanel},
 };
 // Versus (sc4_adv.xbe) binds the pad differently. Its own ids keep rebinds in one game.
@@ -216,8 +215,8 @@ static_assert(kCount <= 32 && [] {
 }(), "the keyboard activity mask holds the pad actions in bits 0-26");
 // The controller's buttons rebound: each pad action is one of the console pad's controls (button as in Target, also
 // the physical button it has by default), pressed in play by the physical button bound to it; or, with an event, no
-// control and no button by default: the game side acts on it once per press, as on the key's. Reload shares A and
-// whistle / co-op action the black button's picker, so they have no rows of their own.
+// control and no button by default: the game side acts on it once per press, as on the key's (push to talk while
+// held). Reload shares A and whistle / co-op action the black button's picker, so they have no rows of their own.
 struct PadAction {
     const char* id;
     const char* label;
@@ -243,6 +242,8 @@ constexpr PadAction kStoryPadActions[] = {
     {"pause", "PAUSE", 12},
     {"quick_save", "QUICK SAVE", -1, KeyEvent::QuickSave},
     {"quick_load", "QUICK LOAD", -1, KeyEvent::QuickLoad},
+    {"push_to_talk", "PUSH TO TALK", -1, KeyEvent::PushToTalk},
+    {"toggle_hud", "TOGGLE HUD", -1, KeyEvent::HideHud},
 };
 // Versus keeps the stock buttons
 constexpr std::span<const PadAction> kPadActions =
@@ -272,6 +273,8 @@ constexpr int kEventTarget = 32;
 std::array<std::atomic<int>, kPadButtons> g_pad_map{};
 // per port, what each held physical button went down as: the control plus two, 1 nothing, 0 up
 std::array<std::array<int, kPadButtons>, 4> g_pad_down_as{};
+// per port, the events whose buttons are held, in menus too
+std::array<std::atomic<uint32_t>, 4> g_pad_events_held{};
 // per controller slot: a button held when the input came back (one that answered a capture) waits for release
 std::array<std::atomic<bool>, 4> g_pad_settle{};
 
@@ -436,6 +439,8 @@ void Keyboard(Pad& p) {
         if (b == 0 && g_title) p.buttons |= kStart;
     }
     if ((Down(VK_BACK) && !g_text && !keypad) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    // a synced session has no menu cursor, so a click confirms as A does
+    if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[0] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
     if (menu && Down(VK_RETURN)) {
         p.analog[0] = 0xFF;
@@ -657,7 +662,9 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
         if (c < 0) continue;
         // a synced session's lockstep carries the pad, not what the game side does on its own
         if (c >= kEventTarget) {
-            if (fresh && !g_net) g_events |= 1u << (c - kEventTarget);
+            KeyEvent event = KeyEvent(c - kEventTarget);
+            if (fresh && event == KeyEvent::HideHud) app::g_hide_hud = !app::g_hide_hud;
+            else if (fresh && !g_net && event != KeyEvent::PushToTalk) g_events |= 1u << int(event);
             continue;
         }
         if (c < 8) p.analog[c] = std::max(p.analog[c], raw[b]);
@@ -868,11 +875,15 @@ void SetTargeting(bool on) {
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
 
-bool EventKeyHeld(KeyEvent event) { return Active() && HeldKeys(event); }
+bool EventKeyHeld(KeyEvent event) {
+    bool pad = std::any_of(g_pad_events_held.begin(), g_pad_events_held.end(),
+                           [&](const std::atomic<uint32_t>& h) { return h >> int(event) & 1; });
+    return Active() && (HeldKeys(event) || pad);
+}
 
-void TapButtons(uint16_t buttons) {
+void TapButtons(uint16_t buttons, uint64_t ms) {
     g_tap = buttons;
-    g_tap_until = NowMs() + kTapMs;
+    g_tap_until = NowMs() + ms;
 }
 
 namespace {
@@ -1150,6 +1161,10 @@ Pad Poll(int port) {
     bool keyboard = port == KeyboardPort();
     XINPUT_GAMEPAD g;
     bool pad = ReadPad(slot, g);
+    uint32_t down = pad ? PadHeld(g) : 0, events = 0;
+    for (int b = 0; b < kPadButtons; b++)
+        if (int m = g_pad_map[size_t(b)]; down >> b & 1 && m > kEventTarget) events |= 1u << (m - 1 - kEventTarget);
+    g_pad_events_held[size_t(port)] = g_blocked ? 0 : events;
     p.connected = pad || keyboard;
     if (!p.connected || g_blocked) return p;
     if (pad) {

@@ -4,7 +4,10 @@
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
 // The wheel steps up and down as the stick does, a notch a step; in play it steps the focused interaction list.
+// In a synced session the lockstep carries only the pad, so there the wheel taps D-pad up and down, in menus and
+// the focused interaction list.
 #include <algorithm>
+#include <chrono>
 #include <iterator>
 
 #include "app/app.h"
@@ -26,7 +29,7 @@ void MenuPlace(X86Context& ctx);    // options_menu.cpp
 bool BlankRow(uint32_t list, int row);  // options_menu.cpp
 void PromptsTick(X86Context& ctx);  // prompts.cpp
 void NameEntryTick(X86Context& ctx, uint32_t top);  // name_entry.cpp
-bool InteractionListFocused();  // interaction_list.cpp
+bool InteractionListFocused(uint32_t player);  // interaction_list.cpp, player 0 any
 }
 
 namespace {
@@ -47,6 +50,8 @@ constexpr uint32_t kHacking = 0xE62F87FD;
 
 // engine: UXboxViewport::UpdateInput takes the synced input when +0xC8 and +0xCC or +0xDC are set
 constexpr uint32_t kNetA = 0xC8, kNetB = 0xCC, kNetC = 0xDC;
+// engine +0xD4: this machine's player number in a synced session, 1 the host, 2 the client
+constexpr uint32_t kLocalPlayer = 0xD4;
 constexpr uint32_t kMouseX = 0xE4, kMouseY = 0xE5, kJoyA = 0xCA, kAnalogUp = 0xC4, kAnalogDown = 0xC5;
 constexpr uint32_t kPress = 1, kRelease = 3, kAxis = 4;
 
@@ -76,6 +81,13 @@ constexpr uint32_t kGoalsTabs[] = {0xDFFFD221, 0xCE9F9174, 0xF2D85AF3};
 // a click anywhere presses A on it
 constexpr uint32_t kEventsCatcher = game::magma::Id("B_EventsCatcher");
 constexpr uint32_t kListHitTest = 0x2C1190, kListSelect = 0x2C2040, kPageSetFocus = 0x2C5370;
+// one press is held, then let go, each longer than a co-op step at the game's own 22 Hz
+constexpr uint16_t kDpadUp = 1 << 0, kDpadDown = 1 << 1;
+constexpr uint64_t kWheelTapMs = 50;
+constexpr auto kWheelTapGap = std::chrono::milliseconds(2 * kWheelTapMs);
+
+int g_pad_wheel = 0;  // notches not pressed yet, up positive
+std::chrono::steady_clock::time_point g_pad_wheel_next;
 
 struct Game {
     X86Context& ctx;
@@ -237,6 +249,16 @@ bool Menu(Game& g, bool act) {
     return true;
 }
 
+void PadWheel(int notches) {
+    if (notches * g_pad_wheel < 0) g_pad_wheel = 0;
+    g_pad_wheel += notches;
+    auto now = std::chrono::steady_clock::now();
+    if (!g_pad_wheel || now < g_pad_wheel_next) return;
+    input::TapButtons(g_pad_wheel > 0 ? kDpadUp : kDpadDown, kWheelTapMs);
+    g_pad_wheel += g_pad_wheel > 0 ? -1 : 1;
+    g_pad_wheel_next = now + kWheelTapGap;
+}
+
 }  // namespace
 
 // viewport: +0x18 client; client: +0x2C engine, +0x30 viewports; engine vtable +0x78 InputEvent(viewport, key, action, delta)
@@ -255,10 +277,13 @@ X86_FUNC(sub_0004B525) {
     bool net = (R32(engine + kNetA) && R32(engine + kNetB)) || R32(engine + kNetC);
     bool menu = Menu(g, !net);
     input::SetMenu(menu);
-    // a synced session's lockstep carries the pad, not these taps
-    bool list = !menu && !net && game::InteractionListFocused();
+    bool list = !menu && game::InteractionListFocused(net ? R32(engine + kLocalPlayer) : 0);
     input::SetInteractionList(list);
-    for (int n = input::TakeMenuWheel(); (menu || list) && !net && n; n += n > 0 ? -1 : 1)
+    // a synced session's lockstep carries the pad, not these taps
+    int wheel = input::TakeMenuWheel();
+    if (!net || !(menu || list)) g_pad_wheel = 0;
+    else PadWheel(wheel);
+    for (int n = wheel; (menu || list) && !net && n; n += n > 0 ? -1 : 1)
         Tap(g, n > 0 ? kAnalogUp : kAnalogDown);
     uint32_t top = InputPage(viewport);
     uint32_t page = top ? R32(top + 0x14) : 0;

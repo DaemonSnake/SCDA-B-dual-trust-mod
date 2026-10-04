@@ -90,7 +90,7 @@ bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is dow
 // the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses
 void SkipPromptShown();
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
-void TapButtons(uint16_t buttons);
+void TapButtons(uint16_t buttons, uint64_t ms = 80);
 
 // blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
 void WaitForPress();
