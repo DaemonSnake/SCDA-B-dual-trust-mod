@@ -5,8 +5,10 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <map>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -21,6 +23,7 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "app/translations.h"
 #include "audio/audio.h"
 #include "core/input.h"
 #include "game/console.h"
@@ -118,11 +121,33 @@ std::vector<Mode> Modes() {
     return modes;
 }
 
+// in the game's language, as ImGui's UTF-8; caps for the panel's capitals (its own font has the accents)
+std::string Ui(std::string_view text, bool caps = true) {
+    static std::map<std::string, std::string> cache;
+    std::string key = std::string(text) + (caps ? "\1" : "\2");
+    if (auto it = cache.find(key); it != cache.end()) return it->second;
+    std::string out;
+    for (char16_t c : Translate(text, [](std::string_view rest) { return std::string(rest); })) {
+        if (caps && ((c >= u'a' && c <= u'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7))) c -= 0x20;
+        if (c < 0x80) {
+            out += char(c);
+        } else if (c < 0x800) {
+            out += char(0xC0 | c >> 6);
+            out += char(0x80 | (c & 0x3F));
+        } else {
+            out += char(0xE0 | c >> 12);
+            out += char(0x80 | ((c >> 6) & 0x3F));
+            out += char(0x80 | (c & 0x3F));
+        }
+    }
+    return cache[key] = out;
+}
+
 void Section(const char* title) {
     float em = ImGui::GetFontSize();
     ImGui::Dummy(ImVec2(0, em * 0.5f));
     ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
-    ImGui::TextUnformatted(title);
+    ImGui::TextUnformatted(Ui(title).c_str());
     ImGui::PopStyleColor();
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0, em * 0.2f));
@@ -144,7 +169,7 @@ int OptionRow(const char* label, const char* value) {
     }
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(Ui(label).c_str());
     ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
     float block_x = row_x + row_w - block_w;
     ImGui::SetCursorPos(ImVec2(block_x, row_y));
@@ -172,7 +197,7 @@ bool TextRow(const char* label, char* buf, size_t size) {
     ImGui::PushID(label);
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(Ui(label).c_str());
     ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
     ImGui::SetNextItemWidth(block_w);
     ImGui::InputText("##text", buf, size);
@@ -542,8 +567,9 @@ bool BindRow(const char* label, const std::string& keys, bool capturing, const c
         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_Header));
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    std::string value = capturing ? std::string(prompt) : keys;
+    ImGui::TextUnformatted(Ui(label).c_str());
+    // key names as they are: the controller's BACK is no Back button
+    std::string value = capturing ? Ui(prompt) : keys == "UNBOUND" ? Ui(keys) : keys;
     float value_x = row_x + row_w - block_w + row_h + style.ItemSpacing.x;
     ImGui::SetCursorPos(ImVec2(value_x + std::max((value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
     ImGui::AlignTextToFramePadding();
@@ -601,15 +627,15 @@ void PlayerRow(const char* label, int player) {
     ImGui::PushID(label);
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(Ui(label).c_str());
     ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
     ImGui::SetNextItemWidth(block_w);
     // opaque: the rows under the list showed through
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
-    if (ImGui::BeginCombo("##device", PortText(s.players[player]).c_str())) {
+    if (ImGui::BeginCombo("##device", Ui(PortText(s.players[player])).c_str())) {
         for (const Port& c : PlayerList(s, player)) {
             bool current = SamePort(c, s.players[player]);
-            if (ImGui::Selectable(ChoiceText(s, player, c).c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
+            if (ImGui::Selectable(Ui(ChoiceText(s, player, c)).c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
             if (current) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -631,11 +657,12 @@ void MicrophoneRow(const char* label) {
     ImGui::PushID(label);
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(Ui(label).c_str());
     ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
     ImGui::SetNextItemWidth(block_w);
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
-    if (ImGui::BeginCombo("##device", RowText(kMicrophone, 0).c_str())) {
+    // device names as they are
+    if (ImGui::BeginCombo("##device", s.microphone.empty() ? Ui("SYSTEM DEFAULT").c_str() : s.microphone.c_str())) {
         if (ImGui::IsWindowAppearing()) devices = audio::Microphones();
         std::vector<std::string> list = devices;
         list.insert(list.begin(), std::string());
@@ -643,9 +670,9 @@ void MicrophoneRow(const char* label) {
             list.push_back(s.microphone);
         for (const std::string& name : list) {
             bool current = name == s.microphone;
-            std::string text = name.empty() ? "SYSTEM DEFAULT" : name;
+            std::string text = name.empty() ? Ui("SYSTEM DEFAULT") : name;
             if (current && !name.empty() && std::find(devices.begin(), devices.end(), name) == devices.end())
-                text += "  (UNPLUGGED)";
+                text += "  " + Ui("(UNPLUGGED)");
             if (ImGui::Selectable(text.c_str(), current) && !current) {
                 s.microphone = name;
                 Changed(false);
@@ -673,7 +700,7 @@ void DrawRows(int page) {
             MicrophoneRow(r.label);
         } else if (r.kind == Kind::Value) {
             bool held = g_display_held && DisplayRow(r.id);
-            if (int step = OptionRow(r.label, RowText(r.id, 0, held ? g_display : Get()).c_str())) {
+            if (int step = OptionRow(r.label, Ui(RowText(r.id, 0, held ? g_display : Get())).c_str())) {
                 if (DisplayRow(r.id)) HoldDisplay(r.id, step);
                 else RowText(r.id, step);
             }
@@ -733,7 +760,8 @@ void DrawTabs() {
         for (int i = 0; i < int(std::size(kPages)); i++) {
             if (!PageShown(i)) continue;
             ImGui::SetNextItemWidth(w);
-            if (ImGui::BeginTabItem(kPages[i], nullptr, set && i == g_page ? ImGuiTabItemFlags_SetSelected : 0)) {
+            std::string tab = Ui(kPages[i]) + "###" + kPages[i];
+            if (ImGui::BeginTabItem(tab.c_str(), nullptr, set && i == g_page ? ImGuiTabItemFlags_SetSelected : 0)) {
                 if (!set && i != g_page) {
                     g_page = i;
                     g_capture = -1;
@@ -760,9 +788,9 @@ void DrawPanel() {
     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
                                         ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
-        const char* title = "SETTINGS";
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title).x) * 0.5f, 0.0f));
-        ImGui::TextUnformatted(title);
+        std::string title = Ui("SETTINGS");
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title.c_str()).x) * 0.5f, 0.0f));
+        ImGui::TextUnformatted(title.c_str());
         DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
@@ -775,16 +803,16 @@ void DrawPanel() {
         if (g_capture >= 0) hint = g_page == kControllerPage ? "Press a controller button to bind, Escape cancels"
                                                              : "Press a key or mouse button to bind, Escape cancels";
         else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
-        ImGui::TextUnformatted(hint);
+        ImGui::TextUnformatted(Ui(hint, false).c_str());
         ImGui::PopStyleColor();
         float bw = em * 8;
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2, 0.0f));
-        if (ImGui::Button("Back", ImVec2(bw, 0))) ToggleMenu();
+        if (ImGui::Button(Ui("Back", false).c_str(), ImVec2(bw, 0))) ToggleMenu();
         ImGui::SameLine();
-        if (ImGui::Button("Defaults", ImVec2(bw, 0))) Defaults();
+        if (ImGui::Button(Ui("Defaults", false).c_str(), ImVec2(bw, 0))) Defaults();
         ImGui::SameLine();
         ImGui::BeginDisabled(!g_display_held);
-        if (ImGui::Button("Apply", ImVec2(bw, 0))) Apply();
+        if (ImGui::Button(Ui("Apply", false).c_str(), ImVec2(bw, 0))) Apply();
         ImGui::EndDisabled();
     }
     ImGui::End();

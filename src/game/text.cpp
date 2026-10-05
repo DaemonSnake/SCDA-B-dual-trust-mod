@@ -1,5 +1,6 @@
 // Game text replaced by key: Xbox wording for the PC, and System Link called LAN everywhere the game shows it (the
-// co-op button, its page titles and the lobby all read [COMMON] MainTitleLan). Every language gets the English text.
+// co-op button, its page titles and the lobby all read [COMMON] MainTitleLan). The other languages get theirs from
+// app::Translation, keyed by the English text.
 // The storage messages never show while the hard disk reports its fixed free space; their "Select OK to free %i
 // blocks" tail went to the dashboard, so it is dropped.
 // On keyboard and mouse the English tutorial text names the bound keys in place of the pad's buttons, as it is
@@ -9,6 +10,7 @@
 #include <string>
 #include <string_view>
 
+#include "app/translations.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -150,5 +152,6 @@ X86_FUNC(sub_00070FC9) {
     __imp__sub_00070FC9(ctx, base);
     if (!found || !ctx.eax) return;
     std::u16string_view text = found->text;
+    if (const char16_t* local = app::Translation(std::string(text.begin(), text.end()))) text = local;
     for (size_t i = 0; i <= text.size(); i++) W16(ctx.eax + uint32_t(i) * 2, i < text.size() ? text[i] : 0);
 }

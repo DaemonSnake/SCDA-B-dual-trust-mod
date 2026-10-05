@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app/app.h"
+#include "app/translations.h"
 #include "core/input.h"
 #include "game/magma.h"
 #include "xdk/hle.h"
@@ -87,6 +88,15 @@ std::string Title(std::string_view text) {
     return out;
 }
 
+// as the game shows it: in the game's language, what has no translation (numbers, units) in title case
+std::u16string Text(std::string_view text) { return app::Translate(text, Title); }
+
+// a key or button name as it is: the controller's BACK is no Back button
+std::u16string Name(std::string_view text) {
+    std::string titled = Title(text);
+    return std::u16string(titled.begin(), titled.end());
+}
+
 struct Take {
     int mode = -1;
     uint32_t menu = 0, owner = 0, page = 0, list = 0;
@@ -122,14 +132,6 @@ bool g_armed = false;
 uint32_t g_text = 0;
 uint32_t g_popup = 0;  // our option (+0) and its vtable (+0x20), the array (+0x60), its strings, their text
 int g_popup_row = -1, g_popup_current = 0;
-
-uint32_t Wide(std::string_view text) {
-    if (!g_text) g_text = mem::AllocSystem(0x400);
-    size_t n = std::min<size_t>(text.size(), 0x1FF);
-    for (size_t i = 0; i < n; i++) W16(g_text + uint32_t(i) * 2, uint8_t(text[i]));
-    W16(g_text + uint32_t(n) * 2, 0);
-    return g_text;
-}
 
 uint32_t Wide16(const std::u16string& text) {
     if (!g_text) g_text = mem::AllocSystem(0x400);
@@ -182,18 +184,22 @@ void Refresh(X86Context& ctx) {
     bool two = int8_t(CallGuest(ctx, kColumns, {})) > 1;
     for (size_t i = 0; i < g_take.rows.size(); i++) {
         const app::rows::Row* r = g_take.rows[i];
-        std::string label = Title(r ? r->label : "RESTORE DEFAULTS"), value;
+        std::u16string label = Text(r ? r->label : "RESTORE DEFAULTS"), value;
         const char* prompt = r && r->kind == app::rows::Kind::PadBind ? "PRESS A BUTTON" : "PRESS A KEY";
-        if (r) value = Title(g_capture == int(i) ? std::string(prompt) : app::rows::Value(*r));
+        if (r && g_capture == int(i)) value = Text(prompt);
+        else if (r) {
+            std::string v = app::rows::Value(*r);
+            value = r->kind == app::rows::Kind::Value || v == "UNBOUND" ? Text(v) : Name(v);
+        }
         ctx.ecx = g_take.list;
         if (!two) {
-            CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide(r ? label + "  " + value : label)});
+            CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide16(r ? label + u"  " + value : label)});
             continue;
         }
         // as the stock rows: the item's own text is not drawn
-        CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide(label)});
+        CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide16(label)});
         ctx.ecx = g_take.list;
-        CallGuest(ctx, kSetCell, {uint32_t(i), 1, Wide(value)});
+        CallGuest(ctx, kSetCell, {uint32_t(i), 1, Wide16(value)});
     }
 }
 
@@ -234,10 +240,10 @@ void Popup(X86Context& ctx, int row, const std::vector<std::string>& choices, in
     W32(g_popup + 0x10, uint32_t(current));
     uint32_t array = g_popup + 0x60, strings = array + 0xC, text = strings + kMaxChoices * 0xC, n = 0;
     for (const std::string& choice : choices) {
-        std::string t = Title(choice);
+        std::u16string t = Text(choice);
         uint32_t length = uint32_t(t.size()) + 1;  // FString counts its terminator
         if (n == kMaxChoices || text + length * 2 > g_popup + kPopupSize) break;
-        for (uint32_t i = 0; i < length; i++) W16(text + i * 2, i < t.size() ? uint8_t(t[i]) : 0);
+        for (uint32_t i = 0; i < length; i++) W16(text + i * 2, i < t.size() ? uint16_t(t[i]) : 0);
         W32(strings + n * 0xC, text);
         W32(strings + n * 0xC + 4, length);
         W32(strings + n * 0xC + 8, length);
@@ -280,7 +286,7 @@ void Fill(X86Context& ctx, int select = 0) {
     uint32_t list = g_take.list;
     ctx.ecx = list;
     CallGuest(ctx, kClear, {});
-    for (const app::rows::Row* r : g_take.rows) CallGuest(ctx, kAddItem, {Wide(Title(r ? r->label : "RESTORE DEFAULTS")), 0});
+    for (const app::rows::Row* r : g_take.rows) CallGuest(ctx, kAddItem, {Wide16(Text(r ? r->label : "RESTORE DEFAULTS")), 0});
     Refresh(ctx);
     G<uint8_t>(list + kRowsShown) = uint8_t(std::min<size_t>(g_take.rows.size(), kRowsMax));
     ctx.ecx = list;
@@ -289,7 +295,7 @@ void Fill(X86Context& ctx, int select = 0) {
 }
 
 // as 1A6235: text elements (type 8) keep it at +0x2C, buttons (2, 3, 4) at +0x28
-void SetTitle(X86Context& ctx, uint32_t page, std::string_view text) {
+void SetTitle(X86Context& ctx, uint32_t page, const std::u16string& text) {
     uint32_t instance = CallGuest(ctx, kFind, {page, kTitleName});
     uint32_t element = instance ? R32(instance + 8) : 0;
     if (!element) return;
@@ -297,7 +303,7 @@ void SetTitle(X86Context& ctx, uint32_t page, std::string_view text) {
     uint32_t type = CallGuest(ctx, R32(R32(element) + 0xC), {});
     if (type != 8 && (type < 2 || type > 4)) return;
     ctx.ecx = element + (type == 8 ? 0x2C : 0x28);
-    CallGuest(ctx, kSetText, {Wide(text)});
+    CallGuest(ctx, kSetText, {Wide16(text)});
 }
 
 // the in-game Confirm Changes button
@@ -328,13 +334,13 @@ void Enter(X86Context& ctx, uint32_t menu, int mode, int section = -1) {
     Fill(ctx);
     size_t count = 0;
     const app::rows::Row* rows = app::rows::Page(mode, &count);
-    SetTitle(ctx, page, section < 0 ? std::string(kCaptions[mode]) : Title(rows[section].label));
+    SetTitle(ctx, page, Text(section < 0 ? kCaptions[mode] : rows[section].label));
     uint32_t top = section < 0 ? 0 : PageChild(page, kTopTextId), top_text = top ? R32(top + 8) : 0;
     if (top_text) {
         if (!g_top_saved) g_top_text = ReadWide(top_text);
         g_top_saved = true;
         ctx.ecx = top_text + 0x2C;
-        CallGuest(ctx, kSetText, {Wide(kCaptions[mode])});
+        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[mode]))});
     }
     if (uint32_t validate = CallGuest(ctx, kFind, {page, kValidateName})) {
         g_validate[0] = G<uint8_t>(validate + kVisible);
@@ -460,7 +466,7 @@ void SectionsTick(X86Context& ctx) {
         CallGuest(ctx, kClear, {});
         for (std::string_view name : kSections) {
             ctx.ecx = list;
-            CallGuest(ctx, kAddItem, {Wide(Title(name)), 0});
+            CallGuest(ctx, kAddItem, {Wide16(Text(name)), 0});
         }
         G<uint8_t>(list + kRowsShown) = uint8_t(std::size(kSections));
         ctx.ecx = list;
@@ -511,7 +517,7 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     if (instance == s.title) {
         text = ReadWide(widget);
         ctx.ecx = widget + 0x2C;
-        CallGuest(ctx, kSetText, {Wide(kCaptions[0])});
+        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[0]))});
     }
     ctx.ecx = instance;
     sub_002C64E0(ctx, base);
@@ -621,7 +627,7 @@ X86_FUNC(sub_001A53B5) {
     if (count < 2) return;  // split screen shows Controls only
     g_first = count;
     ctx.ecx = list;
-    for (const char* caption : kCaptions) CallGuest(ctx, kAddItem, {Wide(caption), 0});
+    for (const char* caption : kCaptions) CallGuest(ctx, kAddItem, {Wide16(Text(caption)), 0});
     G<uint8_t>(list + kRowsShown) = uint8_t(count + kCaptionCount);
     CallGuest(ctx, kLayout, {});
     if (g_restore) RestoreStock(ctx, menu);
