@@ -43,6 +43,9 @@ void SetTitleScreen(bool title);
 void SetPauseMenu(bool pause);
 // an OPSAT page, a computer's file list or the hacking device, which B closes: the pause key is B there
 void SetOpsat(bool opsat);
+// the OPSAT's 3D map: as on SCCT PC, the mouse turns it while the right button is held, which does not back out there
+void SetMap(bool map);
+bool MapDrag();  // the right button is held on the map: no cursor
 // the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
 void SetQuickInventory(bool open);
 // a name being typed: the keys type (OnChar) and press nothing but Enter (A) and pause (B)

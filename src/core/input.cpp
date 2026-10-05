@@ -101,7 +101,11 @@ constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too; so on a computer's file list, the
 // hacking device, the optic cable and keypads, which B leaves, as Escape does on SCCT PC.
 constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
+// The OPSAT map steps zones with the triggers, which the mouse buttons cannot press there: strafing does, as on the
+// sticky camera. Forward and back zoom as the stick.
+constexpr Remap kMapRemap[] = {{8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}};
 std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false}, g_text{false};
+std::atomic<bool> g_map{false};  // SetMap
 std::mutex g_chars_lock;
 std::u16string g_chars;  // typed, not yet taken
 std::atomic<uint32_t> g_stick_keys{0};  // StickKeys
@@ -448,6 +452,7 @@ void Keyboard(Pad& p) {
         if (b == -1) {
             int button = kActions[i].button;
             b = camera                    ? Remapped(kCameraRemap, button)
+                : g_map                 ? Remapped(kMapRemap, button)
                 : back                  ? Remapped(kOpsatRemap, button)
                 : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
                                         : button;
@@ -460,7 +465,7 @@ void Keyboard(Pad& p) {
         else p.buttons |= uint16_t(1u << (b - 8));
         if (b == 0 && g_title) p.buttons |= kStart;
     }
-    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
     // a synced session has no menu cursor, so a click confirms as A does
     if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[0] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
@@ -529,6 +534,14 @@ void Keyboard(Pad& p) {
     float length = g_wiggle ? 1.0f : 0.6f;
     p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
     p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
+}
+
+// the cursor stays where the drag started, so it hovers nothing on the way
+void Pin() {
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    RECT r{pt.x, pt.y, pt.x + 1, pt.y + 1};
+    ClipCursor(&r);
 }
 
 void Clip() {
@@ -724,6 +737,8 @@ void SetMotors(int slot, uint16_t left, uint16_t right) {
 
 }  // namespace
 
+bool MapDrag() { return g_map && Active() && Down(VK_RBUTTON); }
+
 void SetBlocked(bool b) {
     // a controller button that answered a capture or closed the panel reaches the game only once let go
     if (g_blocked.exchange(b) && !b)
@@ -745,7 +760,8 @@ void OnRawInput(void* handle) {
         ri.header.dwType != RIM_TYPEMOUSE || !Active())
         return;
     // only the clip: settling would drop a held key that keeps a menu open (quick inventory)
-    if (Pointing()) ClipCursor(nullptr);
+    if (MapDrag()) Pin();
+    else if (Pointing()) ClipCursor(nullptr);
     else Clip();
     const RAWMOUSE& m = ri.data.mouse;
     if (m.lLastX || m.lLastY || m.usButtonFlags) g_keyboard_ms = NowMs();
@@ -778,7 +794,7 @@ void ReleaseCursor() {
 
 bool TakeMouse(float& dx, float& dy) {
     int x = g_dx.exchange(0), y = g_dy.exchange(0);
-    if ((!x && !y) || !Active() || Pointing()) return false;
+    if ((!x && !y) || !Active() || (Pointing() && !MapDrag())) return false;
     const app::Settings& s = app::Get();
     dx = float(x) * s.mouse_sensitivity;
     dy = float(s.invert_mouse ? -y : y) * s.mouse_sensitivity;
@@ -790,6 +806,8 @@ void SetTitleScreen(bool title) { g_title = title; }
 void SetPauseMenu(bool pause) { g_pause_menu = pause; }
 
 void SetOpsat(bool opsat) { g_opsat = opsat; }
+
+void SetMap(bool map) { g_map = map; }
 
 void SetQuickInventory(bool open) { g_quick = open; }
 

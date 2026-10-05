@@ -166,8 +166,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SETCURSOR:
             if (LOWORD(lp) == HTCLIENT) {
                 // the cursor does nothing in a synced co-op session (mouse.cpp), so none is shown
+                // none while a drag turns the OPSAT map; the button's release asks before its state reads up
                 bool pointing = (input::InMenu() || input::Pointer()) && !input::Movie() && input::KeyboardActive() &&
-                                !input::NetSession();
+                                !input::NetSession() && (!input::MapDrag() || HIWORD(lp) == WM_RBUTTONUP);
                 SetCursor(MenuOpen() || ConsoleOpen() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512))
                           : pointing                  ? static_cast<HCURSOR>(MenuCursor())
                                                       : nullptr);

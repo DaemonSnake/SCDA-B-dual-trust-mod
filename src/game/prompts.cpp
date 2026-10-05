@@ -116,13 +116,15 @@ std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
     // the sticky camera's page: gas on fire, noise on alt fire, strafing switches cameras (input.cpp's camera remap),
     // forward and back zoom
     bool camera = page_id == game::magma::Id("P_Camera");
+    // the OPSAT map: strafing steps zones (input.cpp's map remap), forward and back zoom
+    bool map = page_id == game::magma::Id("P_Map");
     switch (icon->code) {
         case A: return menu ? "ENTER" : Keys({camera ? "fire" : "interact"});
         case B: return !menu ? Keys({"crouch"}) : page_id == game::magma::Id("P_Pause") ? "BACKSPACE" : "ESC";
         case X: return page_id == kNameEntry ? "BACKSPACE" : Keys({camera ? "alt_fire" : "scope"});
         case Y: return Keys({"jump"});
-        case LT: return Keys({camera ? "strafe_left" : "alt_fire"});
-        case RT: return Keys({camera ? "strafe_right" : "fire"});
+        case LT: return Keys({camera || map ? "strafe_left" : "alt_fire"});
+        case RT: return Keys({camera || map ? "strafe_right" : "fire"});
         case White: return Keys({"quick_inventory"});
         case Black: return Keys({"sidekick"});
         case Start: return page_id == game::magma::Id("P_Start") ? "ENTER" : Keys({"pause"});
@@ -132,7 +134,7 @@ std::string Label(uint32_t material_id, bool menu, uint32_t page_id) {
         case Left: return menu ? "LEFT" : Keys({"previous_vision"});
         case Right: return menu ? "RIGHT" : Keys({"next_vision"});
         case Move:
-            return camera ? Keys({"move_forward", "move_back"}, true)
+            return camera || map ? Keys({"move_forward", "move_back"}, true)
                           : Keys({"move_forward", "strafe_left", "move_back", "strafe_right"});
         case Look: return "MOUSE";
         case LeftClick: return Keys({"back_to_wall"});

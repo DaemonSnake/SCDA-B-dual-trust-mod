@@ -4,6 +4,7 @@
 // Menus: the Magma page on top of the input stack. The cursor focuses the widget under it the way the neighbour
 // navigation does and in a list selects the item under it; a click presses A, or scrolls on a list's arrows.
 // The wheel steps up and down as the stick does, a notch a step; in play it steps the focused interaction list.
+// On the OPSAT map the mouse turns the map while the right button is held: the map turns by aTurn and aLookUp.
 // In a synced session the lockstep carries only the pad, so there the wheel taps D-pad up and down, in menus and
 // the focused interaction list.
 #include <algorithm>
@@ -47,6 +48,7 @@ constexpr uint32_t kOpsatPages[] = {
 // the hacking device's help and legend (hud.mgm, name not recovered)
 constexpr uint32_t kComputer = game::magma::Id("P_Computer");
 constexpr uint32_t kHacking = 0xE62F87FD;
+constexpr uint32_t kMap = game::magma::Id("P_Map");
 
 // engine: UXboxViewport::UpdateInput takes the synced input when +0xC8 and +0xCC or +0xDC are set
 constexpr uint32_t kNetA = 0xC8, kNetB = 0xCC, kNetC = 0xDC;
@@ -340,6 +342,7 @@ X86_FUNC(sub_0004B525) {
     input::SetTitleScreen(page == game::magma::Id("P_Start") || reconnect);
     input::SetPauseMenu(page == game::magma::Id("P_Pause") || reconnect);
     input::SetQuickInventory(page == kQuickInventory);
+    input::SetMap(page == kMap);
     input::SetOpsat(page && (std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages) || page == kComputer ||
                              page == kHacking));
     game::UpdateView(viewport);
@@ -350,7 +353,7 @@ X86_FUNC(sub_0004B525) {
     float dx, dy;
     // in a synced session the mouse is recorded with the pad (coop_mouse.cpp); the axis command stores its value,
     // so each axis gets one summed event per update
-    if (!net && !menu && input::TakeMouse(dx, dy)) {
+    if (!net && (!menu || page == kMap) && input::TakeMouse(dx, dy)) {
         if (dx != 0.0f) Event(g, kMouseX, kAxis, dx);
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
