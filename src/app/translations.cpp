@@ -1,0 +1,202 @@
+// Text the recomp adds to the game's menus in French, German, Italian and Spanish: Chaos Theory PC's wording where it
+// had the same option or action, Double Agent's own names for its gadgets and visions (OPSAT is the montre-terminal
+// in French and ENSAT in Spanish; Versus' from its controls page), and the game's casing, which capitalizes only the
+// first word outside German.
+#include <algorithm>
+#include <cctype>
+#include <iterator>
+
+#include "app/app.h"
+#include "app/translations.h"
+
+namespace {
+
+// in app::kLanguages order after int
+struct Entry {
+    std::string_view english;
+    std::u16string_view text[4];
+};
+constexpr Entry kEntries[] = {
+    // options menu pages and the RECOMP SETTINGS sections
+    {"RECOMP SETTINGS", {u"Paramètres Recomp", u"Recomp-Einstellungen", u"Impostazioni Recomp", u"Configuración de Recomp"}},
+    {"MOUSE AND KEYBOARD", {u"Souris et clavier", u"Maus und Tastatur", u"Mouse e tastiera", u"Ratón y teclado"}},
+    {"CONTROLLER", {u"Manette", u"Controller", u"Controller", u"Controlador"}},
+    {"GENERAL", {u"Général", u"Allgemein", u"Generale", u"General"}},
+    {"DISPLAY", {u"Affichage", u"Anzeige", u"Video", u"Pantalla"}},
+    {"GRAPHICS", {u"Graphismes", u"Grafik", u"Grafica", u"Gráficos"}},
+    {"RESTORE DEFAULTS", {u"Rétablir les valeurs par défaut", u"Standard wiederherstellen", u"Ripristina predefiniti", u"Restaurar predeterminados"}},
+    {"PRESS A KEY", {u"Appuyez sur une touche", u"Taste drücken", u"Premi un tasto", u"Pulsa una tecla"}},
+    {"PRESS A BUTTON", {u"Appuyez sur un bouton", u"Taste drücken", u"Premi un pulsante", u"Pulsa un botón"}},
+    {"UNBOUND", {u"Non assigné", u"Nicht belegt", u"Non assegnato", u"Sin asignar"}},
+
+    // RECOMP SETTINGS rows
+    {"DISPLAY MODE", {u"Mode d'affichage", u"Anzeigemodus", u"Modalità schermo", u"Modo de pantalla"}},
+    {"RESOLUTION", {u"Résolution", u"Auflösung", u"Risoluzione", u"Resolución"}},
+    {"RENDER RESOLUTION", {u"Résolution de rendu", u"Render-Auflösung", u"Risoluzione di rendering", u"Resolución de renderizado"}},
+    {"FIELD OF VIEW", {u"Champ de vision", u"Sichtfeld", u"Campo visivo", u"Campo de visión"}},
+    {"VERTICAL SYNC", {u"Synchro verticale", u"V-Sync", u"Sincronia verticale", u"Sincronismo vertical"}},
+    {"MAX FRAME RATE", {u"Images par seconde max.", u"Max. Bildrate", u"Frame rate massimo", u"Fotogramas por segundo máx."}},
+    {"FPS COUNTER", {u"Compteur d'images par seconde", u"FPS-Anzeige", u"Contatore FPS", u"Contador de FPS"}},
+    {"SHADER MODEL", {u"Modèle de shader", u"Shader Model", u"Modello di shader", u"Modelo de shader"}},
+    {"HDR RENDERING", {u"Rendu HDR", u"HDR-Rendering", u"Rendering HDR", u"Renderizado HDR"}},
+    {"TONE MAPPING", {u"Assignation des teintes", u"Tone Mapping", u"Tone mapping", u"Mapeado por tonos"}},
+    {"HIGH QUALITY SOFT SHADOWS", {u"Ombres douces de haute qualité", u"High Quality Soft Shadows", u"Ombre sfumate di alta qualità", u"Sombras suavizadas de alta calidad"}},
+    {"AMBIENT OCCLUSION", {u"Occlusion ambiante", u"Ambient Occlusion", u"Occlusione ambientale", u"Oclusión ambiental"}},
+    {"ANISOTROPIC FILTERING", {u"Filtrage anisotropique", u"Anisotropische Filterung", u"Filtro anisotropico", u"Filtro anisotrópico"}},
+    {"SHADOW RESOLUTION", {u"Résolution des ombres", u"Schattenauflösung", u"Risoluzione delle ombre", u"Resolución de sombras"}},
+    {"SHADOW DISTANCE", {u"Distance des ombres", u"Schattendistanz", u"Distanza delle ombre", u"Distancia de sombras"}},
+    {"SKIP INTROS", {u"Passer les intros", u"Intros überspringen", u"Salta introduzione", u"Saltar introducción"}},
+    {"LANGUAGE", {u"Langue", u"Sprache", u"Lingua", u"Idioma"}},
+    {"COOP TICK RATE", {u"Fréquence de mise à jour co-op", u"Koop-Tickrate", u"Frequenza di aggiornamento cooperativa", u"Tasa de actualización coop."}},
+    {"COOP MIN INPUT DELAY", {u"Délai d'entrée min. co-op", u"Min. Koop-Eingabeverzögerung", u"Ritardo input min. cooperativa", u"Retardo de entrada mín. coop."}},
+
+    // their values
+    {"FULLSCREEN", {u"Plein écran", u"Vollbild", u"Schermo intero", u"Pantalla completa"}},
+    {"WINDOWED", {u"Fenêtré", u"Fenster", u"Finestra", u"Ventana"}},
+    {"BORDERLESS", {u"Fenêtré sans bordure", u"Randloses Fenster", u"Finestra senza bordi", u"Ventana sin bordes"}},
+    {"ON", {u"Oui", u"Ein", u"Sì", u"Sí"}},
+    {"OFF", {u"Non", u"Aus", u"No", u"No"}},
+    {"UNLIMITED", {u"Illimité", u"Unbegrenzt", u"Illimitato", u"Ilimitado"}},
+    {"AUTOMATIC", {u"Automatique", u"Automatisch", u"Automatico", u"Automático"}},
+    {"(DEFAULT)", {u"(par défaut)", u"(Standard)", u"(predefinito)", u"(por defecto)"}},
+    {"(RESTART)", {u"(redémarrage)", u"(Neustart)", u"(riavvio)", u"(reinicio)"}},
+    {"ENGLISH", {u"Anglais", u"Englisch", u"Inglese", u"Inglés"}},
+    {"FRENCH", {u"Français", u"Französisch", u"Francese", u"Francés"}},
+    {"GERMAN", {u"Allemand", u"Deutsch", u"Tedesco", u"Alemán"}},
+    {"ITALIAN", {u"Italien", u"Italienisch", u"Italiano", u"Italiano"}},
+    {"SPANISH", {u"Espagnol", u"Spanisch", u"Spagnolo", u"Español"}},
+
+    // MOUSE AND KEYBOARD and CONTROLLER rows
+    {"MOUSE SENSITIVITY", {u"Sensibilité de la souris", u"Mausempfindlichkeit", u"Sensibilità del mouse", u"Sensibilidad del ratón"}},
+    {"INVERT MOUSE", {u"Inversion de la souris", u"Maus umkehren", u"Inversione mouse", u"Invertir ratón"}},
+    {"MOVE FORWARD", {u"Avancer", u"Vorwärts bewegen", u"Avanti", u"Avanzar"}},
+    {"MOVE BACK", {u"Reculer", u"Rückwärts bewegen", u"Indietro", u"Retroceder"}},
+    {"MOVE LEFT", {u"Déplacement à gauche", u"Nach links", u"Spostati a sinistra", u"Mover a la izquierda"}},
+    {"MOVE RIGHT", {u"Déplacement à droite", u"Nach rechts", u"Spostati a destra", u"Mover a la derecha"}},
+    {"JUMP", {u"Sauter", u"Springen", u"Salta", u"Saltar"}},
+    {"JUMP / SPLIT JUMP", {u"Sauter / saut-écart", u"Springen / Spagatsprung", u"Salta / Spaccata", u"Saltar / Salto de piernas abiertas"}},
+    {"CROUCH", {u"S'accroupir", u"Ducken", u"Chinati", u"Agacharse"}},
+    {"CROUCH / STAND UP / EXIT INTERACTION", {u"S'accroupir / se relever / quitter l'interaction", u"Ducken / Aufstehen / Interaktion beenden", u"Chinati / Alzati / Esci dall'interazione", u"Agacharse / De pie / Salir de la acción"}},
+    {"BACK TO WALL / SWITCH HAND", {u"Dos au mur / changer de main", u"An Wand lehnen / Hand wechseln", u"Spalle al muro / Cambia mano", u"Espalda a la pared / Cambiar de mano"}},
+    {"BACK TO WALL / SWITCH HAND / ZOOM IN OUT", {u"Dos au mur / changer de main / zoom", u"An Wand lehnen / Hand wechseln / Zoom", u"Spalle al muro / Cambia mano / Zoom", u"Espalda a la pared / Cambiar de mano / Zoom"}},
+    {"FIRE", {u"Tirer", u"Feuern", u"Fuoco", u"Disparar"}},
+    {"ALTERNATE FIRE", {u"Tir secondaire", u"Sekundärfeuer", u"Fuoco alternativo", u"Disparo secundario"}},
+    {"INTERACTION", {u"Interaction", u"Interaktion", u"Interazione", u"Acciones"}},
+    {"INTERACTION / RELOAD", {u"Interaction / recharger", u"Interaktion / Nachladen", u"Interazione / Ricarica", u"Acciones / Recargar"}},
+    {"USE / EQUIP", {u"Utiliser / s'équiper", u"Benutzen / Ausrüsten", u"Usa / Impugna", u"Usar / Empuñar"}},
+    {"RELOAD", {u"Recharger", u"Nachladen", u"Ricarica", u"Recargar"}},
+    {"WHISTLE", {u"Siffler", u"Pfeifen", u"Fischia", u"Silbar"}},
+    {"WHISTLE / COOP ACTION", {u"Siffler / action coop.", u"Pfeifen / Koop-Aktion", u"Fischia / Azione cooperativa", u"Silbar / Acción coop."}},
+    {"COOP ACTION", {u"Action coopérative", u"Koop-Aktion", u"Azione cooperativa", u"Acción cooperativa"}},
+    {"QUICK INVENTORY", {u"Inventaire rapide", u"Schnellinventar", u"Inventario rapido", u"Inventario rápido"}},
+    {"QUICK INVENTORY / SWITCH ATTACHMENT", {u"Inventaire rapide / changer d'accessoire", u"Schnellinventar / Modul wechseln", u"Inventario rapido / Cambia modulo", u"Inventario rápido / Cambiar accesorio"}},
+    {"OPSAT", {u"Montre-terminal", u"OPSAT", u"OPSAT", u"ENSAT"}},
+    {"EEV VISION / ZOOM / SNIPER", {u"Vision EEV / zoom / sniper", u"EEV / Zoom / Scharfschütze", u"EEV / Zoom / Mirino", u"Visor VE / Zoom / Francotirador"}},
+    {"NIGHT VISION", {u"Vision nocturne", u"Nachtsicht", u"Visore notturno", u"Visor nocturno"}},
+    {"THERMAL VISION", {u"Vision thermique", u"Wärmebildsicht", u"Visore termico", u"Visor térmico"}},
+    {"EMF VISION", {u"Vision CES", u"EMF-Sicht", u"Visore campo magnetico", u"Visor CEM"}},
+    {"STICKY CAM VISION", {u"Vision par caméra-glu", u"Haftkamera-Sicht", u"Visuale dalla microcamera", u"Visor cámara seguimiento"}},
+    {"PUSH TO TALK", {u"Appuyer pour parler", u"Push-to-Talk", u"Premi per parlare", u"Pulsar para hablar"}},
+    {"PAUSE", {u"Pause", u"Pause", u"Pausa", u"Pausa"}},
+    {"QUICK SAVE", {u"Sauvegarde rapide", u"Schnellspeichern", u"Salvataggio veloce", u"Guardado rápido"}},
+    {"QUICK LOAD", {u"Chargement rapide", u"Schnellladen", u"Caricamento veloce", u"Carga rápida"}},
+    {"CONSOLE", {u"Console", u"Konsole", u"Console", u"Consola"}},
+    {"TOGGLE HUD", {u"Afficher / masquer l'interface", u"HUD ein / aus", u"Mostra / nascondi HUD", u"Mostrar / ocultar HUD"}},
+    {"SETTINGS PANEL", {u"Panneau des paramètres", u"Einstellungsmenü", u"Pannello impostazioni", u"Panel de configuración"}},
+
+    // Versus keys
+    {"INTERACT", {u"Action", u"Aktion", u"Azione", u"Acción"}},
+    {"JUMP / RELOAD", {u"Sauter / recharger", u"Springen / Nachladen", u"Salta / Ricarica", u"Saltar / Recargar"}},
+    {"ZOOM / LOOK BACK", {u"Zoom / regarder derrière", u"Zoom / Nach hinten sehen", u"Zoom / Guarda indietro", u"Zoom / Mirar atrás"}},
+    {"LASER", {u"Laser de visée", u"Laser-Sicht", u"Mirino laser", u"Mira láser"}},
+    {"PREVIOUS CAMERA", {u"Caméra précédente", u"Vorige Haftkamera", u"Stickycam precedente", u"Cámara anterior"}},
+    {"HELP", {u"Texte d'aide", u"Hilfetext", u"Guida", u"Ayuda"}},
+
+    // the F10 panel's own
+    {"SETTINGS", {u"Paramètres", u"Einstellungen", u"Impostazioni", u"Configuración"}},
+    {"BACK", {u"Retour", u"Zurück", u"Indietro", u"Atrás"}},
+    {"DEFAULTS", {u"Par défaut", u"Standard", u"Predefiniti", u"Por defecto"}},
+    {"APPLY", {u"Appliquer", u"Übernehmen", u"Applica", u"Aplicar"}},
+    {"MOUSE", {u"Souris", u"Maus", u"Mouse", u"Ratón"}},
+    {"KEYBOARD", {u"Clavier", u"Tastatur", u"Tastiera", u"Teclado"}},
+    {"INPUT DEVICES", {u"Périphériques", u"Eingabegeräte", u"Dispositivi di input", u"Dispositivos de entrada"}},
+    {"PLAYER 1", {u"Joueur 1", u"Spieler 1", u"Giocatore 1", u"Jugador 1"}},
+    {"PLAYER 2", {u"Joueur 2", u"Spieler 2", u"Giocatore 2", u"Jugador 2"}},
+    {"(FROM PLAYER 1)", {u"(du joueur 1)", u"(von Spieler 1)", u"(dal giocatore 1)", u"(del jugador 1)"}},
+    {"(FROM PLAYER 2)", {u"(du joueur 2)", u"(von Spieler 2)", u"(dal giocatore 2)", u"(del jugador 2)"}},
+    {"NOT CONNECTED", {u"Non connecté", u"Nicht verbunden", u"Non collegato", u"No conectado"}},
+    {"(UNPLUGGED)", {u"(débranché)", u"(entfernt)", u"(scollegato)", u"(desconectado)"}},
+    {"MICROPHONE", {u"Microphone", u"Mikrofon", u"Microfono", u"Micrófono"}},
+    {"SYSTEM DEFAULT", {u"Par défaut du système", u"Systemstandard", u"Predefinito di sistema", u"Predeterminado del sistema"}},
+    {"COOP JOIN IP", {u"IP de connexion co-op", u"Koop-Beitritts-IP", u"IP per unirsi in cooperativa", u"IP para unirse en coop."}},
+    {"Press a key or mouse button to bind, Escape cancels", {u"Appuyez sur une touche ou un bouton de souris, Échap pour annuler", u"Taste oder Maustaste drücken, Escape bricht ab", u"Premi un tasto o un pulsante del mouse, Esc per annullare", u"Pulsa una tecla o un botón del ratón, Escape para cancelar"}},
+    {"Press a controller button to bind, Escape cancels", {u"Appuyez sur un bouton de la manette, Échap pour annuler", u"Controller-Taste drücken, Escape bricht ab", u"Premi un pulsante del controller, Esc per annullare", u"Pulsa un botón del controlador, Escape para cancelar"}},
+
+    // Exit on the game mode menu
+    {"EXIT", {u"Sortir", u"Verlassen", u"Esci", u"Salir"}},
+    {"QUIT GAME", {u"Quitter la partie", u"Spiel beenden", u"Esci dal gioco", u"Salir del juego"}},
+    {"ARE YOU SURE YOU WANT TO EXIT?", {u"Voulez-vous vraiment quitter?", u"Möchten Sie das Spiel wirklich beenden?", u"Vuoi davvero uscire?", u"¿Seguro que quieres salir?"}},
+
+    // game text replaced by key (text.cpp)
+    {"LAN", {u"LAN", u"LAN", u"Rete locale", u"En red"}},
+    {"PLEASE DON'T CLOSE THE GAME OR TURN OFF YOUR PC.", {u"Ne fermez pas le jeu et n'éteignez pas votre PC.", u"Bitte beenden Sie das Spiel nicht und schalten Sie Ihren PC nicht aus.", u"Non chiudere il gioco e non spegnere il PC.", u"No cierres el juego ni apagues el PC."}},
+    {"YOUR PC DOESN'T HAVE ENOUGH FREE STORAGE TO SAVE A PROFILE.", {u"Votre PC ne dispose pas de suffisamment d'espace libre pour sauvegarder un profil.", u"Ihr PC verfügt nicht über genug freien Speicherplatz, um ein Profil zu speichern.", u"Il PC non dispone di spazio libero sufficiente per salvare un profilo.", u"Tu PC no tiene suficiente espacio libre para guardar un perfil."}},
+    {"YOUR PC DOESN'T HAVE ENOUGH FREE STORAGE TO SAVE THE CHECKPOINT.", {u"Votre PC ne dispose pas de suffisamment d'espace libre pour sauvegarder ce point de passage.", u"Ihr PC verfügt nicht über genug freien Speicherplatz, um diesen Speicherpunkt zu sichern.", u"Il PC non dispone di spazio libero sufficiente per salvare il checkpoint.", u"Tu PC no tiene suficiente espacio libre para guardar el checkpoint."}},
+    {"YOUR PC DOESN'T HAVE ENOUGH FREE STORAGE TO SAVE THE CHECKPOINTS.", {u"Votre PC ne dispose pas de suffisamment d'espace libre pour sauvegarder les points de passage.", u"Ihr PC verfügt nicht über genug freien Speicherplatz, um die Speicherpunkte zu sichern.", u"Il PC non dispone di spazio libero sufficiente per salvare i checkpoint.", u"Tu PC no tiene suficiente espacio libre para guardar los checkpoints."}},
+    // each language has the thermal and night vision hints the wrong way round too
+    {"USE: PRESS RIGHT ON THE D-PAD.", {u"UTILISATION: appuyez à droite sur le BMD.", u"VERWENDEN: Rechts auf dem Steuerkreuz drücken.", u"USO: premi destra sul tasto direzionale.", u"USO: Presiona el mando de dirección hacia la derecha."}},
+    {"USE: PRESS LEFT ON THE D-PAD.", {u"UTILISATION: appuyez à gauche sur le BMD.", u"VERWENDEN: Links auf dem Steuerkreuz drücken.", u"USO: premi sinistra sul tasto direzionale.", u"USO: Presiona el mando de dirección hacia la izquierda."}},
+};
+
+bool Same(std::string_view a, std::string_view b) {
+    return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
+               return (x >= 'a' && x <= 'z' ? x - 0x20 : x) == (y >= 'a' && y <= 'z' ? y - 0x20 : y);
+           });
+}
+
+bool WordChar(char c) { return std::isalnum(uint8_t(c)) != 0; }
+
+// the language the game booted with, -1 for English
+int Language() {
+    static const int language = [] {
+        auto at = std::find(std::begin(app::kLanguages), std::end(app::kLanguages), app::BootLanguage());
+        return at == std::end(app::kLanguages) ? -1 : int(at - std::begin(app::kLanguages)) - 1;
+    }();
+    return language;
+}
+
+}  // namespace
+
+const char16_t* app::Translation(std::string_view english) {
+    int language = Language();
+    if (language < 0) return nullptr;
+    for (const Entry& e : kEntries)
+        if (Same(e.english, english)) return e.text[language].data();
+    return nullptr;
+}
+
+std::u16string app::Translate(std::string_view text, std::string (*rest)(std::string_view)) {
+    std::u16string out;
+    size_t plain = 0;  // start of the text not yet out
+    auto flush = [&](size_t to) {
+        std::string kept = rest(text.substr(plain, to - plain));
+        out.append(kept.begin(), kept.end());
+    };
+    for (size_t i = 0; i < text.size();) {
+        const char16_t* found = nullptr;
+        size_t end = text.size();
+        if (!i || !WordChar(text[i - 1]))
+            for (; end > i; end--)
+                if ((end == text.size() || !WordChar(text[end])) && (found = Translation(text.substr(i, end - i))))
+                    break;
+        if (!found) {
+            i++;
+            continue;
+        }
+        flush(i);
+        out += found;
+        i = plain = end;
+    }
+    flush(text.size());
+    return out;
+}

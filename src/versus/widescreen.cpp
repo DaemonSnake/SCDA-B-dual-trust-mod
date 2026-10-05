@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
@@ -31,7 +32,8 @@ constexpr uint32_t Crc32(std::string_view text) {
     return ~crc;
 }
 
-constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_interatt")};
+// the interaction prompt (p_interatt) is one centred widget with fades at its sides: it stays 4:3 like a menu
+constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_spectatormode")};
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
@@ -51,8 +53,12 @@ bool g_hud = false;      // a HUD page is being drawn
 bool g_capture = false;  // a HUD instance is being drawn: its quads wait for its bounds
 bool g_replay = false;
 bool g_pages = false;    // a page was drawn this frame
+bool g_projected = false;  // Enhanced Reality icons are being drawn
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
+// the side each HUD instance was placed on: one reaching past the middle for a while (the weapon box showing a
+// picked up gadget) keeps it instead of going back to its 4:3 place
+std::unordered_map<uint32_t, Mode> g_sides;
 
 float Width() {
     uint32_t m = R32(kMagma), vp = m ? R32(m + 0x38) : 0;
@@ -136,6 +142,8 @@ X86_FUNC(sub_002620A0) {
                 : hi <= w / 2 + kSlack           ? Mode::Left
                 : lo >= w / 2 - kSlack           ? Mode::Right
                                                  : Mode::Centre;
+    if (mode == Mode::Left || mode == Mode::Right) g_sides[id] = mode;
+    else if (auto side = g_sides.find(id); mode == Mode::Centre && side != g_sides.end()) mode = side->second;
     LOG_FIRST(100, "versus widescreen: instance %08X x %.0f..%.0f mode %d", id, lo, hi, int(mode));
     uint32_t esp = ctx.esp, corners = (esp - 0x40) & ~0xFu;
     ctx.esp = corners;
@@ -149,6 +157,15 @@ X86_FUNC(sub_002620A0) {
     }
     g_replay = false;
     ctx.esp = esp;
+}
+
+// HUD Enhanced Reality (thiscall): objective icons at world positions projected through the widened 3D view, each
+// drawn by moving one instance. They are already in place, and caught in their parent's list they would all follow it
+X86_EXTERN_FUNC(__imp__sub_00195FC0);
+X86_FUNC(sub_00195FC0) {
+    g_projected = true;
+    __imp__sub_00195FC0(ctx, base);
+    g_projected = false;
 }
 
 // Magma frame (thiscall): every page into the canvas, which its caller then flushes
@@ -168,7 +185,7 @@ X86_FUNC(sub_00252B80) {
 X86_EXTERN_FUNC(__imp__sub_001231E0);
 X86_FUNC(sub_001231E0) {
     float w = Width();
-    if (!app::Widescreen() || w <= 0.0f) return __imp__sub_001231E0(ctx, base);
+    if (!app::Widescreen() || w <= 0.0f || g_projected) return __imp__sub_001231E0(ctx, base);
     uint32_t corners = R32(ctx.esp + 4);
     float c[12];
     std::memcpy(c, &G<float>(corners), sizeof c);

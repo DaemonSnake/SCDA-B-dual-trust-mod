@@ -1,6 +1,7 @@
 // Exit on the game mode menu (P_OnlineOffline), as SCCT's PC version has: a fifth list item after Solo, Coop, Versus
 // and Credits. Picking it opens the game's own OK / Cancel box, and OK closes the window. Back (B, Escape) on that
 // page opens the same box instead of returning to the title screen; Cancel leaves the selection where it was.
+#include <string>
 #include <string_view>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -12,6 +13,7 @@
 #include <windows.h>
 
 #include "app/app.h"
+#include "app/translations.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -47,9 +49,9 @@ uint32_t g_list = 0;   // the list the item went into
 int g_exit_index = -1;
 bool g_asking = false;  // the box is up: back reaches the page handler under it too
 
-uint32_t Wide(uint32_t& at, std::wstring_view text) {
+uint32_t Wide(uint32_t& at, std::u16string_view text) {
     uint32_t start = at;
-    for (wchar_t c : text) {
+    for (char16_t c : text) {
         W16(at, uint16_t(c));
         at += 2;
     }
@@ -72,7 +74,11 @@ bool Setup() {
     W32(g_listener, kListenerVtable);
     g_title = block + 0x10, g_text = block + 0x1C, g_empty = block + 0x28;
     uint32_t at = block + 0x40;
-    std::wstring_view title = L"Quit Game", text = L"Are you sure you want to exit?", item = L"Exit";
+    auto local = [](std::string_view english) {
+        const char16_t* text = app::Translation(english);
+        return text ? std::u16string(text) : std::u16string(english.begin(), english.end());
+    };
+    std::u16string title = local("Quit Game"), text = local("Are you sure you want to exit?"), item = local("Exit");
     FString(g_title, Wide(at, title), uint32_t(title.size()));
     FString(g_text, Wide(at, text), uint32_t(text.size()));
     FString(g_empty, 0, 0);

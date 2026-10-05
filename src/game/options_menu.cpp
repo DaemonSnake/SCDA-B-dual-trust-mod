@@ -1,7 +1,7 @@
-// RECOMP SETTINGS and MOUSE AND KEYBOARD under Shadow Calibration in the options menu. Each opens the Display page
-// (P_Video) with the F10 panel's rows in its list until B: A opens the list of a row's values (an on / off row flips)
-// or rebinds; a range (no list) steps on Left, Right and A. RECOMP SETTINGS first lists its sections (the F10 headings named here) on
-// P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
+// RECOMP SETTINGS, MOUSE AND KEYBOARD and CONTROLLER under Shadow Calibration in the options menu. Each opens the
+// Display page (P_Video) with the F10 panel's rows in its list until B: A opens the list of a row's values (an on / off
+// row flips) or rebinds; a range (no list) steps on Left, Right and A. RECOMP SETTINGS first lists its sections (the
+// F10 headings named here) on P_Options itself, drawn as the stock two-bar pages (Solo > Load Game).
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app/app.h"
+#include "app/translations.h"
 #include "core/input.h"
 #include "game/magma.h"
 #include "xdk/hle.h"
@@ -56,12 +57,15 @@ constexpr uint32_t kItems = 0x60, kRowsShown = 0x9A, kSelection = 0x9C, kItemSiz
 // instance: +0x18 bit 0 visible, +0x4C flags
 constexpr uint32_t kVisible = 0x18, kFlags = 0x4C;
 constexpr uint32_t kLeft = 0x25, kRight = 0x27, kEscape = 0x1B;
-const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard"};
+const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Controller"};
+constexpr int kCaptionCount = int(std::size(kCaptions));
 const std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
 
 // the F10 panel's upper case in the game's title case: "DISPLAY MODE" as "Display Mode", "SPACE/ENTER" as "Space/Enter"
 std::string Title(std::string_view text) {
-    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"}, kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA"};
+    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"};
+    constexpr std::string_view kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA",
+                                          "LB", "RB", "LT", "RT", "LS", "RS"};
     std::string out;
     size_t i = 0;
     while (i < text.size()) {
@@ -70,6 +74,7 @@ std::string Title(std::string_view text) {
         std::string word(text.substr(i, end - i));
         bool digit = word.find_first_of("0123456789") != std::string::npos;
         if (word == "HZ") word = "Hz";
+        else if (word == "D-PAD") word = "D-Pad";
         else if (word == "MS") word = "ms";
         else if (!digit && std::find(std::begin(kKeep), std::end(kKeep), word) == std::end(kKeep)) {
             bool small = !out.empty() && std::find(std::begin(kSmall), std::end(kSmall), word) != std::end(kSmall);
@@ -81,6 +86,15 @@ std::string Title(std::string_view text) {
         i = end + 1;
     }
     return out;
+}
+
+// as the game shows it: in the game's language, what has no translation (numbers, units) in title case
+std::u16string Text(std::string_view text) { return app::Translate(text, Title); }
+
+// a key or button name as it is: the controller's BACK is no Back button
+std::u16string Name(std::string_view text) {
+    std::string titled = Title(text);
+    return std::u16string(titled.begin(), titled.end());
 }
 
 struct Take {
@@ -105,8 +119,8 @@ constexpr uint32_t kListY = 0x12;
 constexpr int16_t kListTop = 116;
 // P_Video's own (options.mgm): before that page has been shown the list's y is still 0, so it is not read back
 constexpr int16_t kStockListY = 205;
-// only MOUSE AND KEYBOARD, the long page, starts under the titles; the RECOMP SETTINGS sections keep the stock place
-int16_t ListTop() { return g_take.mode == 1 ? kListTop : kStockListY; }
+// the long pages (MOUSE AND KEYBOARD, CONTROLLER) start under the titles; the RECOMP SETTINGS sections keep the stock place
+int16_t ListTop() { return g_take.mode >= 1 ? kListTop : kStockListY; }
 uint8_t g_validate[2] = {};
 bool g_validate_saved = false, g_restore = false;
 // P_Video's upper title (L_Text, "OPTIONS"): RECOMP SETTINGS shows its name there and the section's below
@@ -118,14 +132,6 @@ bool g_armed = false;
 uint32_t g_text = 0;
 uint32_t g_popup = 0;  // our option (+0) and its vtable (+0x20), the array (+0x60), its strings, their text
 int g_popup_row = -1, g_popup_current = 0;
-
-uint32_t Wide(std::string_view text) {
-    if (!g_text) g_text = mem::AllocSystem(0x400);
-    size_t n = std::min<size_t>(text.size(), 0x1FF);
-    for (size_t i = 0; i < n; i++) W16(g_text + uint32_t(i) * 2, uint8_t(text[i]));
-    W16(g_text + uint32_t(n) * 2, 0);
-    return g_text;
-}
 
 uint32_t Wide16(const std::u16string& text) {
     if (!g_text) g_text = mem::AllocSystem(0x400);
@@ -178,17 +184,22 @@ void Refresh(X86Context& ctx) {
     bool two = int8_t(CallGuest(ctx, kColumns, {})) > 1;
     for (size_t i = 0; i < g_take.rows.size(); i++) {
         const app::rows::Row* r = g_take.rows[i];
-        std::string label = Title(r ? r->label : "RESTORE DEFAULTS"), value;
-        if (r) value = Title(g_capture == int(i) ? std::string("PRESS A KEY") : app::rows::Value(*r));
+        std::u16string label = Text(r ? r->label : "RESTORE DEFAULTS"), value;
+        const char* prompt = r && r->kind == app::rows::Kind::PadBind ? "PRESS A BUTTON" : "PRESS A KEY";
+        if (r && g_capture == int(i)) value = Text(prompt);
+        else if (r) {
+            std::string v = app::rows::Value(*r);
+            value = r->kind == app::rows::Kind::Value || v == "UNBOUND" ? Text(v) : Name(v);
+        }
         ctx.ecx = g_take.list;
         if (!two) {
-            CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide(r ? label + "  " + value : label)});
+            CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide16(r ? label + u"  " + value : label)});
             continue;
         }
         // as the stock rows: the item's own text is not drawn
-        CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide(label)});
+        CallGuest(ctx, kSetCell, {uint32_t(i), 0, Wide16(label)});
         ctx.ecx = g_take.list;
-        CallGuest(ctx, kSetCell, {uint32_t(i), 1, Wide(value)});
+        CallGuest(ctx, kSetCell, {uint32_t(i), 1, Wide16(value)});
     }
 }
 
@@ -229,10 +240,10 @@ void Popup(X86Context& ctx, int row, const std::vector<std::string>& choices, in
     W32(g_popup + 0x10, uint32_t(current));
     uint32_t array = g_popup + 0x60, strings = array + 0xC, text = strings + kMaxChoices * 0xC, n = 0;
     for (const std::string& choice : choices) {
-        std::string t = Title(choice);
+        std::u16string t = Text(choice);
         uint32_t length = uint32_t(t.size()) + 1;  // FString counts its terminator
         if (n == kMaxChoices || text + length * 2 > g_popup + kPopupSize) break;
-        for (uint32_t i = 0; i < length; i++) W16(text + i * 2, i < t.size() ? uint8_t(t[i]) : 0);
+        for (uint32_t i = 0; i < length; i++) W16(text + i * 2, i < t.size() ? uint16_t(t[i]) : 0);
         W32(strings + n * 0xC, text);
         W32(strings + n * 0xC + 4, length);
         W32(strings + n * 0xC + 8, length);
@@ -266,7 +277,8 @@ void Fill(X86Context& ctx, int select = 0) {
     } else {
         for (size_t i = 0; i < count; i++) {
             if (page[i].kind == Kind::Heading && !g_take.rows.empty()) g_take.rows.push_back(&kGap);
-            if (page[i].kind == Kind::Value || page[i].kind == Kind::Bind) g_take.rows.push_back(&page[i]);
+            if (page[i].kind == Kind::Value || page[i].kind == Kind::Bind || page[i].kind == Kind::PadBind)
+                g_take.rows.push_back(&page[i]);
         }
         g_take.rows.push_back(&kGap);
         g_take.rows.push_back(nullptr);
@@ -274,7 +286,7 @@ void Fill(X86Context& ctx, int select = 0) {
     uint32_t list = g_take.list;
     ctx.ecx = list;
     CallGuest(ctx, kClear, {});
-    for (const app::rows::Row* r : g_take.rows) CallGuest(ctx, kAddItem, {Wide(Title(r ? r->label : "RESTORE DEFAULTS")), 0});
+    for (const app::rows::Row* r : g_take.rows) CallGuest(ctx, kAddItem, {Wide16(Text(r ? r->label : "RESTORE DEFAULTS")), 0});
     Refresh(ctx);
     G<uint8_t>(list + kRowsShown) = uint8_t(std::min<size_t>(g_take.rows.size(), kRowsMax));
     ctx.ecx = list;
@@ -283,7 +295,7 @@ void Fill(X86Context& ctx, int select = 0) {
 }
 
 // as 1A6235: text elements (type 8) keep it at +0x2C, buttons (2, 3, 4) at +0x28
-void SetTitle(X86Context& ctx, uint32_t page, std::string_view text) {
+void SetTitle(X86Context& ctx, uint32_t page, const std::u16string& text) {
     uint32_t instance = CallGuest(ctx, kFind, {page, kTitleName});
     uint32_t element = instance ? R32(instance + 8) : 0;
     if (!element) return;
@@ -291,7 +303,7 @@ void SetTitle(X86Context& ctx, uint32_t page, std::string_view text) {
     uint32_t type = CallGuest(ctx, R32(R32(element) + 0xC), {});
     if (type != 8 && (type < 2 || type > 4)) return;
     ctx.ecx = element + (type == 8 ? 0x2C : 0x28);
-    CallGuest(ctx, kSetText, {Wide(text)});
+    CallGuest(ctx, kSetText, {Wide16(text)});
 }
 
 // the in-game Confirm Changes button
@@ -322,13 +334,13 @@ void Enter(X86Context& ctx, uint32_t menu, int mode, int section = -1) {
     Fill(ctx);
     size_t count = 0;
     const app::rows::Row* rows = app::rows::Page(mode, &count);
-    SetTitle(ctx, page, section < 0 ? std::string(kCaptions[mode]) : Title(rows[section].label));
+    SetTitle(ctx, page, Text(section < 0 ? kCaptions[mode] : rows[section].label));
     uint32_t top = section < 0 ? 0 : PageChild(page, kTopTextId), top_text = top ? R32(top + 8) : 0;
     if (top_text) {
         if (!g_top_saved) g_top_text = ReadWide(top_text);
         g_top_saved = true;
         ctx.ecx = top_text + 0x2C;
-        CallGuest(ctx, kSetText, {Wide(kCaptions[mode])});
+        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[mode]))});
     }
     if (uint32_t validate = CallGuest(ctx, kFind, {page, kValidateName})) {
         g_validate[0] = G<uint8_t>(validate + kVisible);
@@ -454,7 +466,7 @@ void SectionsTick(X86Context& ctx) {
         CallGuest(ctx, kClear, {});
         for (std::string_view name : kSections) {
             ctx.ecx = list;
-            CallGuest(ctx, kAddItem, {Wide(Title(name)), 0});
+            CallGuest(ctx, kAddItem, {Wide16(Text(name)), 0});
         }
         G<uint8_t>(list + kRowsShown) = uint8_t(std::size(kSections));
         ctx.ecx = list;
@@ -505,7 +517,7 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     if (instance == s.title) {
         text = ReadWide(widget);
         ctx.ecx = widget + 0x2C;
-        CallGuest(ctx, kSetText, {Wide(kCaptions[0])});
+        CallGuest(ctx, kSetText, {Wide16(Text(kCaptions[0]))});
     }
     ctx.ecx = instance;
     sub_002C64E0(ctx, base);
@@ -518,10 +530,11 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
     return true;
 }
 
-bool OnStack(uint32_t page) {
+// the id of the context whose draw or input stack holds the page (a player's menus: its player number), 0 for none
+uint32_t StackOwner(uint32_t page) {
     uint32_t m = R32(0x6A6638);
     uint32_t list = m ? R32(m + 0x3C) : 0, count = m ? R32(m + 0x40) : 0;
-    if (!page || !list || count > 16) return false;
+    if (!page || !list || count > 16) return 0;
     for (uint32_t i = 0; i < count; i++) {
         uint32_t context = R32(list + i * 4);
         for (uint32_t offset : {0x14u, 0x18u}) {
@@ -529,11 +542,13 @@ bool OnStack(uint32_t page) {
             uint32_t begin = stack ? R32(stack + 4) : 0, end = stack ? R32(stack + 8) : 0;
             if (!begin || end < begin || end - begin > 8 * 64) continue;
             for (uint32_t it = begin; it < end; it += 8)
-                if (R32(it) == page) return true;
+                if (R32(it) == page) return R32(context + 0x1C);
         }
     }
-    return false;
+    return 0;
 }
+
+bool OnStack(uint32_t page) { return StackOwner(page) != 0; }
 
 // mouse.cpp: the cursor leaves the selection alone over our blank row, else the pass over it flickers
 bool BlankRow(uint32_t list, int row) {
@@ -583,14 +598,17 @@ void MenuTick(X86Context& ctx) {
     }
     g_take.last_row = row;
     if (g_capture < 0) return;
-    int vk = input::PressedKey();
+    // a controller row takes any controller button, Escape cancels either
+    const app::rows::Row* r = g_take.rows[size_t(g_capture)];
+    bool pad = r && r->kind == app::rows::Kind::PadBind;
+    int vk = input::PressedKey(), button = pad ? input::PressedPadButton() : -1;
     if (!g_armed) {
-        g_armed = !vk;
+        g_armed = !vk && button < 0;
         return;
     }
-    if (!vk) return;
-    const app::rows::Row* r = g_take.rows[size_t(g_capture)];
-    if (vk != kEscape && r) input::Bind(size_t(r->id), vk);
+    if (button >= 0) input::BindPad(size_t(r->id), button);
+    else if (vk && !pad && vk != kEscape && r) input::Bind(size_t(r->id), vk);
+    else if (vk != kEscape) return;
     StopCapture();
     Refresh(ctx);
     Sound(ctx, g_take.owner);
@@ -609,8 +627,8 @@ X86_FUNC(sub_001A53B5) {
     if (count < 2) return;  // split screen shows Controls only
     g_first = count;
     ctx.ecx = list;
-    for (const char* caption : kCaptions) CallGuest(ctx, kAddItem, {Wide(caption), 0});
-    G<uint8_t>(list + kRowsShown) = uint8_t(count + 2);
+    for (const char* caption : kCaptions) CallGuest(ctx, kAddItem, {Wide16(Text(caption)), 0});
+    G<uint8_t>(list + kRowsShown) = uint8_t(count + kCaptionCount);
     CallGuest(ctx, kLayout, {});
     if (g_restore) RestoreStock(ctx, menu);
     g_restore = false;
@@ -631,7 +649,7 @@ X86_FUNC(sub_001A4161) {
         ctx.esp += 8;
         return;
     }
-    if (ours_list && g_take.mode < 0 && g_first >= 0 && R32(instance + 8) == list && row >= g_first && row < g_first + 2 &&
+    if (ours_list && g_take.mode < 0 && g_first >= 0 && R32(instance + 8) == list && row >= g_first && row < g_first + kCaptionCount &&
         IsPage(ctx, owner, kOptionsName)) {
         if (row == g_first) {
             uint32_t page = R32(menu + kOptionsPage);
@@ -643,7 +661,7 @@ X86_FUNC(sub_001A4161) {
             g_sections.title = PageChild(page, kTitleId);
             Sound(ctx, owner);
         } else {
-            Enter(ctx, menu, 1);
+            Enter(ctx, menu, row - g_first);
         }
         ctx.ecx = menu + kListener;
         G<uint8_t>(owner + kTaken) = 1;

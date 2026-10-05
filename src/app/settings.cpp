@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <utility>
 
 #include <toml++/toml.hpp>
 
@@ -83,6 +84,8 @@ void Load() {
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    std::string language = t["language"].value_or(s.language);
+    if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
@@ -93,11 +96,16 @@ void Load() {
     // a device sits on one port only
     if (p1.keyboard) p2.keyboard = false;
     if (p1.pad == p2.pad) p2.pad = -1;
+    // player 1 drives single player and versus alone
+    if (!p1.keyboard && p1.pad < 0) std::swap(p1, p2);
     s.players[0] = p1;
     s.players[1] = p2;
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) s.keys[std::string(id.str())] = *v;
+    if (const toml::table* pads = t["controller"].as_table())
+        for (auto&& [id, value] : *pads)
+            if (auto v = value.value<std::string>()) s.pad_buttons[std::string(id.str())] = *v;
 }
 
 void Save() {
@@ -124,6 +132,7 @@ void Save() {
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},
+                  {"language", s.language},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
                   {"join_ip", s.join_ip},
@@ -134,8 +143,16 @@ void Save() {
     toml::table keys;
     for (const auto& [id, value] : s.keys) keys.insert(id, value);
     t.insert("keys", keys);
+    toml::table pads;
+    for (const auto& [id, value] : s.pad_buttons) pads.insert(id, value);
+    t.insert("controller", pads);
     std::ofstream f(File());
     f << t << "\n";
+}
+
+const std::string& BootLanguage() {
+    static const std::string language = Get().language;
+    return language;
 }
 
 Mode Desktop() {

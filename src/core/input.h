@@ -33,11 +33,15 @@ bool TakeMouse(float& dx, float& dy);
 
 // a game menu takes the input: the cursor is free and the mouse buttons stop firing
 void SetMenu(bool menu);
+// the cursor points at something in play (a keypad's buttons): free, clicks counted (Clicks), no mouse look and the
+// mouse buttons stop firing, the rest as in play
+void SetPointer(bool on);
+bool Pointer();
 // the title screen, which only Start gets past: Enter, the interact key and a left click press it there
 void SetTitleScreen(bool title);
 // the pause menu, which Start closes and B does not: the pause key stays Start there
 void SetPauseMenu(bool pause);
-// an OPSAT page, which B closes: the pause key and the OPSAT key are B there
+// an OPSAT page, a computer's file list or the hacking device, which B closes: the pause key is B there
 void SetOpsat(bool opsat);
 // the quick inventory, which is no menu to the mouse (it keeps looking) but the move keys push the full stick
 void SetQuickInventory(bool open);
@@ -53,11 +57,16 @@ bool Movie();
 // the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
 // A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
 // On a ledge, a narrow ladder or a pipe the move keys push the stick fully: climbing wants aForward past 0.9,
-// which slow walking speeds never reach. Lockpicking turns the move keys into the stick's diagonals.
-enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick };
+// which slow walking speeds never reach. Lockpicking turns the move keys into the stick's diagonals. The optic cable,
+// keypads and elevator panels are left with B, which the pause key presses there; on a keypad Backspace clears the
+// code instead of backing out.
+enum class View { Normal, StickyCamera, Eev, ScriptedEvent, Ledge, Lockpick, BackOut, Keypad };
 void SetView(View view, float zoom_speed = 0.0f);
 // EEV: wheel notches since the last call, up positive
 int TakeWheel();
+// a keypad button pressed on the numpad since the last call (0-8 the digits 1-9, 9 *, 10 0, 11 #), -1 for none;
+// window active, menu or not
+int TakeKeypadButton();
 // in a menu or the focused interaction list: whole wheel notches since the last call, up positive (a high
 // resolution wheel's part notches add up)
 int TakeMenuWheel();
@@ -70,6 +79,7 @@ enum class KeyEvent { None, Whistle, SidekickCommand, QuickSave, QuickLoad, Relo
 // A synced co-op session. Its lockstep carries the pad, not what the game side calls on its own, so there the
 // sidekick key holds the black button (co-op action) and whistle is off.
 void SetNetSession(bool net);
+bool NetSession();
 // aiming with nothing to interact with, where the pad's A reloads: the keyboard's interact key leaves A alone, the
 // reload key reloads (in a synced session it holds A, as the pad would)
 void SetInteractReloads(bool on);
@@ -80,7 +90,7 @@ bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is dow
 // the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses
 void SkipPromptShown();
 // holds pad buttons (Pad::buttons bits) long enough for the game to read one press
-void TapButtons(uint16_t buttons);
+void TapButtons(uint16_t buttons, uint64_t ms = 80);
 
 // blocks until a key, mouse button or pad button goes down in the game window; those held on entry must come up
 void WaitForPress();
@@ -95,6 +105,8 @@ bool KeyboardActive();
 // the cursor in window client pixels and the client size; false when the game is not taking input
 bool Cursor(int& x, int& y, int& w, int& h);
 uint32_t Clicks();
+// the left button is down after a press that will count as a click
+bool Pressing();
 
 // actions the keyboard and mouse can be bound to, key names comma separated
 struct Action {
@@ -106,8 +118,19 @@ const Action* Actions(size_t* count);
 std::string Binding(size_t action);
 void Bind(size_t action, int vk);
 void ResetBindings();
-void LoadBindings();  // after the settings load
+void LoadBindings();  // after the settings load, the controller's too
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
+// The controller's buttons by action, for every controller: each action is one of the console pad's controls,
+// pressed in play by the physical button bound to it (defaults: the stock one's name, empty for quick save and quick
+// load, which have none); menus keep the stock buttons. A button another action has changes places with the one
+// rebound; quick save or load bound again to its own button comes off it.
+const Action* PadActions(size_t* count);
+std::string PadBinding(size_t action);
+void BindPad(size_t action, int button);
+void ResetPadBindings();
+// a controller button held now on any controller, -1 for none: 0-7 A B X Y RB LB LT RT, 8-15 the Pad::buttons bits,
+// 16 and 17 a PlayStation controller's touchpad, left and right half
+int PressedPadButton();
 bool ConsoleKey(int vk);     // the console action is bound to this key
 bool HostKey(KeyEvent event, int vk);  // that event's action is bound to this key and no key capture wants it
 bool ConsoleChar(unsigned c);  // the character a console key types, kept out of the console's line

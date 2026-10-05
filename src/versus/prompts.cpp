@@ -86,8 +86,9 @@ struct Act {
     enum Kind { Hide, Name, Caption, Skip };
     uint32_t widget;
     Kind kind;
-    std::u16string text;
+    std::u16string text;      // a caption's key, put before its text when after
     int left = 0, right = 0;  // added to the caption's sides
+    bool after = true;
 };
 std::vector<Act> g_acts;  // of the pages being drawn, game thread
 std::vector<size_t> g_pages;
@@ -201,7 +202,9 @@ void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
             if (!widget || R32(widget) != kText || !Shown(inst)) continue;
             g_font = R32(widget + 8);
             std::u16string text = Read(GivenTo(ctx, sub, inst).text);
-            if (text.empty()) continue;
+            // a number is no caption: the duel's timer sits beside one of its buttons
+            auto letter = [](char16_t c) { return ((c | 0x20) >= u'a' && (c | 0x20) <= u'z') || c > 0x7F; };
+            if (std::none_of(text.begin(), text.end(), letter)) continue;
             Rect r = RectOf(widget);
             int x = (r.l + r.r) / 2, y = (r.t + r.b) / 2;
             for (size_t i = 0; i < icons.size(); i++) {
@@ -218,8 +221,7 @@ void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
                 std::u16string key = u"(" + Wide(icons[i].key) + u")";
                 paired[i] = true;
                 g_acts.push_back({icons[i].widget, Act::Hide});
-                g_acts.push_back({widget, Act::Caption, after ? key + u" " + text : text + u" " + key,
-                                  after ? c.l - r.l : 0, after ? 0 : c.r - r.r});
+                g_acts.push_back({widget, Act::Caption, key, after ? c.l - r.l : 0, after ? 0 : c.r - r.r, after});
                 break;
             }
         }
@@ -266,7 +268,9 @@ X86_FUNC(sub_00263C30) {
     int left = int16_t(sides) + act->left, right = int16_t(sides >> 16) + act->right;
     W16(rect, uint16_t(left));
     W16(rect + 2, uint16_t(right));
-    W32(drawer + kGivenText, Write(act->text));
+    // the text it draws now: the interaction prompt's is filled in after the page starts, over a placeholder
+    std::u16string text = Read(given ? given : R32(ctx.ecx + 0xC));
+    W32(drawer + kGivenText, Write(act->after ? act->text + u" " + text : text + u" " + act->text));
     // a caption too long for its place with the key in it shrinks to fit
     float width = Width(ctx, ctx.ecx, g_block + 0x80), room = float(right - left - kMargin);
     if (room > 0.0f && width > room) G<float>(frame + 0x1C) *= room / width;
@@ -301,8 +305,10 @@ X86_FUNC(sub_0014C190) {
     W16(frame + kRect + 2, uint16_t(int16_t(x + 100)));
     W16(frame + kRect + 4, uint16_t(int16_t(y)));
     W16(frame + kRect + 6, uint16_t(int16_t(y + size)));
-    W32(frame + 0x14, R32(image + 0x28) | 0xFFFFFF);
-    W32(frame + 0x18, R32(image + 0x28) & 0xFF000000);
+    // the icon's own colour: the duel dims the buttons not to press
+    uint32_t colour = R32(image + 0x28);
+    W32(frame + 0x14, colour);
+    W32(frame + 0x18, colour & 0xFF000000);
     G<float>(frame + 0x1C) = float(size);
     W32(frame + 0x24, uint32_t(size));
     uint32_t given = R32(drawer + kGivenText);

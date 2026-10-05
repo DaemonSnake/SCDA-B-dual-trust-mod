@@ -14,6 +14,10 @@ namespace {
 constexpr uint32_t kManager = 0x18, kHandled = 0x14, kOpen = 0x18C;
 // the full close the in-game menus run when the player controller resets the OPSAT (NotifyMenu(Opsat, 0, 1))
 constexpr uint32_t kClose = 0x19A1B0;    // thiscall COpsatMenu
+// P_Goals: +0x188 the tab shown (0 Primary, 1 Opposing, 2 Opportunity). The input handler steps it with NextTab /
+// PreviousTab (which pass Opposing by where a mission has none) and refills the list (thiscall COpsatMenu each).
+constexpr uint32_t kTab = 0x188, kNextTab = 0x192334, kFillGoals = 0x194C19;
+uint32_t g_goals = 0;  // the COpsatMenu that last filled P_Goals
 constexpr uint32_t kEventAction = 0x0C;  // input event: FString* bound action
 
 bool IsAction(uint32_t event, std::wstring_view name) {
@@ -41,3 +45,31 @@ X86_FUNC(sub_00199620) {
     }
     __imp__sub_00199620(ctx, base);
 }
+
+// P_Goals' list fill (thiscall COpsatMenu), as the page shows and on each tab change
+X86_EXTERN_FUNC(__imp__sub_00194C19);
+X86_FUNC(sub_00194C19) {
+    g_goals = ctx.ecx;
+    __imp__sub_00194C19(ctx, base);
+}
+
+namespace game {
+
+// mouse.cpp: a click on a P_Goals tab goes there through NextTab, as the pad's steps do; a tab the mission passes
+// over is left alone
+void GoalsTab(X86Context& ctx, uint32_t tab) {
+    uint32_t menu = g_goals, from = menu ? R32(menu + kTab) : tab;
+    if (!menu || from == tab) return;
+    for (int i = 0; i < 3 && R32(menu + kTab) != tab; i++) {
+        ctx.ecx = menu;
+        CallGuest(ctx, kNextTab, {});
+    }
+    if (R32(menu + kTab) != tab) {
+        W32(menu + kTab, from);
+        return;
+    }
+    ctx.ecx = menu;
+    CallGuest(ctx, kFillGoals, {});
+}
+
+}  // namespace game

@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <string_view>
+#include <utility>
 
 #include "app/app.h"
 #include "kernel/crypto.h"
@@ -885,11 +887,19 @@ KERNEL_EXPORT(37, FscSetCacheSize, 1) { return kSuccess; }
 // widescreen (a 4:3 output plays the console's 4:3), 480p
 static uint32_t VideoFlags() { return (app::Widescreen() ? 0x00010000 : 0) | 0x00080000; }
 
+// XC_LANGUAGE ids, which the game turns back into its folder names
+static uint32_t Language() {
+    constexpr std::pair<std::string_view, uint32_t> kIds[] = {{"int", 1}, {"deu", 3}, {"fra", 4}, {"esp", 5}, {"ita", 6}};
+    for (auto [name, id] : kIds)
+        if (app::BootLanguage() == name) return id;
+    return 1;
+}
+
 KERNEL_EXPORT(24, ExQueryNonVolatileSetting, 5) {
     uint32_t index = a[0], type_out = a[1], value = a[2], len = a[3], result_len = a[4];
     uint32_t v = 0;
     switch (index) {
-        case 7: v = 1; break;                      // XC_LANGUAGE english
+        case 7: v = Language(); break;             // XC_LANGUAGE
         case 8: v = VideoFlags(); break;          // XC_VIDEO_FLAGS
         case 9: v = 0x00010001; break;             // XC_AUDIO_FLAGS stereo
         case 0x103: v = 0x00400100; break;         // XC_FACTORY_AV_REGION NTSC-M
@@ -902,7 +912,7 @@ KERNEL_EXPORT(24, ExQueryNonVolatileSetting, 5) {
         // the whole EEPROM image: user settings live at 0xC0 onwards
         if (type_out) W32(type_out, 3);  // REG_BINARY
         if (value && len >= 0x100) {
-            W32(value + 0xE8, 1);                     // language
+            W32(value + 0xE8, Language());            // language
             W32(value + 0xEC, VideoFlags());          // video flags
             W32(value + 0xF0, 0x00010001);            // audio flags
             W32(value + 0x58, 0x00400100);            // factory video standard
