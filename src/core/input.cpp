@@ -823,7 +823,8 @@ void MovieFrame() {
 
 bool Movie() { return NowMs() - g_movie_ms < kMovieMs; }
 
-bool KeyboardActive() { return g_keyboard_ms >= g_pad_ms; }
+// a pad only takes over from the keyboard on the keyboard's own port, so with nobody on the keyboard it is never active
+bool KeyboardActive() { return KeyboardPort() >= 0 && g_keyboard_ms >= g_pad_ms; }
 
 void SetView(View view, float zoom_speed) {
     if (g_view.exchange(int(view)) != int(view)) g_wheel = 0;
