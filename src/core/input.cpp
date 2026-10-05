@@ -1033,6 +1033,7 @@ bool Cursor(int& x, int& y, int& w, int& h) {
 }
 
 uint32_t Clicks() { return g_clicks; }
+bool Pressing() { return g_press_counts; }
 
 const Action* Actions(size_t* count) {
     static const auto list = [] {

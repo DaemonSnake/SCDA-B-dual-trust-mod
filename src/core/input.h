@@ -105,6 +105,8 @@ bool KeyboardActive();
 // the cursor in window client pixels and the client size; false when the game is not taking input
 bool Cursor(int& x, int& y, int& w, int& h);
 uint32_t Clicks();
+// the left button is down after a press that will count as a click
+bool Pressing();
 
 // actions the keyboard and mouse can be bound to, key names comma separated
 struct Action {

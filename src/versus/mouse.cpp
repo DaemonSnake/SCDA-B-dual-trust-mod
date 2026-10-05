@@ -98,15 +98,29 @@ void Look(uint32_t rate, uint32_t axis, uint32_t max, float r, bool invert) {
 constexpr uint32_t kMagma = 0x3D8D74, kDrawer = 0x3D8D8C;
 // page: +4 id, +0xC begin, +0x10 end of instances, +0x24 focused
 // instance: +4 shown, +5 hidden, +0x10 widget, +0xB8 flags (2 enabled, 8 focused), vtable +0xC Focus(direction, notify)
-// widget vtable: +0xC type, +0x10 GetBounds(short rect[4] left right top bottom), +0x28 MouseDown and +0x2C MouseUp
-// (instance, event: +4 point), +0x3C MouseLeave(instance)
-// list: +0x30 up arrow, +0x44 down arrow, +0x54 selection, +0x88 up arrow rect, +0x98 down arrow rect
+// widget vtable: +0xC type, +0x10 GetBounds(short rect[4] left right top bottom), +0x28 MouseDown, +0x2C MouseUp and
+// +0x34 MouseMove (instance, event: +4 point), +0x3C MouseLeave(instance)
+// list: +0x30 up arrow, +0x44 down arrow, +0x54 selection, +0x68 begin, +0x6C end of its 32 byte items, +0x88 up arrow
+// rect, +0x98 down arrow rect
+// slider: +0x5C track, +0x70 float value, +0x80 vertical, +0x88 decrease arrow rect, +0x90 increase arrow rect, +0x98
+// thumb rect, +0xA0 track rect, +0xAC flags (4 the thumb is dragged: MouseMove sets the value under the point)
 constexpr uint32_t kListType = 8, kSliderType = 10;
+constexpr uint32_t kSliderTrack = 0x5C, kSliderVertical = 0x80, kSliderDown = 0x88, kSliderUp = 0x90,
+                   kSliderThumbRect = 0x98, kSliderTrackRect = 0xA0, kSliderValue = 0x70, kSliderFlags = 0xAC;
+constexpr uint8_t kSliderDragged = 4;
+constexpr uint32_t kMouseDown = 0x28, kMouseUp = 0x2C, kMouseMove = 0x34, kMouseLeave = 0x3C;
+// page units, measured on screen: with a track an arrow is drawn inside its image, from its image's left / right
+constexpr int16_t kDownLeft = 1, kDownRight = -5, kUpLeft = 3, kUpRight = -3;
+// with no track the arrow images are laid out away from the drawn arrows (Aiming Sensitivity): the decrease arrow from
+// its image's left, the increase arrow from its image's right
+constexpr int16_t kDownFrom = -5, kDownTo = 3, kUpFrom = -11, kUpTo = -3;
+constexpr float kPageWidth = 1.1f;  // pages are drawn this wide about the screen's centre
 constexpr uint32_t kPageSetFocus = 0x25C420, kListHitTest = 0x25DF00, kListSelect = 0x25EE00;
 constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("p_interatt")};
 constexpr uint32_t kPopUp = game::magma::Id("p_popupmessageauto");
 // viewport +0x18 client, +0x28 engine, vtable +0x7C InputEvent(viewport, key, action, delta)
-constexpr uint32_t kKeyA = 0xC8, kKeyUp = 0xD0, kKeyDown = 0xD1, kPress = 1, kRelease = 3;
+constexpr uint32_t kKeyA = 0xC8, kKeyUp = 0xD0, kKeyDown = 0xD1, kKeyLeft = 0xD2, kKeyRight = 0xD3, kPress = 1,
+                   kRelease = 3;
 // controller +0xF3C bReloadROF, held by the pad's Y (the ini's ReloadROF alias) along with jump: the reload key holds
 // it alone. Its IK_R=ForceReload binding is a PC leftover that does nothing here.
 constexpr uint32_t kReloadButton = 0xF3C;
@@ -149,9 +163,67 @@ bool Inside(Ui& u, uint32_t rect) {
     return l < r && t < b && x >= l && x <= r && y >= t && y <= b;
 }
 
-uint32_t g_page = 0, g_clicks = 0, g_point = ~0u;
+// A click steps a horizontal slider only on its drawn arrows, which can sit away from their images (Aiming
+// Sensitivity) and are smaller than them: one on an arrow steps with a point inside its image, false for any other
+// (a thumb is dragged, Voice Masking's value box takes nothing).
+bool SliderPoint(uint32_t widget, uint32_t& point) {
+    if (R32(widget + kSliderVertical)) return true;
+    int16_t x = int16_t(point), y = int16_t(point >> 16);
+    auto at = [&](uint32_t rect, int16_t from, int16_t to) {
+        int16_t t = int16_t(R16(rect + 4)), b = int16_t(R16(rect + 6));
+        return y >= t && y <= b && x >= from && x <= to;
+    };
+    uint32_t down = widget + kSliderDown, up = widget + kSliderUp;
+    int16_t down_left = int16_t(R16(down)), down_right = int16_t(R16(down + 2));
+    int16_t up_left = int16_t(R16(up)), up_right = int16_t(R16(up + 2));
+    bool track = R32(widget + kSliderTrack);
+    auto centre = [](uint32_t rect) {
+        int16_t cx = (int16_t(R16(rect)) + int16_t(R16(rect + 2))) / 2;
+        int16_t cy = (int16_t(R16(rect + 4)) + int16_t(R16(rect + 6))) / 2;
+        return uint32_t(uint16_t(cx)) | uint32_t(uint16_t(cy)) << 16;
+    };
+    if (track ? at(down, down_left + kDownLeft, down_right + kDownRight)
+              : at(down, down_left + kDownFrom, down_left + kDownTo))
+        return point = centre(down), true;
+    if (track ? at(up, up_left + kUpLeft, up_right + kUpRight) : at(up, up_right + kUpFrom, up_right + kUpTo))
+        return point = centre(up), true;
+    return false;
+}
 
-// window cursor to page space: pages are 4:3 in the middle of a 16:9 frame
+uint32_t g_page = 0, g_clicks = 0, g_point = ~0u;
+bool g_pressing = false;
+uint32_t g_drag = 0;  // the slider instance a held press drags
+
+// the list's item under the point, -1 on none: its rows past the last item hit too
+int32_t ListItem(Ui& u, uint32_t list) {
+    int32_t hit = int32_t(Call(u, kListHitTest, list, {u.scratch}));
+    return hit < int32_t((R32(list + 0x6C) - R32(list + 0x68)) / 32) ? hit : -1;
+}
+
+bool ListArrow(Ui& u, uint32_t list) {
+    return (R32(list + 0x30) && Inside(u, list + 0x88)) || (R32(list + 0x44) && Inside(u, list + 0x98));
+}
+
+void Mouse(Ui& u, uint32_t instance, uint32_t handler, uint32_t point) {
+    W32(u.scratch + 0x10, 0);
+    W32(u.scratch + 0x14, point);
+    Virtual(u, R32(instance + 0x10), handler, {instance, u.scratch + 0x10});
+}
+
+// a slider with a draggable thumb: the press takes the thumb to the point, and its value to the nearest whole step
+// (the audio volumes go 0 to 10)
+bool Draggable(uint32_t widget) {
+    uint32_t thumb = widget + kSliderThumbRect, bar = widget + kSliderTrackRect;
+    return R32(widget + kSliderTrack) && (R32(thumb) != R32(bar) || R32(thumb + 4) != R32(bar + 4));
+}
+
+void Drag(Ui& u, uint32_t handler, uint32_t point) {
+    Mouse(u, g_drag, handler, point);
+    float& value = G<float>(R32(g_drag + 0x10) + kSliderValue);
+    value = std::round(value);
+}
+
+// window cursor to page space: pages are 4:3 in the middle of a 16:9 frame, drawn 1.1 wide
 bool Point(uint32_t& point) {
     int x, y, w, h;
     if (!input::Cursor(x, y, w, h) || w <= 0 || h <= 0) return false;
@@ -163,6 +235,7 @@ bool Point(uint32_t& point) {
     float vw = std::min(float(w), h * aspect), vh = vw / aspect;
     float fx = (x - (w - vw) / 2) / vw;
     if (wide) fx = (fx - 0.125f) / 0.75f;
+    fx = 0.5f + (fx - 0.5f) / kPageWidth;
     int px = int(fx * sw), py = int((y - (h - vh) / 2) / vh * sh);
     point = uint32_t(uint16_t(int16_t(px))) | uint32_t(uint16_t(int16_t(py))) << 16;
     return true;
@@ -178,37 +251,74 @@ bool Menu(Ui& u) {
     // a new page starts from where the cursor rests
     bool fresh = top != g_page;
     bool moved = Point(point) && point != g_point && !fresh, clicked = clicks != g_clicks && !fresh;
+    bool pressing = input::Pressing() && !fresh, pressed = pressing && !g_pressing;
+    g_pressing = pressing;
+    if (fresh) g_drag = 0;
     g_page = top;
     g_point = point;
     g_clicks = clicks;
     bool hud = std::ranges::find(kHudPages, id) != std::end(kHudPages);
     if (hud || !(id == kPopUp || (focus && Shown(focus)))) return false;
     if (id == kPopUp && clicked) Tap(u, kKeyA);
-    if (id == kPopUp || (!moved && !clicked)) return true;
+    if (id == kPopUp) return true;
     W32(u.scratch, point);
+    // a held press keeps dragging the slider it began on wherever the cursor goes; letting go ends it, click and all
+    if (g_drag && (g_drag != focus || !Shown(g_drag))) g_drag = 0;
+    if (g_drag) {
+        if (pressing) {
+            if (moved) Drag(u, kMouseMove, point);
+            return true;
+        }
+        Drag(u, kMouseMove, point);
+        Drag(u, kMouseUp, point);
+        Virtual(u, R32(g_drag + 0x10), kMouseLeave, {g_drag});
+        g_drag = 0;
+        return true;
+    }
+    if (!moved && !clicked && !pressed) return true;
     uint32_t hovered = 0;
     for (uint32_t it = R32(top + 0xC), end = R32(top + 0x10); it < end; it += 4) {
         uint32_t instance = R32(it);
         if (!instance || !Focusable(u, instance)) continue;
-        Virtual(u, R32(instance + 0x10), 0x10, {u.scratch + 8});
-        if (Inside(u, u.scratch + 8) && (!hovered || instance == focus)) hovered = instance;
+        uint32_t widget = R32(instance + 0x10);
+        Virtual(u, widget, 0x10, {u.scratch + 8});
+        uint32_t type = Virtual(u, widget, 0xC);
+        // a slider's bounds are its arrows alone: its row reaches back over the label on its left
+        if (type == kSliderType) W16(u.scratch + 8, 0);
+        // a list's bounds hold its empty rows too (Session parameters' rows down to ADVANCED PARAMETERS)
+        if (!Inside(u, u.scratch + 8)) continue;
+        if (type == kListType && ListItem(u, widget) < 0 && !ListArrow(u, widget)) continue;
+        if (!hovered || instance == focus) hovered = instance;
     }
     if (!hovered) return true;
     if (hovered != focus) Call(u, kPageSetFocus, top, {hovered});
     uint32_t widget = R32(hovered + 0x10), type = Virtual(u, widget, 0xC);
-    if (type == kSliderType && clicked) {
-        // its own mouse handlers step on the arrows
-        W32(u.scratch + 0x10, 0);
-        W32(u.scratch + 0x14, point);
-        Virtual(u, widget, 0x28, {hovered, u.scratch + 0x10});
-        Virtual(u, widget, 0x2C, {hovered, u.scratch + 0x10});
-        Virtual(u, widget, 0x3C, {hovered});
+    // a click too quick to be seen held still takes the thumb there (the next frame lets it go)
+    if (type == kSliderType && (pressed || clicked) && Draggable(widget) &&
+        (Inside(u, widget + kSliderTrackRect) || Inside(u, widget + kSliderThumbRect))) {
+        Mouse(u, hovered, kMouseDown, point);
+        G<uint8_t>(widget + kSliderFlags) |= kSliderDragged;
+        g_drag = hovered;
+        Drag(u, kMouseMove, point);
+        return true;
+    }
+    if (uint32_t at = point; type == kSliderType && clicked && SliderPoint(widget, at)) {
+        if (!R32(widget + kSliderTrack)) {
+            // with no track the page keeps the value (Advanced parameters' sliders stay at their minimum): the D-pad
+            // steps it as on the pad
+            Tap(u, int16_t(at) < int16_t(R16(widget + kSliderUp)) ? kKeyLeft : kKeyRight);
+        } else {
+            // its own mouse handlers step on the arrows
+            Mouse(u, hovered, kMouseDown, at);
+            Mouse(u, hovered, kMouseUp, at);
+            Virtual(u, widget, kMouseLeave, {hovered});
+        }
     }
     if (type != kListType) {
         if (clicked && type != kSliderType) Tap(u, kKeyA);
         return true;
     }
-    int32_t hit = int32_t(Call(u, kListHitTest, widget, {u.scratch}));
+    int32_t hit = ListItem(u, widget);
     if (hit >= 0 && hit != int32_t(R32(widget + 0x54))) {
         Call(u, kListSelect, widget, {uint32_t(hit), 0});
         Virtual(u, hovered, 0xC, {0, 1});
