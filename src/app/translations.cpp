@@ -106,6 +106,7 @@ constexpr Entry kEntries[] = {
 
     // Versus keys
     {"INTERACT", {u"Action", u"Aktion", u"Azione", u"Acción"}},
+    {"JUMP / RELOAD", {u"Sauter / recharger", u"Springen / Nachladen", u"Salta / Ricarica", u"Saltar / Recargar"}},
     {"ZOOM / LOOK BACK", {u"Zoom / regarder derrière", u"Zoom / Nach hinten sehen", u"Zoom / Guarda indietro", u"Zoom / Mirar atrás"}},
     {"LASER", {u"Laser de visée", u"Laser-Sicht", u"Mirino laser", u"Mira láser"}},
     {"PREVIOUS CAMERA", {u"Caméra précédente", u"Vorige Haftkamera", u"Stickycam precedente", u"Cámara anterior"}},

@@ -544,7 +544,7 @@ constexpr bool kLevelSelect = false;
 #else
 constexpr bool kLevelSelect = true;
 #endif
-// the controller page where the game has pad actions (not Versus), the level select in debug builds where the game
+// the controller page where the game has pad actions, the level select in debug builds where the game
 // has levels to open
 bool PageShown(int page) {
     size_t pads = 0;

@@ -251,9 +251,25 @@ constexpr PadAction kStoryPadActions[] = {
     {"push_to_talk", "PUSH TO TALK", -1, KeyEvent::PushToTalk},
     {"toggle_hud", "TOGGLE HUD", -1, KeyEvent::HideHud},
 };
-// Versus keeps the stock buttons
+// Versus, as the game's own controls page. White (next player while spectating), D-pad right, back and the left
+// thumb are not on it and keep their own controls. Its own ids keep rebinds in one game.
+constexpr PadAction kVersusPadActions[] = {
+    {"versus_fire", "FIRE", 7},
+    {"versus_alt_fire", "ALTERNATE FIRE", 6},
+    {"versus_interact", "INTERACT", 0},
+    {"versus_jump", "JUMP / RELOAD", 3},
+    {"versus_crouch", "CROUCH", 1},
+    {"versus_scope", "USE / EQUIP", 2},
+    {"versus_zoom", "ZOOM / LOOK BACK", 15},
+    {"versus_laser", "LASER", 8},
+    {"versus_night_vision", "NIGHT VISION", 10},
+    {"versus_previous_camera", "PREVIOUS CAMERA", 9},
+    {"versus_help", "HELP", 4},
+    {"versus_pause", "PAUSE", 12},
+    {"versus_push_to_talk", "PUSH TO TALK", -1, KeyEvent::PushToTalk},
+};
 constexpr std::span<const PadAction> kPadActions =
-    kVersus ? std::span<const PadAction>() : std::span<const PadAction>(kStoryPadActions);
+    kVersus ? std::span<const PadAction>(kVersusPadActions) : std::span<const PadAction>(kStoryPadActions);
 constexpr size_t kPadCount = kPadActions.size();
 constexpr int kPadControls = 16;
 // a PlayStation controller's touchpad click on its left or right half, in the two wButtons bits XInput leaves unused
@@ -274,7 +290,7 @@ constexpr WORD kPadMasks[kPadButtons] = {XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XIN
                                          kTouchpadRight};
 std::array<int, kPadCount> g_pad_binds{};  // each pad action's physical button, under g_bind_lock
 // what a physical button presses in play: the control (kEventTarget + event for an event) plus one, -1 nothing, 0 its
-// own (no binds loaded, Versus)
+// own (before the binds load, or a control no action stands for)
 constexpr int kEventTarget = 32;
 std::array<std::atomic<int>, kPadButtons> g_pad_map{};
 // per port, what each held physical button went down as: the control plus two, 1 nothing, 0 up
@@ -684,7 +700,8 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
 }
 
 void ApplyPadBinds() {
-    for (auto& m : g_pad_map) m = kPadCount ? -1 : 0;
+    for (int b = 0; b < kPadButtons; b++)
+        g_pad_map[size_t(b)] = std::ranges::any_of(kPadActions, [b](const PadAction& a) { return a.button == b; }) ? -1 : 0;
     for (size_t i = 0; i < kPadCount; i++) {
         const PadAction& a = kPadActions[i];
         if (g_pad_binds[i] >= 0)
