@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
@@ -31,7 +32,7 @@ constexpr uint32_t Crc32(std::string_view text) {
     return ~crc;
 }
 
-constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_interatt")};
+constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_interatt"), Crc32("p_spectatormode")};
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
@@ -53,6 +54,9 @@ bool g_replay = false;
 bool g_pages = false;    // a page was drawn this frame
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
+// the side each HUD instance was placed on: one reaching past the middle for a while (the weapon box showing a
+// picked up gadget) keeps it instead of going back to its 4:3 place
+std::unordered_map<uint32_t, Mode> g_sides;
 
 float Width() {
     uint32_t m = R32(kMagma), vp = m ? R32(m + 0x38) : 0;
@@ -136,6 +140,8 @@ X86_FUNC(sub_002620A0) {
                 : hi <= w / 2 + kSlack           ? Mode::Left
                 : lo >= w / 2 - kSlack           ? Mode::Right
                                                  : Mode::Centre;
+    if (mode == Mode::Left || mode == Mode::Right) g_sides[id] = mode;
+    else if (auto side = g_sides.find(id); mode == Mode::Centre && side != g_sides.end()) mode = side->second;
     LOG_FIRST(100, "versus widescreen: instance %08X x %.0f..%.0f mode %d", id, lo, hi, int(mode));
     uint32_t esp = ctx.esp, corners = (esp - 0x40) & ~0xFu;
     ctx.esp = corners;
