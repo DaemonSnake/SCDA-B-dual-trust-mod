@@ -132,6 +132,10 @@ std::chrono::steady_clock::time_point g_wiggle_time;
 constexpr float kSpeeds[] = {0.44f, 0.638f, 0.759f, 0.879f, 1.0f};
 constexpr float kSlowestTargeting = 0.517f;
 constexpr float kDeadZone = 0.3f;
+// Versus walks or runs, as SCCT PC versus's bFastSpeed (the wheel). Once a pad has been plugged in its UpdateInput
+// zeroes each stick axis within 18000 of the centre, and its bindings take a 0.2 dead zone after that: the slowest it
+// moves is axis 0.437 (168 a second of 385). Walking at 0.44 is PC's walk, 0.4 of its 423.5.
+constexpr float kVersusWalk = 0.552f, kVersusDeadZone = 0.2f, kVersusFloor = 18001.0f / 32767.0f;
 std::atomic<int> g_speed{4};
 std::atomic<bool> g_targeting{false};
 
@@ -194,6 +198,8 @@ constexpr Target kVersusActions[] = {
     {{"versus_jump", "JUMP", "Space"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
     {{"versus_scope", "USE / EQUIP", "E"}, 2},
+    // the pad's Y jumps or reloads as the state allows; the key reloads alone (versus/mouse.cpp)
+    {{"reload", "RELOAD", "R"}, -1, true, KeyEvent::Reload},
     {{"versus_zoom", "ZOOM / LOOK BACK", "MMB"}, 15},
     {{"laser", "LASER", "B"}, 8},
     {{"night_vision", "NIGHT VISION", "Tab"}, 10},
@@ -460,6 +466,7 @@ void Keyboard(Pad& p) {
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
     bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
     float v = full ? 1.0f : g_speed == 0 && g_targeting ? kSlowestTargeting : kSpeeds[g_speed];
+    if (kVersus && !full) v = g_speed ? 1.0f : kVersusWalk;
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
@@ -482,7 +489,11 @@ void Keyboard(Pad& p) {
     }
     // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
     // as fast as one. Not where the full stick is forced: a ledge climb wants aForward past 0.9.
-    if (x && y && !full) v = kDeadZone + (v - kDeadZone) * 0.70710678f;
+    if (x && y && !full) {
+        float zone = kVersus ? kVersusDeadZone : kDeadZone;
+        v = zone + (v - zone) * 0.70710678f;
+        if (kVersus) v = std::max(v, kVersusFloor);  // a walking diagonal cannot keep the straight speed there
+    }
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
     if (View(g_view.load()) != View::Lockpick || menu) {
@@ -730,6 +741,7 @@ void OnRawInput(void* handle) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
         if (View view = View(g_view.load()); view == View::Eev || view == View::StickyCamera) g_wheel += notch;
+        else if (kVersus) g_speed = notch > 0 ? int(std::size(kSpeeds)) - 1 : 0;
         else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
     }
 }

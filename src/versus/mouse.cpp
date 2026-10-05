@@ -103,6 +103,10 @@ constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("
 constexpr uint32_t kPopUp = game::magma::Id("p_popupmessageauto");
 // viewport +0x18 client, +0x28 engine, vtable +0x7C InputEvent(viewport, key, action, delta)
 constexpr uint32_t kKeyA = 0xC8, kKeyUp = 0xD0, kKeyDown = 0xD1, kPress = 1, kRelease = 3;
+// controller +0xF3C bReloadROF, held by the pad's Y (the ini's ReloadROF alias) along with jump: the reload key holds
+// it alone. Its IK_R=ForceReload binding is a PC leftover that does nothing here.
+constexpr uint32_t kReloadButton = 0xF3C;
+bool g_reload = false;
 
 struct Ui {
     X86Context& ctx;
@@ -228,6 +232,10 @@ X86_FUNC(sub_00188E80) {
     bool menu = Menu(u);
     input::SetMenu(menu);
     for (int n = input::TakeMenuWheel(); menu && n; n += n > 0 ? -1 : 1) Tap(u, n > 0 ? kKeyUp : kKeyDown);
+    // set and cleared on the key's edges only, as the button command does: Y's own presses keep it otherwise
+    bool reload = input::EventKeyHeld(input::KeyEvent::Reload) && !menu;
+    if (g_player && reload != g_reload) G<uint8_t>(g_player + kReloadButton) = reload;
+    g_reload = reload;
     ctx.esp = esp;
     // counts from a menu or a load are dropped, not saved up for the next look
     if (!input::TakeMouse(g_dx, g_dy)) g_dx = g_dy = 0.0f;

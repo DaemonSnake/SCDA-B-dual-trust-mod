@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <utility>
 
 #include <toml++/toml.hpp>
 
@@ -95,6 +96,8 @@ void Load() {
     // a device sits on one port only
     if (p1.keyboard) p2.keyboard = false;
     if (p1.pad == p2.pad) p2.pad = -1;
+    // player 1 drives single player and versus alone
+    if (!p1.keyboard && p1.pad < 0) std::swap(p1, p2);
     s.players[0] = p1;
     s.players[1] = p2;
     if (const toml::table* keys = t["keys"].as_table())
