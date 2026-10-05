@@ -83,6 +83,8 @@ void Load() {
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    std::string language = t["language"].value_or(s.language);
+    if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
@@ -127,6 +129,7 @@ void Save() {
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},
+                  {"language", s.language},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
                   {"join_ip", s.join_ip},
@@ -142,6 +145,11 @@ void Save() {
     t.insert("controller", pads);
     std::ofstream f(File());
     f << t << "\n";
+}
+
+const std::string& BootLanguage() {
+    static const std::string language = Get().language;
+    return language;
 }
 
 Mode Desktop() {

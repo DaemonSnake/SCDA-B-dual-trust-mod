@@ -61,6 +61,7 @@ constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
+const char* const kLanguageNames[] = {"ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};  // as kLanguages
 // player 2 may be empty from its own list, player 1 only by handing its devices to player 2
 constexpr Port kPlayer1Choices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3}, {true, -1},
                                     {false, 0}, {false, 1}, {false, 2}, {false, 3}};
@@ -237,7 +238,7 @@ void Changed(bool display) {
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage
 };
 
 using rows::Kind;
@@ -265,6 +266,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kShadowDistance, "SHADOW DISTANCE"},
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
+    {Kind::Value, kLanguage, "LANGUAGE"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
     {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
     {Kind::Text, kJoinIp, "COOP JOIN IP"},
@@ -398,6 +400,13 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             Flip(s.skip_intros, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));
             break;
+        case kLanguage: {
+            int count = int(std::size(kLanguages)), i = 0;
+            while (i < count - 1 && s.language != kLanguages[i]) i++;
+            if (step) s.language = kLanguages[i = StepIndex(i, step, count)];
+            std::snprintf(text, sizeof(text), s.language == BootLanguage() ? "%s" : "%s (RESTART)", kLanguageNames[i]);
+            break;
+        }
         case kTickRate: {
             uint32_t rate = kTickRates[StepTable(kTickRates, s.coop_tick_rate, step)];
             if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);

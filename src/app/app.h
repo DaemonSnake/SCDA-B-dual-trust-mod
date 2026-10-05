@@ -22,6 +22,9 @@ struct Port {
     int pad = -1;  // controller slot 0-3, -1 for none
 };
 
+// the game's languages by folder name, as the disc ships them
+inline constexpr const char* kLanguages[] = {"int", "fra", "deu", "ita", "esp"};
+
 struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
@@ -44,6 +47,7 @@ struct Settings {
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
+    std::string language = "int";    // one of kLanguages
     uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
     uint32_t coop_input_delay_floor = 0;   // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
@@ -58,6 +62,8 @@ Settings& Get();
 void Load();
 void Save();
 void ApplyDisplay();  // any thread
+// the language setting as this run started: the console's language setting, which the game reads at boot
+const std::string& BootLanguage();
 struct Mode {
     uint32_t width, height;
 };
