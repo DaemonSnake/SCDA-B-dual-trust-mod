@@ -53,6 +53,7 @@ bool g_hud = false;      // a HUD page is being drawn
 bool g_capture = false;  // a HUD instance is being drawn: its quads wait for its bounds
 bool g_replay = false;
 bool g_pages = false;    // a page was drawn this frame
+bool g_projected = false;  // Enhanced Reality icons are being drawn
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
 // the side each HUD instance was placed on: one reaching past the middle for a while (the weapon box showing a
@@ -158,6 +159,15 @@ X86_FUNC(sub_002620A0) {
     ctx.esp = esp;
 }
 
+// HUD Enhanced Reality (thiscall): objective icons at world positions projected through the widened 3D view, each
+// drawn by moving one instance. They are already in place, and caught in their parent's list they would all follow it
+X86_EXTERN_FUNC(__imp__sub_00195FC0);
+X86_FUNC(sub_00195FC0) {
+    g_projected = true;
+    __imp__sub_00195FC0(ctx, base);
+    g_projected = false;
+}
+
 // Magma frame (thiscall): every page into the canvas, which its caller then flushes
 X86_EXTERN_FUNC(__imp__sub_00252B80);
 X86_FUNC(sub_00252B80) {
@@ -175,7 +185,7 @@ X86_FUNC(sub_00252B80) {
 X86_EXTERN_FUNC(__imp__sub_001231E0);
 X86_FUNC(sub_001231E0) {
     float w = Width();
-    if (!app::Widescreen() || w <= 0.0f) return __imp__sub_001231E0(ctx, base);
+    if (!app::Widescreen() || w <= 0.0f || g_projected) return __imp__sub_001231E0(ctx, base);
     uint32_t corners = R32(ctx.esp + 4);
     float c[12];
     std::memcpy(c, &G<float>(corners), sizeof c);
