@@ -494,7 +494,9 @@ X86_FUNC(sub_0004B46F) {
 X86_EXTERN_FUNC(__imp__sub_00038F96);
 X86_FUNC(sub_00038F96) {
     input::MovieFrame();
+    game::loading::g_movie = true;
     __imp__sub_00038F96(ctx, base);
+    game::loading::g_movie = false;
 }
 
 namespace {

@@ -14,4 +14,7 @@ void AfterShowScreen(X86Context& ctx);
 // copied back on the GPU (the game's copy goes through 640x480 memory)
 void BothBuffers(X86Context& ctx, uint32_t render_device);
 
+// a movie frame is being drawn: hud.cpp redoes its fit for the frame's shape
+inline thread_local bool g_movie = false;
+
 }  // namespace game::loading

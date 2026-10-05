@@ -5,6 +5,7 @@
 // cinematics as well, so a movie wider than 4:3 is fitted there as it is in a level.
 #include <cstdint>
 
+#include "game/loading.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -39,17 +40,19 @@ X86_EXTERN_FUNC(__imp__sub_002E708A);
 X86_FUNC(sub_002E6D5B) {
     uint32_t movie = R32(ctx.esp + 4), bink = movie ? R32(movie + kMovieBink) : 0;
     g_wide_movie = Wide(movie);
+    game::loading::g_movie = true;
     if (bink && !R32(bink + kBinkPaused) && CallGuest(ctx, SYM(BinkWait), {bink}))
         __imp__sub_002E708A(ctx, base);
     else
         __imp__sub_002E6D5B(ctx, base);
-    g_wide_movie = false;
+    g_wide_movie = game::loading::g_movie = false;
 }
 
 X86_FUNC(sub_002E708A) {
     g_wide_movie = Wide(R32(ctx.esp + 4));
+    game::loading::g_movie = true;
     __imp__sub_002E708A(ctx, base);
-    g_wide_movie = false;
+    g_wide_movie = game::loading::g_movie = false;
 }
 
 // the level is the menu (thiscall, no arguments)
