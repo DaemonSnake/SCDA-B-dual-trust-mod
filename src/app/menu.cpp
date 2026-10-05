@@ -171,7 +171,7 @@ int OptionRow(const char* label, const char* value) {
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(Ui(label).c_str());
-    ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
+    ImGui::PushItemFlag(ImGuiItemFlags_NoNav | ImGuiItemFlags_ButtonRepeat, true);  // held arrows keep stepping
     float block_x = row_x + row_w - block_w;
     ImGui::SetCursorPos(ImVec2(block_x, row_y));
     if (ImGui::ArrowButton("##dec", ImGuiDir_Left)) step = -1;
@@ -846,6 +846,7 @@ void DrawUi() {
     ImGuiIO& io = ImGui::GetIO();
     if (MenuOpen() || ConsoleOpen()) io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    io.KeyRepeatRate = 0.1f;  // held arrows step ten times a second, ImGui's twenty is too fast for settings
     // scale the font with the output height
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
     if (ConsoleOpen()) DrawConsole();
