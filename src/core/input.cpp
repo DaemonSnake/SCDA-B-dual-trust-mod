@@ -81,6 +81,8 @@ std::atomic<uint64_t> g_tap_until{0};
 // As SCCT's PC sticky camera: a wheel notch zooms 105 degrees a second for one 30 Hz tick. The stick tops out
 // at the camera's zoom speed, so the notch holds it at full for as long as the same angle takes.
 constexpr float kNotchDegrees = 105.0f / 30.0f;
+// As SCCT PC's OPSAT map: a notch zooms by one frame of the full stick (fZoomSpeed times the frame), taken at 30 Hz.
+constexpr float kMapNotchSeconds = 1.0f / 30.0f;
 float g_zoom_left = 0.0f;  // seconds of full stick still to hold, negative zooms out
 std::chrono::steady_clock::time_point g_zoom_time;
 
@@ -492,12 +494,13 @@ void Keyboard(Pad& p) {
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
     float zoom_speed = g_zoom_speed;
-    if (!camera || zoom_speed <= 0.0f) {
+    float notch = camera && zoom_speed > 0.0f ? kNotchDegrees / zoom_speed : g_map ? kMapNotchSeconds : 0.0f;
+    if (notch <= 0.0f) {
         g_zoom_left = 0.0f;
     } else {
         if (int notches = g_wheel.exchange(0)) {
             if (notches * g_zoom_left < 0.0f) g_zoom_left = 0.0f;
-            g_zoom_left += float(notches) * kNotchDegrees / zoom_speed;
+            g_zoom_left += float(notches) * notch;
         }
         if (g_zoom_left > 0.0f) g_zoom_left = std::max(0.0f, g_zoom_left - seconds);
         if (g_zoom_left < 0.0f) g_zoom_left = std::min(0.0f, g_zoom_left + seconds);
@@ -764,7 +767,8 @@ void OnRawInput(void* handle) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
     }
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
+    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && g_map) g_wheel += SHORT(m.usButtonData) > 0 ? 1 : -1;
+    else if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu && !g_list) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
