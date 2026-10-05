@@ -201,7 +201,9 @@ void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
             if (!widget || R32(widget) != kText || !Shown(inst)) continue;
             g_font = R32(widget + 8);
             std::u16string text = Read(GivenTo(ctx, sub, inst).text);
-            if (text.empty()) continue;
+            // a number is no caption: the duel's timer sits beside one of its buttons
+            auto letter = [](char16_t c) { return ((c | 0x20) >= u'a' && (c | 0x20) <= u'z') || c > 0x7F; };
+            if (std::none_of(text.begin(), text.end(), letter)) continue;
             Rect r = RectOf(widget);
             int x = (r.l + r.r) / 2, y = (r.t + r.b) / 2;
             for (size_t i = 0; i < icons.size(); i++) {
@@ -301,8 +303,10 @@ X86_FUNC(sub_0014C190) {
     W16(frame + kRect + 2, uint16_t(int16_t(x + 100)));
     W16(frame + kRect + 4, uint16_t(int16_t(y)));
     W16(frame + kRect + 6, uint16_t(int16_t(y + size)));
-    W32(frame + 0x14, R32(image + 0x28) | 0xFFFFFF);
-    W32(frame + 0x18, R32(image + 0x28) & 0xFF000000);
+    // the icon's own colour: the duel dims the buttons not to press
+    uint32_t colour = R32(image + 0x28);
+    W32(frame + 0x14, colour);
+    W32(frame + 0x18, colour & 0xFF000000);
     G<float>(frame + 0x1C) = float(size);
     W32(frame + 0x24, uint32_t(size));
     uint32_t given = R32(drawer + kGivenText);
