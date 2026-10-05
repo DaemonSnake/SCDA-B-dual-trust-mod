@@ -65,10 +65,11 @@ constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
 const char* const kLanguageNames[] = {"ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};  // as kLanguages
-// player 2 may be empty from its own list, player 1 only by handing its devices to player 2
+// player 2 may be empty from its own list, player 1 never (SetPlayer)
 constexpr Port kPlayer1Choices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3}, {true, -1},
                                     {false, 0}, {false, 1}, {false, 2}, {false, 3}};
-constexpr Port kPlayer2Choices[] = {{false, -1}, {true, -1}, {false, 0}, {false, 1}, {false, 2}, {false, 3}};
+constexpr Port kPlayer2Choices[] = {{false, -1}, {true, 0},  {true, 1},  {true, 2},  {true, 3},
+                                    {true, -1},  {false, 0}, {false, 1}, {false, 2}, {false, 3}};
 
 // rows::Choices reads a row's values by picking each index in turn; -1 steps as usual
 int g_pick = -1, g_picks = 0, g_picked = 0;
@@ -225,18 +226,21 @@ std::string PortText(const Port& p) {
 bool SamePort(const Port& a, const Port& b) { return a.keyboard == b.keyboard && a.pad == b.pad; }
 
 // a device the other player has moves over to this one, which may leave them with nothing
-Port Leftover(const Settings& s, int player, const Port& choice) {
-    Port left = s.players[1 - player];
-    if (choice.keyboard) left.keyboard = false;
-    if (choice.pad >= 0 && choice.pad == left.pad) left.pad = -1;
-    return left;
+// a port's devices without those a choice takes
+Port Without(Port p, const Port& choice) {
+    if (choice.keyboard) p.keyboard = false;
+    if (choice.pad >= 0 && choice.pad == p.pad) p.pad = -1;
+    return p;
 }
 
-// Stepping would pass through choices on the way, so it skips those that leave player 1 with nothing; the list
-// takes any choice.
-bool SetPlayer(Settings& s, int player, const Port& choice, bool keep_player1 = false) {
-    Port left = Leftover(s, player, choice);
-    if (keep_player1 && player == 1 && !left.keyboard && left.pad < 0) return false;
+bool Empty(const Port& p) { return !p.keyboard && p.pad < 0; }
+
+// Single player and versus are driven by player 1 alone, so a player 2 choice that takes player 1's last device
+// hands it player 2's old ones instead, and is refused when that leaves none.
+bool SetPlayer(Settings& s, int player, const Port& choice) {
+    Port left = Without(s.players[1 - player], choice);
+    if (player == 1 && Empty(left)) left = Without(s.players[1], choice);
+    if (player == 1 && Empty(left)) return false;
     s.players[1 - player] = left;
     s.players[player] = choice;
     return true;
@@ -252,7 +256,7 @@ void StepPlayer(Settings& s, int player, int step) {
     for (int k = 0; k < count; k++)
         if (SamePort(choices[k], s.players[player])) i = k;
     for (int tries = 1; tries < count; tries++)
-        if (SetPlayer(s, player, choices[i = StepIndex(i, step, count)], true)) return;
+        if (SetPlayer(s, player, choices[i = StepIndex(i, step, count)])) return;
 }
 
 void Changed(bool display) {
@@ -598,11 +602,15 @@ void PollCapture() {
     g_capture_done = ImGui::GetFrameCount();
 }
 
-// an unplugged controller is left out, unless the player has it now
+// an unplugged controller is left out, unless the player has it now, and so is a choice SetPlayer refuses
 std::vector<Port> PlayerList(const Settings& s, int player) {
     std::vector<Port> out;
-    for (const Port& c : PlayerChoices(player))
-        if (c.pad < 0 || SamePort(c, s.players[player]) || input::PadConnected(c.pad)) out.push_back(c);
+    for (const Port& c : PlayerChoices(player)) {
+        bool current = SamePort(c, s.players[player]);
+        bool plugged = c.pad < 0 || current || input::PadConnected(c.pad);
+        Settings test = s;
+        if (plugged && (current || SetPlayer(test, player, c))) out.push_back(c);
+    }
     return out;
 }
 
