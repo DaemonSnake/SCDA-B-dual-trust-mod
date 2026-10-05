@@ -65,8 +65,12 @@ Mode Output();
 float RenderScale(uint32_t guest_height);
 // tangent of the fov setting's half angle over that of the game's 75 degrees
 float FovScale();
-// the output is 3:2 or wider: the console reports a widescreen TV and the frame is shown 16:9, else 4:3 as on a 4:3 TV
-bool Widescreen();
+// the output's shape, 4:3 at the narrowest: the frame is shown that wide
+float Aspect();
+// the share of the frame's width a 4:3 picture takes
+inline float Narrow() { return 4.0f / 3.0f / Aspect(); }
+// wider than 4:3: the console reports a widescreen TV
+inline bool Widescreen() { return Aspect() > 1.34f; }
 
 std::filesystem::path ExeDir();
 // the game in assets (game_files.cpp): its folder and this executable's xbe, from the extracted files or a disc

@@ -155,17 +155,17 @@ Mode Output() {
     return Desktop();
 }
 
-bool Widescreen() {
+float Aspect() {
     // asked per frame and per HUD quad: the desktop mode lookup only runs when the resolution setting changes
     static std::atomic<uint64_t> key{~0ull};
-    static std::atomic<bool> wide{true};
+    static std::atomic<float> aspect{16.0f / 9.0f};
     const Settings& s = Get();
     uint64_t k = uint64_t(s.width) << 32 | s.height;
     if (key.exchange(k) != k) {
         Mode m = Output();
-        wide = m.width * 2 >= m.height * 3;
+        aspect = std::max(float(m.width) / std::max(m.height, 1u), 4.0f / 3.0f);
     }
-    return wide;
+    return aspect;
 }
 
 float FovScale() {

@@ -140,3 +140,27 @@ X86_FUNC(sub_002878A3) {
     __imp__sub_002878A3(ctx, base);
     if (model) d3d::ViewScale(1.0f);
 }
+
+// The view's x scale for the frame's shape (node in esi, result in xmm0): 1 on 4:3, 3/4 on widescreen, times the
+// 10:11 pixel widening. The widescreen share becomes the output's own.
+X86_EXTERN_FUNC(__imp__sub_00285530);
+X86_FUNC(sub_00285530) {
+    __imp__sub_00285530(ctx, base);
+    float& x = ctx.xmm[0].f[0];
+    if (x < 1.0f) x *= 4.0f / 3.0f;
+    x *= app::Narrow();
+}
+
+// Both scene nodes' matrix updates keep the first x scale they get (flags 0x673108, 0x673110): forgotten each time,
+// so a resolution change takes effect
+X86_EXTERN_FUNC(__imp__sub_00286BB6);
+X86_FUNC(sub_00286BB6) {
+    G<uint8_t>(0x673108) &= ~1;
+    __imp__sub_00286BB6(ctx, base);
+}
+
+X86_EXTERN_FUNC(__imp__sub_00289051);
+X86_FUNC(sub_00289051) {
+    G<uint8_t>(0x673110) &= ~1;
+    __imp__sub_00289051(ctx, base);
+}

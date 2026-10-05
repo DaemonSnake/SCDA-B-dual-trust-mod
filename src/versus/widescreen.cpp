@@ -88,11 +88,11 @@ bool Picture(X86Context& ctx) {
 }  // namespace
 
 // FPerspectiveMatrix(fov x, fov y, x scale, y scale, near, far), thiscall ret 0x18: M[0][0] = x scale / tan(fov x).
-// The camera passes its viewport's 640 / 480 as y scale; a 16:9 frame takes 3/4 of the x scale.
+// The camera passes its viewport's 640 / 480 as y scale; a wider frame takes that share of the x scale.
 X86_EXTERN_FUNC(__imp__sub_0011B720);
 X86_FUNC(sub_0011B720) {
     float& x = G<float>(ctx.esp + 0xC);
-    if (app::Widescreen() && std::fabs(G<float>(ctx.esp + 0x10) - 4.0f / 3.0f) < 0.01f) x *= 0.75f;
+    if (std::fabs(G<float>(ctx.esp + 0x10) - 4.0f / 3.0f) < 0.01f) x *= app::Narrow();
     if (float s = app::FovScale(); s != 1.0f)
         for (uint32_t arg : {4u, 8u}) G<float>(ctx.esp + arg) = std::atan(std::tan(G<float>(ctx.esp + arg)) * s);
     __imp__sub_0011B720(ctx, base);

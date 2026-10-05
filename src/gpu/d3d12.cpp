@@ -2391,9 +2391,7 @@ void D3D12Backend::Present(const Surface& front, bool pillarbox) {
         cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
         bound_rt_ = bound_ds_ = nullptr;
         if (t) {
-            // 16:9 when the console reports a widescreen display, else 4:3
-            bool wide = app::Widescreen();
-            float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f, w = float(bb_w_), h = float(bb_h_);
+            float aspect = app::Aspect(), w = float(bb_w_), h = float(bb_h_);
             float vw = std::min(w, h * aspect), vh = vw / aspect;
             if (pillarbox) vw = vh * 4.0f / 3.0f;
             float uv[4] = {0, 0, 1, 1};
