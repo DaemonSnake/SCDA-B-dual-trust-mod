@@ -223,18 +223,16 @@ void Drag(Ui& u, uint32_t handler, uint32_t point) {
     value = std::round(value);
 }
 
-// window cursor to page space: pages are 4:3 in the middle of a 16:9 frame, drawn 1.1 wide
+// window cursor to page space: pages are 4:3 in the middle of the frame, drawn 1.1 wide
 bool Point(uint32_t& point) {
     int x, y, w, h;
     if (!input::Cursor(x, y, w, h) || w <= 0 || h <= 0) return false;
     uint32_t drawer = R32(kDrawer);
     float sw = drawer ? float(int16_t(R16(drawer + 0xAC))) : 0, sh = drawer ? float(int16_t(R16(drawer + 0xAE))) : 0;
     if (sw <= 0 || sh <= 0) sw = 640, sh = 480;
-    bool wide = app::Widescreen();
-    float aspect = wide ? 16.0f / 9.0f : 4.0f / 3.0f;
+    float aspect = app::Aspect(), k = app::Narrow();
     float vw = std::min(float(w), h * aspect), vh = vw / aspect;
-    float fx = (x - (w - vw) / 2) / vw;
-    if (wide) fx = (fx - 0.125f) / 0.75f;
+    float fx = ((x - (w - vw) / 2) / vw - (1 - k) / 2) / k;
     fx = 0.5f + (fx - 0.5f) / kPageWidth;
     int px = int(fx * sw), py = int((y - (h - vh) / 2) / vh * sh);
     point = uint32_t(uint16_t(int16_t(px))) | uint32_t(uint16_t(int16_t(py))) << 16;

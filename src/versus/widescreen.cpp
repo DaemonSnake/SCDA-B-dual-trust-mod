@@ -69,12 +69,13 @@ float Width() {
 bool Place(float* c, Mode mode, float w) {
     float lo = std::min({c[0], c[3], c[6], c[9]}), hi = std::max({c[0], c[3], c[6], c[9]});
     bool fill = mode == Mode::Fill && hi - lo >= kMinWidth, pulled = false;
-    float offset = w * (mode == Mode::Left ? kOff / 4 : mode == Mode::Right ? 0.25f - kOff / 4 : 0.125f);
+    float k = app::Narrow();
+    float offset = w * (1 - k) * (mode == Mode::Left ? kOff : mode == Mode::Right ? 1 - kOff : 0.5f);
     for (int i = 0; i < 12; i += 3) {
         float& x = c[i];
         if (mode == Mode::Stretch) continue;
         if (fill && (x <= kSlack || x >= w - kSlack)) x = x <= kSlack ? -1.0f : w + 1.0f, pulled = true;
-        else x = x * 0.75f + offset;
+        else x = x * k + offset;
     }
     return pulled;
 }

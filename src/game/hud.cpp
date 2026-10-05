@@ -1,5 +1,5 @@
-// 2D is drawn 640x480 and shown 16:9. Canvas flushes get x' = x * 3/4 + offset * width: HUD elements are
-// placed per page and element, menus and loading screens are centred 4:3. A 4:3 output is shown 4:3: nothing moves.
+// 2D is drawn 640x480 and shown as wide as the output. Canvas flushes get x' = x * narrow + offset * spare width:
+// HUD elements are placed per page and element, menus and loading screens are centred 4:3. On 4:3 nothing moves.
 #include <algorithm>
 #include <bit>
 #include <cctype>
@@ -102,7 +102,8 @@ constexpr Page kPages[] = {
 };
 
 constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8;  // page units
-constexpr float kLeft = 0.0f, kCentre = 0.125f, kRight = 0.25f, kNone = -1.0f;
+// share of the width a 4:3 page leaves spare that goes left of it
+constexpr float kLeft = 0.0f, kCentre = 0.5f, kRight = 1.0f, kNone = -1.0f;
 
 float g_offset = kCentre;
 Mode g_mode = Mode::Centre;
@@ -170,7 +171,7 @@ X86_FUNC(sub_0028F090) {
     bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
     if (!edges || !app::Widescreen() || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
     uint32_t esp = ctx.esp, util = ctx.ecx, args = esp + 4;
-    float w = float(int(R32(util + 0x28))), unit = w / sw, side = w / 6;
+    float k = app::Narrow(), w = float(int(R32(util + 0x28))), unit = w / sw, side = w * (1 - k) / (2 * k);
     auto x = [&](int i) -> float& { return G<float>(args + i * 0x14); };
     if (g_mode == Mode::Spread) {
         for (int i = 0; i < 4; i++) x(i) += x(i) < w / 2 - kKeep * unit ? -side : x(i) > w / 2 + kKeep * unit ? side : 0;
@@ -224,9 +225,9 @@ X86_FUNC(sub_0028EDCC) {
     if (g_offset < 0 || w < 640 || h < 448 || !app::Widescreen()) return __imp__sub_0028EDCC(ctx, base);
     float& scale = G<float>(util + 0x74);
     float& move = G<float>(util + 0xA4);
-    float s = scale, m = move;
-    move = m + g_offset * w * s;
-    scale = s * 0.75f;
+    float s = scale, m = move, k = app::Narrow();
+    move = m + g_offset * (1 - k) * w * s;
+    scale = s * k;
     __imp__sub_0028EDCC(ctx, base);
     G<float>(util + 0x74) = s;
     G<float>(util + 0xA4) = m;
@@ -244,7 +245,8 @@ X86_FUNC(sub_002CC260) {
     if (ret != 0x2BD973 || g_offset < 0 || sw <= 0 || !app::Widescreen()) return;
     int l = int16_t(R16(state + 8)), r = int16_t(R16(state + 0xA));
     bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
-    auto narrow = [&](int x) { return int(std::lround(x * 0.75f + g_offset * sw)); };
+    float k = app::Narrow();
+    auto narrow = [&](int x) { return int(std::lround(x * k + g_offset * (1 - k) * sw)); };
     W16(state + 8, uint16_t(int16_t(edges && l <= kSlack ? -1 : narrow(l))));
     W16(state + 0xA, uint16_t(int16_t(edges && r >= sw - kSlack ? sw + 1 : narrow(r))));
 }
@@ -262,23 +264,23 @@ bool g_old_43 = false;   // the frame it fades from is 4:3, until the fade draws
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
 // centred 4:3 like the page around it. A quad the full viewport wide (full screen movies, post effects) is left as
 // it is, and so is the loading bar over a loading picture, which is pillarboxed with the frame. The ESRB notice keeps
-// its 4:3 proportions: a sixth of its width more on each side (clamped, so the edge columns reach the screen sides).
+// its 4:3 proportions: the spare width more on each side (clamped, so the edge columns reach the screen sides).
 X86_EXTERN_FUNC(__imp__sub_002E3011);
 X86_FUNC(sub_002E3011) {
     uint32_t ri = R32(ctx.esp + 4);
     if (ri && app::Widescreen()) {
-        float w = float(int(R32(ri + 0x4B84)));
+        float w = float(int(R32(ri + 0x4B84))), k = app::Narrow();
         float& x0 = G<float>(ctx.esp + 8);
         float& x1 = G<float>(ctx.esp + 0x10);
         float& u0 = G<float>(ctx.esp + 0x18);
         float& u1 = G<float>(ctx.esp + 0x20);
         if (g_esrb) {
-            float d = (u1 - u0) / 6;
+            float d = (u1 - u0) * (1 - k) / (2 * k);
             u0 -= d;
             u1 += d;
         } else if (!g_loading && w > 0 && (std::min(x0, x1) > kSlack || std::max(x0, x1) < w - kSlack)) {
-            x0 = x0 * 0.75f + kCentre * w;
-            x1 = x1 * 0.75f + kCentre * w;
+            x0 = x0 * k + kCentre * (1 - k) * w;
+            x1 = x1 * k + kCentre * (1 - k) * w;
         }
     }
     __imp__sub_002E3011(ctx, base);
@@ -360,7 +362,7 @@ X86_FUNC(sub_002E5F1F) {
     if (alpha == 1) return __imp__sub_002E5F1F(ctx, base);
     float saved[24];
     std::memcpy(saved, f, sizeof saved);
-    float half = float(int(R32(ri + 0x4B84))) / 2, wide = half * 4 / 3;
+    float half = float(int(R32(ri + 0x4B84))) / 2, wide = half / app::Narrow();
     float now = g_new_43 || g_esrb ? wide : half, was = g_old_43 ? wide : half;
     if (R32(old + 4) == R32(R32(ri + 0x4B74) + 4)) g_old_43 = false;
     f[0] = 0;

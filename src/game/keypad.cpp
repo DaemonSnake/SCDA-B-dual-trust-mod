@@ -106,11 +106,10 @@ bool Inside(const float px[4], const float py[4], float x, float y) {
     return !(neg && pos);
 }
 
-// the button under the window point, -1 for none. The view fills the shown frame: 16:9 in the middle of the window,
-// 4:3 on a 4:3 output.
+// the button under the window point, -1 for none. The view fills the shown frame, in the middle of the window
 int ButtonAt(uint32_t keypad, int x, int y, int w, int h) {
     uint32_t count = std::min(R32(keypad + kButtonCount), kMaxButtons), data = R32(keypad + kButtons);
-    float aspect = app::Widescreen() ? 16.0f / 9.0f : 4.0f / 3.0f;
+    float aspect = app::Aspect();
     float vw = std::min(float(w), h * aspect), vh = vw / aspect, left = (w - vw) / 2, top = (h - vh) / 2;
     for (uint32_t i = 0; data && i < count; i++) {
         uint32_t button = R32(data + i * 4);
