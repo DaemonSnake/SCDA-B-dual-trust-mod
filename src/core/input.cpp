@@ -119,15 +119,15 @@ int Remapped(const Remap (&table)[N], int b) {
 }
 
 // Lockpicking. The Xbox script (EPickLockSystem) takes the quadrant from the stick's diagonals and tilts the pick
-// only when the stick moved by more than MoveThreshold (0.3) since the last tilt; the PC version gives each key one
-// quadrant and tilts while it is held. So W, A, S and D stand for the PC's diagonals (up-left, down-left, down-right,
-// up-right) and go out as the stick, its length alternating so the pick keeps tilting. Per move key (forward, back,
-// left, right): forward and strafe.
+// only when the stick moved by more than MoveThreshold (0.3) since the last tilt; a centred stick is no quadrant and
+// drops the pin. The PC version gives each key one quadrant, and a key's press and its release each move the axis by
+// 1, a tilt each, so a pin takes a few taps. So W, A, S and D stand for the PC's diagonals (up-left, down-left,
+// down-right, up-right) and go out as the stick: full while held, and once let go the stick rests short of full in
+// the same quadrant, which is the release's tilt without centring. Per move key (forward, back, left, right): forward
+// and strafe.
 constexpr float kPickStick[4][2] = {{1.0f, -1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, 1.0f}};
-constexpr auto kWiggle = std::chrono::milliseconds(40);
-int g_pick_last = -1;  // the held move key pressed last
-bool g_wiggle = false;
-std::chrono::steady_clock::time_point g_wiggle_time;
+constexpr float kPickRest = 0.6f;
+int g_pick_last = -1;  // the move key pressed last while picking, its quadrant kept at rest once let go
 
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
 // these land the game's axis on 0.2 0.48 0.66 0.83 1.0: 0.2 is SCCT PC's slowest (its AxisMod floor). On foot a
@@ -518,20 +518,15 @@ void Keyboard(Pad& p) {
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
     if (View(g_view.load()) != View::Lockpick || menu) {
+        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
         g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
         return;
     }
-    if (g_pick_last < 0 || !move[g_pick_last]) {
-        g_pick_last = -1;
-        for (int i = 0; i < 4; i++)
-            if (move[i]) g_pick_last = i;
-    }
+    bool held = g_pick_last >= 0 && move[g_pick_last];
+    for (int i = 0; i < 4 && !held; i++)
+        if (move[i]) g_pick_last = i, held = true;
     if (g_pick_last < 0) return;
-    if (now - g_wiggle_time >= kWiggle) {
-        g_wiggle = !g_wiggle;
-        g_wiggle_time = now;
-    }
-    float length = g_wiggle ? 1.0f : 0.6f;
+    float length = held ? 1.0f : kPickRest;
     p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
     p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
 }
