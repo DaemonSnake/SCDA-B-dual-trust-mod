@@ -86,8 +86,9 @@ struct Act {
     enum Kind { Hide, Name, Caption, Skip };
     uint32_t widget;
     Kind kind;
-    std::u16string text;
+    std::u16string text;      // a caption's key, put before its text when after
     int left = 0, right = 0;  // added to the caption's sides
+    bool after = true;
 };
 std::vector<Act> g_acts;  // of the pages being drawn, game thread
 std::vector<size_t> g_pages;
@@ -220,8 +221,7 @@ void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
                 std::u16string key = u"(" + Wide(icons[i].key) + u")";
                 paired[i] = true;
                 g_acts.push_back({icons[i].widget, Act::Hide});
-                g_acts.push_back({widget, Act::Caption, after ? key + u" " + text : text + u" " + key,
-                                  after ? c.l - r.l : 0, after ? 0 : c.r - r.r});
+                g_acts.push_back({widget, Act::Caption, key, after ? c.l - r.l : 0, after ? 0 : c.r - r.r, after});
                 break;
             }
         }
@@ -268,7 +268,9 @@ X86_FUNC(sub_00263C30) {
     int left = int16_t(sides) + act->left, right = int16_t(sides >> 16) + act->right;
     W16(rect, uint16_t(left));
     W16(rect + 2, uint16_t(right));
-    W32(drawer + kGivenText, Write(act->text));
+    // the text it draws now: the interaction prompt's is filled in after the page starts, over a placeholder
+    std::u16string text = Read(given ? given : R32(ctx.ecx + 0xC));
+    W32(drawer + kGivenText, Write(act->after ? act->text + u" " + text : text + u" " + act->text));
     // a caption too long for its place with the key in it shrinks to fit
     float width = Width(ctx, ctx.ecx, g_block + 0x80), room = float(right - left - kMargin);
     if (room > 0.0f && width > room) G<float>(frame + 0x1C) *= room / width;

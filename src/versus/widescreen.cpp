@@ -32,7 +32,8 @@ constexpr uint32_t Crc32(std::string_view text) {
     return ~crc;
 }
 
-constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_interatt"), Crc32("p_spectatormode")};
+// the interaction prompt (p_interatt) is one centred widget with fades at its sides: it stays 4:3 like a menu
+constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_spectatormode")};
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
