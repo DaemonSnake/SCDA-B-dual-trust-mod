@@ -27,6 +27,7 @@
 #include "audio/audio.h"
 #include "core/input.h"
 #include "game/console.h"
+#include "image_symbols.h"
 
 namespace app {
 
@@ -272,6 +273,13 @@ enum RowId {
 
 using rows::Kind;
 using rows::Row;
+
+// versus has none of the renderer features of story
+bool VersusHides(int id) {
+    if (std::string_view(IMAGE_XBE) != "sc4_adv.xbe") return false;
+    return id == kShaderModel || id == kHdr || id == kToneMapping || id == kHqShadows || id == kAmbientOcclusion ||
+           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps;
+}
 
 constexpr Row kSettingsRows[] = {
     {Kind::Heading, -1, "DISPLAY"},
@@ -700,6 +708,7 @@ void DrawRows(int page) {
     const Row* list = rows::Page(page, &count);
     for (size_t i = 0; i < count; i++) {
         const Row& r = list[i];
+        if (r.kind == Kind::Value && VersusHides(r.id)) continue;
         if (r.kind == Kind::Heading) {
             Section(r.label);
         } else if (r.kind == Kind::Value && (r.id == kPlayer1 || r.id == kPlayer2)) {
@@ -914,7 +923,7 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
-    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk)) return false;
+    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id))) return false;
     bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
     return !sm3 || Get().shader_model >= 3;
 }
