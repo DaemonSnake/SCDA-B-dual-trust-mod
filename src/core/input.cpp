@@ -81,6 +81,8 @@ std::atomic<uint64_t> g_tap_until{0};
 // As SCCT's PC sticky camera: a wheel notch zooms 105 degrees a second for one 30 Hz tick. The stick tops out
 // at the camera's zoom speed, so the notch holds it at full for as long as the same angle takes.
 constexpr float kNotchDegrees = 105.0f / 30.0f;
+// As SCCT PC's OPSAT map: a notch zooms by one frame of the full stick (fZoomSpeed times the frame), taken at 30 Hz.
+constexpr float kMapNotchSeconds = 1.0f / 30.0f;
 float g_zoom_left = 0.0f;  // seconds of full stick still to hold, negative zooms out
 std::chrono::steady_clock::time_point g_zoom_time;
 
@@ -119,15 +121,15 @@ int Remapped(const Remap (&table)[N], int b) {
 }
 
 // Lockpicking. The Xbox script (EPickLockSystem) takes the quadrant from the stick's diagonals and tilts the pick
-// only when the stick moved by more than MoveThreshold (0.3) since the last tilt; the PC version gives each key one
-// quadrant and tilts while it is held. So W, A, S and D stand for the PC's diagonals (up-left, down-left, down-right,
-// up-right) and go out as the stick, its length alternating so the pick keeps tilting. Per move key (forward, back,
-// left, right): forward and strafe.
+// only when the stick moved by more than MoveThreshold (0.3) since the last tilt; a centred stick is no quadrant and
+// drops the pin. The PC version gives each key one quadrant, and a key's press and its release each move the axis by
+// 1, a tilt each, so a pin takes a few taps. So W, A, S and D stand for the PC's diagonals (up-left, down-left,
+// down-right, up-right) and go out as the stick: full while held, and once let go the stick rests short of full in
+// the same quadrant, which is the release's tilt without centring. Per move key (forward, back, left, right): forward
+// and strafe.
 constexpr float kPickStick[4][2] = {{1.0f, -1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, 1.0f}};
-constexpr auto kWiggle = std::chrono::milliseconds(40);
-int g_pick_last = -1;  // the held move key pressed last
-bool g_wiggle = false;
-std::chrono::steady_clock::time_point g_wiggle_time;
+constexpr float kPickRest = 0.6f;
+int g_pick_last = -1;  // the move key pressed last while picking, its quadrant kept at rest once let go
 
 // Walking speed steps for the move keys, set with the wheel. The stick bindings have a 0.3 dead zone,
 // these land the game's axis on 0.2 0.48 0.66 0.83 1.0: 0.2 is SCCT PC's slowest (its AxisMod floor). On foot a
@@ -492,12 +494,13 @@ void Keyboard(Pad& p) {
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
     float zoom_speed = g_zoom_speed;
-    if (!camera || zoom_speed <= 0.0f) {
+    float notch = camera && zoom_speed > 0.0f ? kNotchDegrees / zoom_speed : g_map ? kMapNotchSeconds : 0.0f;
+    if (notch <= 0.0f) {
         g_zoom_left = 0.0f;
     } else {
         if (int notches = g_wheel.exchange(0)) {
             if (notches * g_zoom_left < 0.0f) g_zoom_left = 0.0f;
-            g_zoom_left += float(notches) * kNotchDegrees / zoom_speed;
+            g_zoom_left += float(notches) * notch;
         }
         if (g_zoom_left > 0.0f) g_zoom_left = std::max(0.0f, g_zoom_left - seconds);
         if (g_zoom_left < 0.0f) g_zoom_left = std::min(0.0f, g_zoom_left + seconds);
@@ -518,20 +521,15 @@ void Keyboard(Pad& p) {
     if (x) p.lx = int16_t(float(x) * v * 32767.0f);
     if (y) p.ly = int16_t(float(y) * v * 32767.0f);
     if (View(g_view.load()) != View::Lockpick || menu) {
+        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
         g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
         return;
     }
-    if (g_pick_last < 0 || !move[g_pick_last]) {
-        g_pick_last = -1;
-        for (int i = 0; i < 4; i++)
-            if (move[i]) g_pick_last = i;
-    }
+    bool held = g_pick_last >= 0 && move[g_pick_last];
+    for (int i = 0; i < 4 && !held; i++)
+        if (move[i]) g_pick_last = i, held = true;
     if (g_pick_last < 0) return;
-    if (now - g_wiggle_time >= kWiggle) {
-        g_wiggle = !g_wiggle;
-        g_wiggle_time = now;
-    }
-    float length = g_wiggle ? 1.0f : 0.6f;
+    float length = held ? 1.0f : kPickRest;
     p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
     p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
 }
@@ -769,7 +767,8 @@ void OnRawInput(void* handle) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
     }
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
+    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && g_map) g_wheel += SHORT(m.usButtonData) > 0 ? 1 : -1;
+    else if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu && !g_list) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
