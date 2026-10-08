@@ -2335,8 +2335,7 @@ void D3D12Backend::Present(const Surface& front, bool pillarbox) {
         char stamp[32];
         snprintf(stamp, sizeof(stamp), "%02u%02u%02u", tm.wHour, tm.wMinute, tm.wSecond);
         std::error_code ec;
-        // exe in <repos>/SCDoubleAgent-V2Recomp/out/build/<preset>
-        cap_dir_ = std::filesystem::weakly_canonical(app::ExeDir() / "../../../../RECOMPILATION/claude-outputs/scda v2 capture" / stamp, ec);
+        cap_dir_ = app::ExeDir() / "captures" / stamp;
         std::filesystem::create_directories(cap_dir_, ec);
         cap_ = _wfopen((cap_dir_ / "frame.txt").c_str(), L"w");
         cap_i_ = cap_rt_ = 0;

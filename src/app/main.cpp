@@ -56,6 +56,12 @@ LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+#ifdef NDEBUG
+constexpr bool kDumpKey = false;
+#else
+constexpr bool kDumpKey = true;
+#endif
+
 void DumpThreads() {
     gpu::g_capture = true;
     for (auto& t : kernel::Threads())
@@ -124,7 +130,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_KEYDOWN:
             if (HostKey(wp, lp)) return 0;
-            if (wp == VK_F3) DumpThreads();
+            if (kDumpKey && wp == VK_F3) DumpThreads();
             if (wp == VK_ESCAPE && MenuOpen() && !Capturing()) ToggleMenu();
             else if (wp == VK_ESCAPE && ConsoleOpen()) ToggleConsole();
             if (input::ConsoleKey(int(wp)) && !MenuOpen() && !(lp & (1 << 30))) ToggleConsole();
