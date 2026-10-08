@@ -94,7 +94,9 @@ void UpdateView(uint32_t viewport) {
     } else if (state == unreal::Name("s_ScriptedEvent")) {
         view = input::View::ScriptedEvent;
     } else if (state == unreal::Name("s_Ledge") || state == unreal::Name("s_NarrowLadder") ||
-               state == unreal::Name("s_Pipe") || state == unreal::Name("s_PipeSlideDown")) {
+               state == unreal::Name("s_Pipe") || state == unreal::Name("s_PipeSlideDown") ||
+               state == unreal::Name("s_Vent") || state == unreal::Name("s_Carry") ||
+               state == unreal::Name("s_SBRopeClimb")) {
         view = input::View::Ledge;
     } else if (state == unreal::Name("s_PickLock") || state == unreal::Name("s_HandCuffed")) {
         view = input::View::Lockpick;
