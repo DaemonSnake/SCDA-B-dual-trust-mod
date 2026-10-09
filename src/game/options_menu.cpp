@@ -61,39 +61,12 @@ const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Contr
 constexpr int kCaptionCount = int(std::size(kCaptions));
 const std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
 
-// the F10 panel's upper case in the game's title case: "DISPLAY MODE" as "Display Mode", "SPACE/ENTER" as "Space/Enter"
-std::string Title(std::string_view text) {
-    constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"};
-    constexpr std::string_view kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA",
-                                          "LB", "RB", "LT", "RT", "LS", "RS"};
-    std::string out;
-    size_t i = 0;
-    while (i < text.size()) {
-        size_t end = text.find_first_of(" /()", i);
-        if (end == std::string_view::npos) end = text.size();
-        std::string word(text.substr(i, end - i));
-        bool digit = word.find_first_of("0123456789") != std::string::npos;
-        if (word == "HZ") word = "Hz";
-        else if (word == "D-PAD") word = "D-Pad";
-        else if (word == "MS") word = "ms";
-        else if (!digit && std::find(std::begin(kKeep), std::end(kKeep), word) == std::end(kKeep)) {
-            bool small = !out.empty() && std::find(std::begin(kSmall), std::end(kSmall), word) != std::end(kSmall);
-            for (size_t k = 0; k < word.size(); k++)
-                if (small || k) word[k] = char(std::tolower(uint8_t(word[k])));
-        }
-        out += word;
-        if (end < text.size()) out += text[end];
-        i = end + 1;
-    }
-    return out;
-}
-
 // as the game shows it: in the game's language, what has no translation (numbers, units) in title case
-std::u16string Text(std::string_view text) { return app::Translate(text, Title); }
+std::u16string Text(std::string_view text) { return app::Translate(text, app::TitleCase); }
 
 // a key or button name as it is: the controller's BACK is no Back button
 std::u16string Name(std::string_view text) {
-    std::string titled = Title(text);
+    std::string titled = app::TitleCase(text);
     return std::u16string(titled.begin(), titled.end());
 }
 

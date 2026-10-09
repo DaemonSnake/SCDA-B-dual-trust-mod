@@ -278,7 +278,7 @@ using rows::Row;
 bool VersusHides(int id) {
     if (std::string_view(IMAGE_XBE) != "sc4_adv.xbe") return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kHqShadows || id == kAmbientOcclusion ||
-           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps;
+           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate || id == kInputDelay;
 }
 
 constexpr Row kSettingsRows[] = {

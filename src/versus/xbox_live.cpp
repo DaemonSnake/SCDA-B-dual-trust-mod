@@ -8,6 +8,10 @@
 
 using namespace kernel;
 
+namespace versus {
+uint32_t OptionsText(uint32_t section, uint32_t section2, uint32_t key);  // options_menu.cpp
+}  // namespace versus
+
 namespace {
 
 // localization database find (thiscall(section, section2, key*, package), ret 0x10): returns the text in the table.
@@ -111,6 +115,11 @@ X86_EXTERN_FUNC(__imp__sub_00157A90);
 X86_FUNC(sub_00157A90) {
     uint32_t section = R32(ctx.esp + 4), section2 = R32(ctx.esp + 8), key = R32(ctx.esp + 0xC);
     uint32_t id = key ? R32(key) : 0;
+    if (uint32_t text = versus::OptionsText(section, section2, id)) {
+        ctx.eax = text;
+        ctx.esp += 0x14;
+        return;
+    }
     for (auto& t : kTexts) {
         if ((section != t.section && section2 != t.section) || id != t.key) continue;
         static const auto guest = [] {

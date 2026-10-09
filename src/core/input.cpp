@@ -212,7 +212,7 @@ constexpr Target kVersusActions[] = {
     {{"previous_camera", "PREVIOUS CAMERA", "V"}, 9, true},
     {{"help", "HELP", "F1"}, 4},
     {{"pause", "PAUSE", "Escape"}, 12},
-    {{"console", "CONSOLE", "Backtick"}, kHostKey},
+    // no console: versus has no commands
     {{"push_to_talk", "PUSH TO TALK", "T"}, kHostKey, false, KeyEvent::PushToTalk},
     {{"settings_panel", "SETTINGS PANEL", "F10"}, kHostKey, false, KeyEvent::SettingsPanel},
 };
