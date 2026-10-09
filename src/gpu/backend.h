@@ -64,6 +64,8 @@ void SavePipelineCache();
 inline std::atomic<bool> g_splash{false};
 inline std::atomic<int> g_in_splash{0};
 inline std::atomic<bool> g_shown_splash{false};  // the frame on screen was presented 4:3
+// the game side drew a 4:3 picture this frame (versus' loading page): the next Swap shows it 4:3, whatever drew after
+inline std::atomic<bool> g_splash_next{false};
 
 // F3: save the next frame, every draw and target, under captures
 inline std::atomic<bool> g_capture{false};

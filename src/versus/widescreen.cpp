@@ -1,5 +1,6 @@
 // Versus widescreen. The 3D view widens instead of stretching. Magma 2D keeps its 4:3 shapes: menu pages are centred
-// with images touching a page side pulled out to the screen side, HUD page instances go to the side they sit on.
+// with images touching a page side pulled out to the screen side, HUD page instances go to the side they sit on. The
+// loading page is a 4:3 picture with black bars, as the load bar's frames after it are.
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -34,6 +35,8 @@ constexpr uint32_t Crc32(std::string_view text) {
 
 // the interaction prompt (p_interatt) is one centred widget with fades at its sides: it stays 4:3 like a menu
 constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_spectatormode")};
+constexpr uint32_t kLoadingPage = Crc32("p_loading");
+static_assert(kLoadingPage == 0x50A0D1DB);
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
@@ -54,6 +57,7 @@ bool g_capture = false;  // a HUD instance is being drawn: its quads wait for it
 bool g_replay = false;
 bool g_pages = false;    // a page was drawn this frame
 bool g_projected = false;  // Enhanced Reality icons are being drawn
+bool g_picture = false;    // the loading page is being drawn: as the game draws it, shown 4:3
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
 // the side each HUD instance was placed on: one reaching past the middle for a while (the weapon box showing a
@@ -117,8 +121,12 @@ X86_FUNC(sub_0025A3F0) {
         LOGI("versus widescreen: page %08X %s", id, g_hud ? "hud" : "menu");
     }
     g_pages = true;
+    bool picture = g_picture;
+    g_picture = id == kLoadingPage;
+    if (g_picture) gpu::g_splash_next = true;
     versus::EnterPage(ctx, ctx.ecx, 0);
     __imp__sub_0025A3F0(ctx, base);
+    g_picture = picture;
     versus::LeavePage();
     g_hud = saved;
 }
@@ -186,7 +194,7 @@ X86_FUNC(sub_00252B80) {
 X86_EXTERN_FUNC(__imp__sub_001231E0);
 X86_FUNC(sub_001231E0) {
     float w = Width();
-    if (!app::Widescreen() || w <= 0.0f || g_projected) return __imp__sub_001231E0(ctx, base);
+    if (!app::Widescreen() || w <= 0.0f || g_projected || g_picture) return __imp__sub_001231E0(ctx, base);
     uint32_t corners = R32(ctx.esp + 4);
     float c[12];
     std::memcpy(c, &G<float>(corners), sizeof c);
