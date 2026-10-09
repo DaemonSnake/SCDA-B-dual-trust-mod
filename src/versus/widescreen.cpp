@@ -1,6 +1,7 @@
 // Versus widescreen. The 3D view widens instead of stretching. Magma 2D keeps its 4:3 shapes: menu pages are centred
-// with images touching a page side pulled out to the screen side, HUD page instances go to the side they sit on. The
-// loading page is a 4:3 picture with black bars, as the load bar's frames after it are.
+// with images touching a page side pulled out to the screen side, HUD page instances go to the side they sit on.
+// Menu backgrounds (pictures from the canvas top to its bottom) are zoomed to the screen's width, cropped top and
+// bottom. The loading page is a 4:3 picture with black bars, as the load bar's frames after it are.
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -37,7 +38,7 @@ constexpr uint32_t Crc32(std::string_view text) {
 constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_spectatormode")};
 constexpr uint32_t kLoadingPage = Crc32("p_loading");
 static_assert(kLoadingPage == 0x50A0D1DB);
-constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width in pixels)
+constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width, +0xA0 height in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;
 constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
 // the canvas is drawn 1.1 wide about its centre (10:11 pixels): this share of a page is off each screen side
@@ -69,6 +70,11 @@ float Width() {
     return vp ? float(int(R32(vp + 0x9C))) : 0.0f;
 }
 
+float Height() {
+    uint32_t m = R32(kMagma), vp = m ? R32(m + 0x38) : 0;
+    return vp ? float(int(R32(vp + 0xA0))) : 0.0f;
+}
+
 // corners: 4 x {x, y, z}; true when a side was pulled out. Left and Right keep the distance to the screen side
 bool Place(float* c, Mode mode, float w) {
     float lo = std::min({c[0], c[3], c[6], c[9]}), hi = std::max({c[0], c[3], c[6], c[9]});
@@ -84,16 +90,39 @@ bool Place(float* c, Mode mode, float w) {
     return pulled;
 }
 
-// the quad's material (sixth argument), sizes from its vtable +0x68 / +0x6C
-bool Picture(X86Context& ctx) {
+// the quad's material (sixth argument), sizes from its vtable +0x68 / +0x6C; 0 x 0 for none
+void MaterialSize(X86Context& ctx, uint32_t& width, uint32_t& height) {
     uint32_t material = R32(ctx.esp + 0x18), ecx = ctx.ecx;
-    if (!material) return false;
+    width = height = 0;
+    if (!material) return;
     ctx.ecx = material;
-    uint32_t width = CallGuest(ctx, R32(R32(material) + 0x68), {});
+    width = CallGuest(ctx, R32(R32(material) + 0x68), {});
     ctx.ecx = material;
-    uint32_t height = CallGuest(ctx, R32(R32(material) + 0x6C), {});
+    height = CallGuest(ctx, R32(R32(material) + 0x6C), {});
     ctx.ecx = ecx;
+}
+
+bool Picture(X86Context& ctx) {
+    uint32_t width, height;
+    MaterialSize(ctx, width, height);
     return width >= kPicture && height >= kPicture;
+}
+
+// A menu background: a picture, or a tile of one (Fond's are 512 and 128 wide, both 512 tall), from the canvas top to
+// its bottom. Zoomed about the screen centre until the page's full width (the canvas is 1.1 wide) is the screen's,
+// both ways by the same share of its 4:3 place: no stretch, the top and bottom cropped.
+bool Background(X86Context& ctx, float* c, float w, float h) {
+    float top = std::min({c[1], c[4], c[7], c[10]}), bottom = std::max({c[1], c[4], c[7], c[10]});
+    if (h <= 0.0f || top > kSlack || bottom < h - kSlack) return false;
+    uint32_t width, height;
+    MaterialSize(ctx, width, height);
+    if (height < kPicture) return false;
+    float zoom = 1.0f / (1.1f * app::Narrow());
+    for (int i = 0; i < 12; i += 3) {
+        c[i] = w / 2 + (c[i] - w / 2) / 1.1f;
+        c[i + 1] = h / 2 + (c[i + 1] - h / 2) * zoom;
+    }
+    return true;
 }
 
 }  // namespace
@@ -208,8 +237,9 @@ X86_FUNC(sub_001231E0) {
     }
     float placed[12];
     std::memcpy(placed, c, sizeof c);
-    // a picture keeps its shape (menu backgrounds), only fills reach the screen sides
-    if (Place(placed, g_replay ? g_mode : Mode::Fill, w) && !g_replay && Picture(ctx)) {
+    // a picture keeps its shape, only fills reach the screen sides; Background moves the corners only when it is one
+    if ((g_replay || !Background(ctx, placed, w, Height())) && Place(placed, g_replay ? g_mode : Mode::Fill, w) &&
+        !g_replay && Picture(ctx)) {
         std::memcpy(placed, c, sizeof c);
         Place(placed, Mode::Centre, w);
     }
