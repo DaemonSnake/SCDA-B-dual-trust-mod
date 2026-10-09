@@ -47,12 +47,12 @@ cmake --build out\build\release || goto :fail
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.
-echo   out\build\release\SCDAOffline.exe  story and co-op
-echo   out\build\release\SCDAOnline.exe   versus, started from the main menu
+echo   out\build\release\SCDA.exe         story and co-op
+echo   out\build\release\SCDA_Versus.exe  versus, started from the main menu
 echo.
 if defined CI exit /b 0
 choice /c YN /n /m "  Play now? [Y/N] "
-if not errorlevel 2 (start "" /d "%OUT%" "%OUT%\SCDAOffline.exe") else (pause)
+if not errorlevel 2 (start "" /d "%OUT%" "%OUT%\SCDA.exe") else (pause)
 exit /b 0
 
 rem ---------------------------------------------------------------- helpers

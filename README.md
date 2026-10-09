@@ -5,7 +5,7 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 ## Game Setup
 
 - Put the game files in the `assets` folder.
-- Run `SCDAOffline.exe`.
+- Run `SCDA.exe`.
 - You can adjust the recomp settings inside the in-game options menu whilst the game is running, or alternatively via the F10 quick menu.
 <img width="1920" height="1080" alt="{3C71BA44-CD79-411A-90CB-7F88F80572B9}" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3" /> 
 
@@ -84,6 +84,6 @@ A static recompilation of the original Xbox version of Splinter Cell: Double Age
 - Clone this repository.
 - Put the game files in the `assets` folder.
 - Run `build.bat`. The first build recompiles the game and takes a while.
-- Run `out\build\release\SCDAOffline.exe`.
+- Run `out\build\release\SCDA.exe`.
 
 

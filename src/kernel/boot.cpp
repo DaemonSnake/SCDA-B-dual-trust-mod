@@ -156,7 +156,7 @@ bool Boot(std::vector<uint8_t> xbe, const std::string& xbe_name, const std::stri
 
 const char* ImageExe(std::string xbe_path) {
     for (char& c : xbe_path) c = char(std::tolower(uint8_t(c)));
-    static const std::pair<const char*, const char*> kImages[] = {{"default.xbe", "SCDAOffline"}, {"sc4_adv.xbe", "SCDAOnline"}};
+    static const std::pair<const char*, const char*> kImages[] = {{"default.xbe", "SCDA"}, {"sc4_adv.xbe", "SCDA_Versus"}};
     for (auto& [xbe, exe] : kImages) {
         size_t n = std::strlen(xbe);
         if (xbe_path.size() >= n && xbe_path.compare(xbe_path.size() - n, n, xbe) == 0 &&
