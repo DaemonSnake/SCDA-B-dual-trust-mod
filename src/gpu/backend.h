@@ -65,7 +65,7 @@ inline std::atomic<bool> g_splash{false};
 inline std::atomic<int> g_in_splash{0};
 inline std::atomic<bool> g_shown_splash{false};  // the frame on screen was presented 4:3
 
-// F3: save the next frame, every draw and target, under claude-outputs
+// F3: save the next frame, every draw and target, under captures
 inline std::atomic<bool> g_capture{false};
 
 // the game's shadow map, the colour surface bound beside it and the swizzled chain aliased over the map's memory

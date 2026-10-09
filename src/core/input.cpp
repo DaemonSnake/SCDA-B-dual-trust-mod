@@ -1067,21 +1067,19 @@ std::string Binding(size_t action) {
     return action < kCount ? Join(g_binds[action]) : std::string();
 }
 
-void Bind(size_t action, int vk) {
+void Bind(size_t action, int vk, int slot) {
     // the console, hide HUD and the settings panel act on the window's key messages, which mouse buttons do not send
-    if (action >= kCount || !NameOf(vk)) return;
+    if (action >= kCount || slot < 0 || slot > 1 || (vk && !NameOf(vk))) return;
     if (kActions[action].button == kHostKey && kActions[action].event != KeyEvent::PushToTalk && Mouse(vk)) return;
     {
         std::lock_guard lock(g_bind_lock);
-        // a new key joins the action's keys (two at most, the older goes); one it has already comes off, unless it is
-        // the last
         std::vector<int>& keys = g_binds[action];
-        if (auto it = std::find(keys.begin(), keys.end(), vk); it != keys.end()) {
-            if (keys.size() > 1) keys.erase(it);
-        } else {
-            keys.push_back(vk);
-            if (keys.size() > 2) keys.erase(keys.begin());
-        }
+        int slots[2] = {keys.size() > 0 ? keys[0] : 0, keys.size() > 1 ? keys[1] : 0};
+        if (vk && slots[1 - slot] == vk) slots[1 - slot] = 0;
+        slots[slot] = vk;
+        keys.clear();
+        for (int k : slots)
+            if (k) keys.push_back(k);
         app::Get().keys[kActions[action].action.id] = Join(keys);
     }
     app::Save();

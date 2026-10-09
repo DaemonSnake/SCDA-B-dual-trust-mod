@@ -516,6 +516,8 @@ void RestoreDefaults(int page) {
 
 // the row being rebound, -1 when idle; its keys must be released before the next press binds
 std::atomic<int> g_capture{-1};
+int g_capture_slot = 0;  // its box: 0 the key, 1 the alternate
+int g_hovered_box = -1;  // the box under the mouse with a key in it, this frame
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = 0;
@@ -546,7 +548,7 @@ void Apply() {
     Changed(true);
 }
 const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER", "LEVEL SELECT"};
-constexpr int kControllerPage = 2, kLevelsPage = 3;
+constexpr int kKeyboardPage = 1, kControllerPage = 2, kLevelsPage = 3;
 #ifdef NDEBUG
 constexpr bool kLevelSelect = false;
 #else
@@ -567,27 +569,48 @@ int StepPage(int page, int step) {
 }
 
 // the DataXb\LMaps folders; Menu is the main menu
-// label left, keys right; Enter or a click starts the capture
-bool BindRow(const char* label, const std::string& keys, bool capturing, const char* prompt) {
+// the action's key and its alternate as their boxes show them, the alternate blank when there is none
+std::vector<std::string> KeyBoxes(size_t action) {
+    std::string keys = input::Binding(action);
+    size_t comma = keys.find(',');
+    std::string second = comma == std::string::npos ? std::string() : keys.substr(comma + 1);
+    second = second.substr(0, second.find(','));
+    return {KeyText(keys.substr(0, comma)), second.empty() ? second : KeyText(second)};
+}
+
+// label left, a box per key right (the keyboard's key and its alternate side by side), ending where the other rows'
+// values do; Enter or a click on a box starts its capture, a right click sets `cleared`. The box pressed, -1 for none.
+int BindRow(const char* label, const std::vector<std::string>& keys, int capturing, const char* prompt, int& cleared) {
     const ImGuiStyle& style = ImGui::GetStyle();
     float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
     float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
     float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    float value_end = row_x + row_w - block_w + row_h + style.ItemSpacing.x + value_w;
+    int n = int(keys.size()), pressed = -1;
+    float box_w = n > 1 ? em * 10 : value_w;
     ImGui::PushID(label);
-    bool pressed = ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(row_w, row_h));
-    if (ImGui::IsItemFocused() || capturing)
-        ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_Header));
     ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(Ui(label).c_str());
-    // key names as they are: the controller's BACK is no Back button
-    std::string value = capturing ? Ui(prompt) : keys == "UNBOUND" ? Ui(keys) : keys;
-    float value_x = row_x + row_w - block_w + row_h + style.ItemSpacing.x;
-    ImGui::SetCursorPos(ImVec2(value_x + std::max((value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
-    ImGui::AlignTextToFramePadding();
-    if (capturing) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
-    ImGui::TextUnformatted(value.c_str());
-    if (capturing) ImGui::PopStyleColor();
+    for (int i = 0; i < n; i++) {
+        float x = value_end - float(n - i) * box_w - float(n - 1 - i) * style.ItemSpacing.x;
+        ImGui::SetCursorPos(ImVec2(x, row_y));
+        ImGui::PushID(i);
+        if (ImGui::InvisibleButton("##key", ImVec2(box_w, row_h))) pressed = i;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) cleared = i;
+        if (ImGui::IsItemHovered() && !keys[i].empty()) g_hovered_box = i;
+        bool lit = capturing == i || ImGui::IsItemFocused() || ImGui::IsItemHovered();
+        ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                                  ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
+        // key names as they are: the controller's BACK is no Back button
+        std::string value = capturing == i ? Ui(prompt) : keys[i] == "UNBOUND" ? Ui(keys[i]) : keys[i];
+        ImGui::SetCursorPos(ImVec2(x + std::max((box_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
+        ImGui::AlignTextToFramePadding();
+        if (capturing == i) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+        ImGui::TextUnformatted(value.c_str());
+        if (capturing == i) ImGui::PopStyleColor();
+        ImGui::PopID();
+    }
     ImGui::PopID();
     ImGui::SetCursorPos(ImVec2(row_x, row_y));
     ImGui::Dummy(ImVec2(row_w, row_h));
@@ -604,7 +627,7 @@ void PollCapture() {
         return;
     }
     if (button >= 0) input::BindPad(size_t(g_capture.load()), button);
-    else if (vk && !pad && vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk);
+    else if (vk && !pad && vk != VK_ESCAPE) input::Bind(size_t(g_capture.load()), vk, g_capture_slot);
     else if (vk != VK_ESCAPE) return;
     g_capture = -1;
     g_capture_done = ImGui::GetFrameCount();
@@ -722,12 +745,17 @@ void DrawRows(int page) {
                 else RowText(r.id, step);
             }
         } else if (r.kind == Kind::Bind || r.kind == Kind::PadBind) {
-            const char* prompt = r.kind == Kind::Bind ? "PRESS A KEY" : "PRESS A BUTTON";
-            if (BindRow(r.label, rows::Value(r), g_capture == r.id, prompt) && g_capture < 0 &&
-                ImGui::GetFrameCount() > g_capture_done + 1) {
+            bool keys = r.kind == Kind::Bind;
+            std::vector<std::string> boxes = keys ? KeyBoxes(size_t(r.id)) : std::vector<std::string>{rows::Value(r)};
+            int cleared = -1;
+            int box = BindRow(r.label, boxes, g_capture == r.id ? g_capture_slot : -1, keys ? "PRESS A KEY" : "PRESS A BUTTON", cleared);
+            if (box >= 0 && g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1) {
+                g_capture_slot = box;
                 g_capture = r.id;
                 g_capture_armed = false;
             }
+            // only the alternate: an action left with no key at all could be the settings panel's own
+            if (keys && cleared == 1 && g_capture < 0) input::Bind(size_t(r.id), 0, 1);
         } else {
             static char join[64] = {};
             static bool loaded = false;
@@ -811,6 +839,7 @@ void DrawPanel() {
         DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
+        g_hovered_box = -1;
         if (g_page == kLevelsPage) DrawLevels();
         else DrawRows(g_page);
         ImGui::EndChild();
@@ -819,6 +848,7 @@ void DrawPanel() {
         const char* hint = "";
         if (g_capture >= 0) hint = g_page == kControllerPage ? "Press a controller button to bind, Escape cancels"
                                                              : "Press a key or mouse button to bind, Escape cancels";
+        else if (g_page == kKeyboardPage && g_hovered_box == 1) hint = "Right click clears the second key";
         else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
         ImGui::TextUnformatted(Ui(hint, false).c_str());
         ImGui::PopStyleColor();
