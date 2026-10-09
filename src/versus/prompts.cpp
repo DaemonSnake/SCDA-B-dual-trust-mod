@@ -1,8 +1,10 @@
 // Button prompts on keyboard and mouse. A pad icon with its caption beside it goes and the caption takes the key,
 // "(SHIFT) Select"; an icon on its own gets the key's name drawn in its place. Nothing is kept between frames, so the
-// icons are back as soon as the pad is.
+// icons are back as soon as the pad is. Texts with the pad's buttons inline ("Press \\2 to continue.") take the key
+// when they are looked up.
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -59,28 +61,42 @@ constexpr Icon kIcons[] = {
     {Id("button_ar_clic"), {"versus_zoom"}},
 };
 
+// an action's first key in capitals, or the name itself when it is in capitals; empty when unbound
+std::string KeyOf(const char* key) {
+    size_t count = 0;
+    const input::Action* actions = input::Actions(&count);
+    std::string k;
+    if (std::isupper(uint8_t(key[0]))) k = key;
+    for (size_t i = 0; i < count && k.empty(); i++)
+        if (std::string_view(actions[i].id) == key) k = input::Binding(i);
+    k = k.substr(0, k.find(','));
+    if (k == "Escape") k = "Esc";
+    for (char& c : k) c = char(std::toupper(uint8_t(c)));
+    return k;
+}
+
 // empty when a key is missing: the icon stays
 std::string Label(uint32_t material) {
     uint32_t id = material ? R32(material + 4) : 0;
     const Icon* icon = std::find_if(std::begin(kIcons), std::end(kIcons), [&](const Icon& i) { return i.id == id; });
     if (icon == std::end(kIcons)) return {};
-    size_t count = 0;
-    const input::Action* actions = input::Actions(&count);
     std::string out;
     for (const char* key : icon->keys) {
         if (!key) break;
-        std::string k;
-        if (std::isupper(uint8_t(key[0]))) k = key;
-        for (size_t i = 0; i < count && k.empty(); i++)
-            if (std::string_view(actions[i].id) == key) k = input::Binding(i);
-        k = k.substr(0, k.find(','));
+        std::string k = KeyOf(key);
         if (k.empty()) return {};
-        if (k == "Escape") k = "Esc";
-        for (char& c : k) c = char(std::toupper(uint8_t(c)));
         out += (out.empty() || (k.size() == 1 && !icon->split) ? "" : "/") + k;
     }
     return out;
 }
+
+// a text's inline pad buttons: a backslash (the table writes two) and the button's code; A and B as the menu legends
+// have them (button_a / button_b above)
+struct Inline {
+    char16_t code;
+    const char* key;
+};
+constexpr Inline kInline[] = {{u'2', "versus_interact"}, {u'6', "crouch"}};
 
 struct Act {
     enum Kind { Hide, Name, Caption, Skip };
@@ -234,6 +250,38 @@ void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
 void LeavePage() {
     g_acts.resize(g_pages.back());
     g_pages.pop_back();
+}
+
+// xbox_live.cpp's text lookup, on what it found: with the keyboard in use, a copy with the inline A and B given their
+// keys ("Press (SHIFT) to continue.", as the HUD writes its keys); 0 keeps the text
+uint32_t KeyText(uint32_t text) {
+    if (!text || !input::KeyboardActive()) return 0;
+    std::u16string s = Read(text), out;
+    if (s.size() >= kMaxText || s.find(u'\\') == std::u16string::npos) return 0;
+    bool changed = false;
+    for (size_t i = 0; i < s.size(); i++) {
+        size_t j = i;
+        while (j < s.size() && s[j] == u'\\') j++;
+        const Inline* b = j > i && j < s.size()
+                              ? std::find_if(std::begin(kInline), std::end(kInline), [&](const Inline& x) { return x.code == s[j]; })
+                              : std::end(kInline);
+        std::string key = b != std::end(kInline) ? KeyOf(b->key) : std::string();
+        if (key.empty()) {
+            out += s[i];
+            continue;
+        }
+        out += Wide("(" + key + ")");
+        i = j;
+        changed = true;
+    }
+    if (!changed) return 0;
+    static std::map<std::u16string, uint32_t> guest;  // Magma keeps the pointers it is given
+    uint32_t& va = guest[out];
+    if (!va) {
+        va = mem::AllocSystem(uint32_t(out.size() + 1) * 2);
+        for (size_t i = 0; i <= out.size(); i++) W16(va + uint32_t(i) * 2, i < out.size() ? uint16_t(out[i]) : 0);
+    }
+    return va;
 }
 
 }  // namespace versus

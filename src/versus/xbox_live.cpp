@@ -10,6 +10,7 @@ using namespace kernel;
 
 namespace versus {
 uint32_t OptionsText(uint32_t section, uint32_t section2, uint32_t key);  // options_menu.cpp
+uint32_t KeyText(uint32_t text);                                          // prompts.cpp
 }  // namespace versus
 
 namespace {
@@ -132,6 +133,7 @@ X86_FUNC(sub_00157A90) {
         return;
     }
     __imp__sub_00157A90(ctx, base);
+    if (uint32_t text = versus::KeyText(ctx.eax)) ctx.eax = text;
 }
 
 X86_EXTERN_FUNC(__imp__sub_00192390);
