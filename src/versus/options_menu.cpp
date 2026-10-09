@@ -48,8 +48,11 @@ constexpr uint32_t kPage = 0x28;             // menu: its Magma page
 // (thiscall (?, event*), ret 8), both true when handled; the Game button's vtable
 constexpr uint32_t kBind = 0x193A20, kHandlerVtable = 0x338E48, kHandlerSlots = 8, kPressSlot = 4, kEventSlot = 6;
 constexpr uint32_t kHandlerTail = 0x3380E0;
-// B (event 0x81) as the stock pages take it: the back sound (the sound player's vtable +8, 2), then the menu popped
-constexpr uint32_t kBack = 0x81, kSoundPlayer = 0x3D8D78, kBackSound = 2, kPopMenu = 0x193E40;
+// B as P_Options takes it, in its menu's key slot 10 (thiscall (key, action, ?), ret 0xC, true when handled): on
+// B's release (IK_Joy2 0xC9, IST_Release 3) the menu is popped (cdecl, no arguments). Taken on the press (handler
+// event 0x81) instead, the release would pop the menu under it as well.
+constexpr uint32_t kKeySlot = 10, kJoyB = 0xC9, kRelease = 3, kPopMenu = 0x193E40;
+constexpr uint32_t kSoundPlayer = 0x3D8D78, kBackSound = 2;  // the sound player's vtable +8
 constexpr uint32_t kLeft = 0x25, kUp = 0x26, kRight = 0x27, kDown = 0x28;  // events: the directions' virtual keys
 constexpr uint32_t kSelectSound = 1;             // as a stock page's X press plays
 // a popup pushes over the page under it (cdecl (menu, 0, 1)), a page in its place (menu, 1, 1)
@@ -512,6 +515,25 @@ void MenuOpen(X86Context& __restrict ctx, uint8_t*) {
     ctx.esp += 4;
 }
 
+void ClosePopup(X86Context& ctx, uint32_t sound);
+void Sound(X86Context& ctx, uint32_t sound);
+
+// our menus' keys (thiscall menu (key, action, ?), ret 0xC): B goes back a page, as P_Options' does
+void MenuKey(X86Context& __restrict ctx, uint8_t*) {
+    uint32_t menu = ctx.ecx, key = R32(ctx.esp + 4), action = R32(ctx.esp + 8), handled = 0;
+    if (key == kJoyB && action == kRelease) {
+        if (R32(menu + kMenuKind) == 2) {
+            ClosePopup(ctx, kBackSound);
+        } else {
+            Sound(ctx, kBackSound);
+            CallGuest(ctx, kPopMenu, {});
+        }
+        handled = 1;
+    }
+    ctx.eax = handled;
+    ctx.esp += 16;
+}
+
 uint32_t MenuVtable() {
     static uint32_t vtable = 0;
     if (!vtable) {
@@ -519,6 +541,7 @@ uint32_t MenuVtable() {
         for (uint32_t i = 0; i < kMenuSlots; i++) W32(vtable + i * 4, R32(kMenuVtable + i * 4));
         W32(vtable + kOpenSlot * 4, dispatch::HostThunk(MenuOpen));
         W32(vtable + kLegendSlot * 4, kOptionsLegend);
+        W32(vtable + kKeySlot * 4, dispatch::HostThunk(MenuKey));
     }
     return vtable;
 }
@@ -645,19 +668,12 @@ bool PastGap(X86Context& ctx, int dir) {
     return true;
 }
 
-// an event on our lists (thiscall handler, ?, event*, ret 8): B goes back a page, Left / Right step a row, Up / Down
-// pass the blank rows; our buttons leave theirs to P_Options
+// an event on our lists (thiscall handler, ?, event*, ret 8): Left / Right step a row, Up / Down pass the blank rows;
+// our buttons leave theirs to P_Options
 void Event(X86Context& __restrict ctx, uint8_t*) {
     int kind = int(R32(ctx.ecx + 0x10));
     uint32_t event = R32(ctx.esp + 8), key = event ? R32(event) : 0, handled = 0;
-    if (kind == 5 && key == kBack) {
-        ClosePopup(ctx, kBackSound);
-        handled = 1;
-    } else if (kind >= 3 && key == kBack) {
-        Sound(ctx, kBackSound);
-        CallGuest(ctx, kPopMenu, {});
-        handled = 1;
-    } else if (kind == 4 && (key == kLeft || key == kRight)) {
+    if (kind == 4 && (key == kLeft || key == kRight)) {
         handled = Act(ctx, key == kLeft ? -1 : 1);
     } else if (kind == 4 && (key == kUp || key == kDown)) {
         handled = PastGap(ctx, key == kUp ? -1 : 1);
