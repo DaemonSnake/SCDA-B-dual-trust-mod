@@ -328,6 +328,29 @@ D3D12_STENCIL_OP StencilOp(uint32_t v) {
     }
 }
 
+// A small draw whose every float2 input lies in 0..1: sprites, HUD pieces, text, full screen passes. The console's
+// pixel centres sample such a quad from its first texel to half a texel short of its far edge; upscaled, the far
+// edge's last half texel is drawn too, and wrapped it blends in the opposite edge (the crosshair ticks' dark lines).
+// Clamped, it takes the edge texel instead, which a wrapped texture used once over 0..1 has there anyway.
+bool UnitTexcoords(const Assembled& a) {
+    constexpr float kLo = -1e-4f, kHi = 1.0001f;
+    if (!a.vertices.empty() || !a.vertex_count || a.vertex_count > 4096) return false;
+    bool any = false;
+    for (int r = 0; r < 16; r++) {
+        const VertexElement& e = a.elements[size_t(r)];
+        if (!(a.regs >> r & 1) || e.format != DXGI_FORMAT_R32G32_FLOAT) continue;
+        const VertexBuffer& vb = a.buffers[e.buffer];
+        if (!vb.src || !vb.stride || uint64_t(a.vertex_count) * vb.stride > vb.bytes) return false;
+        for (uint32_t v = 0; v < a.vertex_count; v++) {
+            float uv[2];
+            std::memcpy(uv, vb.src + size_t(v) * vb.stride + e.offset, sizeof(uv));
+            if (!(uv[0] >= kLo && uv[0] <= kHi && uv[1] >= kLo && uv[1] <= kHi)) return false;
+        }
+        any = true;
+    }
+    return any;
+}
+
 D3D12_TEXTURE_ADDRESS_MODE Address(uint32_t v) {
     switch (v) {
         case 2: return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
@@ -482,7 +505,7 @@ private:
     ID3D12Resource* BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& srv);
     bool tex_rt_[4] = {};  // stage samples a render target
     float tex_wide_[4] = {};  // host texels per console texel of a target read into a smaller one, 0 otherwise
-    uint32_t Samplers(const State& s, const TexInfo info[4]);
+    uint32_t Samplers(const State& s, const TexInfo info[4], bool clamp);
     // shaders by source hash: Register keeps the source, Shader finds the bytecode on disk or compiles it; with compile
     // false it only looks, and sets pending where the compiler is needed
     uint64_t Register(std::string src, const char* entry, const char* profile);
@@ -1774,7 +1797,7 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
     return tx.res.Get();
 }
 
-uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4]) {
+uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4], bool clamp) {
     D3D12_SAMPLER_DESC sd[4] = {};
     uint32_t aniso = app::Get().aniso;
     for (int i = 0; i < 4; i++) {
@@ -1791,8 +1814,10 @@ uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4]) {
             sd[i].Filter = D3D12_FILTER_ANISOTROPIC;
             sd[i].MaxAnisotropy = std::min<uint32_t>(an, 16);
         }
-        sd[i].AddressU = Address(t[kTssAddressU]);
-        sd[i].AddressV = Address(t[kTssAddressV]);
+        // clamp: UnitTexcoords
+        constexpr uint32_t kWrap = 1, kClamp = 3;
+        sd[i].AddressU = Address(clamp && t[kTssAddressU] == kWrap ? kClamp : t[kTssAddressU]);
+        sd[i].AddressV = Address(clamp && t[kTssAddressV] == kWrap ? kClamp : t[kTssAddressV]);
         sd[i].AddressW = Address(t[kTssAddressW]);
         sd[i].MipLODBias = Bits(t[kTssMipLodBias]);
         sd[i].MinLOD = float(t[kTssMaxMipLevel]);
@@ -2118,7 +2143,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         dev_->CreateShaderResourceView(res[i], &sv[i], Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     cl_->SetGraphicsRootDescriptorTable(2, Gpu(srv_heap_.Get(), slot, srv_inc_));
-    cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), Samplers(s, info), smp_inc_));
+    cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), Samplers(s, info, UnitTexcoords(a)), smp_inc_));
 
     // viewport covers the target, the guest viewport is in the shader; scissor clips to it
     float W = float(bound_rt_ ? bound_rt_->w : bound_ds_->w), H = float(bound_rt_ ? bound_rt_->h : bound_ds_->h);
