@@ -75,6 +75,12 @@ constexpr List kSectionList{"Options", "P_Options_RecompSections", "SectionList"
 // in P_Options_Game's on ours, where its option rows were: 21 high from y 176, down to the frame's bottom
 constexpr std::string_view kItem = "B_RecompItem";
 constexpr List kRowList{"Options", "P_Options_Recomp", "RecompList", kItem, "50 176", 10};
+constexpr int kRowListY = 176, kRowHeight = 21;
+// a RECOMP SETTINGS section's few rows sit in the middle of the frame under the title (y 84 to 405)
+constexpr int kFrameMiddle = 245;
+// an instance's place: its keyframes' (+0x18 begin, end; keyframe +0x18) and its widget's (+4) position frames
+// (vtable 0x361FC8, +0xE y, page units)
+constexpr uint32_t kKeyframes = 0x18, kKeyFrame = 0x18, kWidgetFrame = 0x04, kPositionFrame = 0x361FC8, kFrameY = 0x0E;
 // the popup over the rows: P_TeamsActionPopup's list at the map list popup's place (P_createMatchParamsPopup in
 // entry, whose B_OptionItem xboxlive has too), on a background as that one's
 constexpr List kChoiceList{"xboxlive", "P_Options_RecompPopup", "ChoiceList", "B_OptionItem", "50 267", 4};
@@ -379,6 +385,17 @@ int Heading(std::string_view name) {
     return -1;
 }
 
+void SetY(uint32_t inst, int y) {
+    auto set = [&](uint32_t frame) {
+        if (frame && R32(frame) == kPositionFrame) W16(frame + kFrameY, uint16_t(int16_t(y)));
+    };
+    uint32_t begin = R32(inst + kKeyframes), end = R32(inst + kKeyframes + 4);
+    if (begin && end >= begin && end - begin <= 4 * 64)
+        for (uint32_t it = begin; it < end; it += 4)
+            if (uint32_t key = R32(it)) set(R32(key + kKeyFrame));
+    if (uint32_t widget = R32(inst + kWidget)) set(R32(widget + kWidgetFrame));
+}
+
 uint32_t ListOf(X86Context& ctx, uint32_t page, std::string_view name) {
     ctx.ecx = page;
     uint32_t inst = page ? CallGuest(ctx, kFind, {Id(name)}) : 0;
@@ -463,6 +480,12 @@ void FillRows(X86Context& ctx, uint32_t menu) {
     if (!in_section) {
         g_rows.rows.push_back(&kGap);
         g_rows.rows.push_back(nullptr);
+    }
+    // one page serves them all: its list's place is set for each
+    ctx.ecx = page;
+    if (uint32_t inst = CallGuest(ctx, kFind, {Id(kRowList.list)})) {
+        int rows_shown = int(std::min<size_t>(g_rows.rows.size(), size_t(kRowList.rows)));
+        SetY(inst, in_section ? kFrameMiddle - rows_shown * kRowHeight / 2 : kRowListY);
     }
     for (const app::rows::Row* r : g_rows.rows) {
         ctx.ecx = list;

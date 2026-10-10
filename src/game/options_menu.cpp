@@ -92,8 +92,15 @@ constexpr uint32_t kListY = 0x12;
 constexpr int16_t kListTop = 116;
 // P_Video's own (options.mgm): before that page has been shown the list's y is still 0, so it is not read back
 constexpr int16_t kStockListY = 205;
-// the long pages (MOUSE AND KEYBOARD, CONTROLLER) start under the titles; the RECOMP SETTINGS sections keep the stock place
-int16_t ListTop() { return g_take.mode >= 1 ? kListTop : kStockListY; }
+constexpr int16_t kRowHeight = 20;
+// the long pages (MOUSE AND KEYBOARD, CONTROLLER) start under the titles; a RECOMP SETTINGS section sits in the middle
+// of the room under them, which the stock place is for its few rows
+int16_t ListTop() {
+    if (g_take.mode >= 1) return kListTop;
+    if (g_take.rows.empty()) return kStockListY;
+    size_t rows = std::min(g_take.rows.size(), kRowsMax);
+    return int16_t(kListTop + int(kRowsMax - rows) * kRowHeight / 2);
+}
 uint8_t g_validate[2] = {};
 bool g_validate_saved = false, g_restore = false;
 // P_Video's upper title (L_Text, "OPTIONS"): RECOMP SETTINGS shows its name there and the section's below
@@ -262,6 +269,7 @@ void Fill(X86Context& ctx, int select = 0) {
     for (const app::rows::Row* r : g_take.rows) CallGuest(ctx, kAddItem, {Wide16(Text(r ? r->label : "RESTORE DEFAULTS")), 0});
     Refresh(ctx);
     G<uint8_t>(list + kRowsShown) = uint8_t(std::min<size_t>(g_take.rows.size(), kRowsMax));
+    W16(list + kListY, uint16_t(ListTop()));
     ctx.ecx = list;
     CallGuest(ctx, kLayout, {});
     CallGuest(ctx, kSelect, {uint32_t(select), 0, 1});
