@@ -13,6 +13,7 @@ struct X86Context;
 namespace app {
 
 inline constexpr int kVersion = 1;  // release number, the GitHub release tag is V<number>
+inline constexpr uint32_t kFpsCapRefresh = 1;  // fps_cap: just under the monitor's refresh rate
 
 enum class DisplayMode : uint32_t { Fullscreen, Windowed, Borderless };
 
@@ -29,7 +30,7 @@ struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
     uint32_t render_percent = 100;   // of the output height
-    uint32_t fps_cap = 60;           // 0 unlimited
+    uint32_t fps_cap = 60;           // 0 unlimited, kFpsCapRefresh the monitor's refresh rate
     uint32_t fov = 75;               // horizontal degrees on a 4:3 frame, 75 is the game's
     bool fps_counter = false;
     bool vsync = true;

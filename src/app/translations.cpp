@@ -57,6 +57,7 @@ constexpr Entry kEntries[] = {
     {"ON", {u"Oui", u"Ein", u"Sì", u"Sí"}},
     {"OFF", {u"Non", u"Aus", u"No", u"No"}},
     {"UNLIMITED", {u"Illimité", u"Unbegrenzt", u"Illimitato", u"Ilimitado"}},
+    {"REFRESH RATE", {u"Fréquence de rafraîchissement", u"Bildwiederholfrequenz", u"Frequenza di aggiornamento", u"Frecuencia de actualización"}},
     {"AUTOMATIC", {u"Automatique", u"Automatisch", u"Automatico", u"Automático"}},
     {"(DEFAULT)", {u"(par défaut)", u"(Standard)", u"(predefinito)", u"(por defecto)"}},
     {"(RESTART)", {u"(redémarrage)", u"(Neustart)", u"(riavvio)", u"(reinicio)"}},
