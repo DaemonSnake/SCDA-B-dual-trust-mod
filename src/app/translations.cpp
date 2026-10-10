@@ -89,7 +89,6 @@ constexpr Entry kEntries[] = {
     {"WHISTLE / COOP ACTION", {u"Siffler / action coop.", u"Pfeifen / Koop-Aktion", u"Fischia / Azione cooperativa", u"Silbar / Acción coop."}},
     {"COOP ACTION", {u"Action coopérative", u"Koop-Aktion", u"Azione cooperativa", u"Acción cooperativa"}},
     {"QUICK INVENTORY", {u"Inventaire rapide", u"Schnellinventar", u"Inventario rapido", u"Inventario rápido"}},
-    {"QUICK INVENTORY / SWITCH ATTACHMENT", {u"Inventaire rapide / changer d'accessoire", u"Schnellinventar / Modul wechseln", u"Inventario rapido / Cambia modulo", u"Inventario rápido / Cambiar accesorio"}},
     {"OPSAT", {u"Montre-terminal", u"OPSAT", u"OPSAT", u"ENSAT"}},
     {"EEV VISION / ZOOM / SNIPER", {u"Vision EEV / zoom / sniper", u"EEV / Zoom / Scharfschütze", u"EEV / Zoom / Mirino", u"Visor VE / Zoom / Francotirador"}},
     {"NIGHT VISION", {u"Vision nocturne", u"Nachtsicht", u"Visore notturno", u"Visor nocturno"}},
