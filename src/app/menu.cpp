@@ -274,9 +274,11 @@ enum RowId {
 using rows::Kind;
 using rows::Row;
 
+constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
+
 // versus has none of the renderer features of story
 bool VersusHides(int id) {
-    if (std::string_view(IMAGE_XBE) != "sc4_adv.xbe") return false;
+    if (!kVersus) return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kHqShadows || id == kAmbientOcclusion ||
            id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate || id == kInputDelay;
 }
@@ -306,7 +308,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kLanguage, "LANGUAGE"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
     {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
-    {Kind::Text, kJoinIp, "COOP JOIN IP"},
+    {Kind::Text, kJoinIp, kVersus ? "VERSUS JOIN IP" : "COOP JOIN IP"},
     {Kind::Value, kMicrophone, "MICROPHONE"},
     {Kind::Value, kPushToTalk, "PUSH TO TALK"},
     {Kind::Heading, -1, "INPUT DEVICES"},
