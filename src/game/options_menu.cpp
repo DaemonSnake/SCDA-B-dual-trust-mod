@@ -59,7 +59,7 @@ constexpr uint32_t kVisible = 0x18, kFlags = 0x4C;
 constexpr uint32_t kLeft = 0x25, kRight = 0x27, kEscape = 0x1B;
 const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Controller"};
 constexpr int kCaptionCount = int(std::size(kCaptions));
-const std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
+const std::string_view kSections[] = {"DISPLAY", "GRAPHICS", "GENERAL"};
 
 // as the game shows it: in the game's language, what has no translation (numbers, units) in title case
 std::u16string Text(std::string_view text) { return app::Translate(text, app::TitleCase); }

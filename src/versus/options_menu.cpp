@@ -80,7 +80,7 @@ constexpr List kRowList{"Options", "P_Options_Recomp", "RecompList", kItem, "50 
 constexpr List kChoiceList{"xboxlive", "P_Options_RecompPopup", "ChoiceList", "B_OptionItem", "50 267", 4};
 constexpr std::string_view kPopupBackground[] = {"246", "404"};  // top, bottom
 // the RECOMP SETTINGS sections: F10 headings, as story's
-constexpr std::string_view kSections[] = {"GENERAL", "DISPLAY", "GRAPHICS"};
+constexpr std::string_view kSections[] = {"DISPLAY", "GRAPHICS", "GENERAL"};
 // our menus keep their page (0 sections, 1 rows, 2 popup), the button's mode and the section heading's row past the
 // base menu's fields (P_Options_Game's own start at +0xC8)
 constexpr uint32_t kMenuKind = 0x100, kMenuMode = 0x104, kMenuSection = 0x108;
