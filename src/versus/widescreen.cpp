@@ -128,12 +128,14 @@ bool Background(X86Context& ctx, float* c, float w, float h) {
 }  // namespace
 
 // FPerspectiveMatrix(fov x, fov y, x scale, y scale, near, far), thiscall ret 0x18: M[0][0] = x scale / tan(fov x).
-// The camera passes its viewport's 640 / 480 as y scale; a wider frame takes that share of the x scale.
+// The camera passes its viewport's 640 / 480 as y scale; a wider frame takes that share of the x scale. The fov
+// setting widens only the game's own 75 degree view (half angles here): scopes and binoculars zoom to theirs.
 X86_EXTERN_FUNC(__imp__sub_0011B720);
 X86_FUNC(sub_0011B720) {
+    constexpr float kDefaultHalf = 75.0f * 3.14159265f / 360.0f;
     float& x = G<float>(ctx.esp + 0xC);
     if (std::fabs(G<float>(ctx.esp + 0x10) - 4.0f / 3.0f) < 0.01f) x *= app::Narrow();
-    if (float s = app::FovScale(); s != 1.0f)
+    if (float s = app::FovScale(); s != 1.0f && std::fabs(G<float>(ctx.esp + 4) - kDefaultHalf) < 0.001f)
         for (uint32_t arg : {4u, 8u}) G<float>(ctx.esp + arg) = std::atan(std::tan(G<float>(ctx.esp + arg)) * s);
     __imp__sub_0011B720(ctx, base);
 }
