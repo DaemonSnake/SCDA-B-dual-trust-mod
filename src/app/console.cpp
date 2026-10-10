@@ -2,12 +2,14 @@
 // game's own console would send it, and what the command prints comes back into the log.
 #include <algorithm>
 #include <atomic>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include <imgui.h>
 
 #include "app/app.h"
+#include "app/panel_colors.h"
 #include "core/input.h"
 #include "game/console.h"
 
@@ -16,8 +18,6 @@ namespace app {
 namespace {
 
 constexpr size_t kMaxLog = 500;
-constexpr ImVec4 kBackground{0.03f, 0.03f, 0.03f, 0.88f};
-constexpr ImVec4 kEcho{0.82f, 0.28f, 0.22f, 1.0f};
 
 std::atomic<bool> g_open{false};
 bool g_focus = false;
@@ -72,7 +72,7 @@ void DrawConsole() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->Pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y * 0.4f), ImGuiCond_Always);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, kBackground);
+    for (const auto& [col, color] : kPanelColors) ImGui::PushStyleColor(col, color);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
@@ -80,7 +80,7 @@ void DrawConsole() {
         ImGui::BeginChild("##log", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
         for (const std::string& line : g_log) {
             bool echo = line.rfind("> ", 0) == 0;
-            if (echo) ImGui::PushStyleColor(ImGuiCol_Text, kEcho);
+            if (echo) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
             ImGui::TextUnformatted(line.c_str());
             if (echo) ImGui::PopStyleColor();
         }
@@ -99,7 +99,7 @@ void DrawConsole() {
     }
     ImGui::End();
     ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(int(std::size(kPanelColors)));
 }
 
 }  // namespace app
