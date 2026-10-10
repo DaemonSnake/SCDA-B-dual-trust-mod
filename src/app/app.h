@@ -49,7 +49,7 @@ struct Settings {
     bool skip_intros = false;        // logos video and rating screen at boot
     std::string language = "int";    // one of kLanguages
     uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
-    uint32_t coop_input_delay_floor = 0;   // ms, the game's 50
+    uint32_t coop_input_delay_floor = 20;  // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
     std::string microphone;                // recording device by name, empty the system default
     bool push_to_talk = false;             // voice only while the push to talk key is held

@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cwchar>
 #include <random>
 
 #include "app/app.h"
@@ -96,6 +97,38 @@ std::mutex g_nat_lock;
 std::unordered_map<uint64_t, uint16_t> g_nat;  // (peer address, our port) -> the port its packets come from
 std::vector<uint32_t> g_public;                // public addresses packets came from, the latest last
 constexpr size_t kMaxPublic = 8;
+
+// Co-op settings beside the game's PRUDP traffic (UDP 1000): a host sends its tick rate and input delay floor to the
+// peers the game talks to there, on the same socket, and a client takes them out before the game sees them
+constexpr uint16_t kPrudpPort = 1000;
+constexpr char kCoopMagic[4] = {'S', 'C', 'D', 'C'};
+constexpr uint8_t kCoopVersion = 1;
+constexpr int kCoopPacket = 16;            // magic, version, 3 spare, rate, floor
+constexpr uint64_t kCoopPeerHoldMs = 5000;  // a peer the game sent PRUDP to this recently is sent ours
+constexpr uint64_t kCoopSendMs = 250;
+struct CoopPeer {
+    uint32_t sock;
+    uint16_t port;
+    uint64_t at;
+};
+std::mutex g_coop_lock;
+std::unordered_map<uint32_t, CoopPeer> g_coop_peers;  // address -> where the game last sent it PRUDP
+bool (*g_coop_host)(uint32_t& rate, uint32_t& floor) = nullptr;
+std::atomic<uint64_t> g_coop_values{0};  // the host's: 1 << 63 | rate << 32 | floor, 0 for none
+
+void StoreCoop(uint32_t rate, uint32_t floor) { g_coop_values = 1ull << 63 | uint64_t(rate & 0x7FFFFFFF) << 32 | floor; }
+
+// a host's settings packet: stored, and kept from the game
+bool TakeCoopPacket(const uint8_t* data, int len) {
+    if (len != kCoopPacket || std::memcmp(data, kCoopMagic, 4) || data[4] != kCoopVersion) return false;
+    uint32_t rate, floor;
+    std::memcpy(&rate, data + 8, 4);
+    std::memcpy(&floor, data + 12, 4);
+    uint64_t before = g_coop_values;
+    StoreCoop(rate, floor);
+    if (g_coop_values != before) LOGI("xnet: the host's co-op tick rate %u, input delay floor %u ms", rate, floor);
+    return true;
+}
 
 std::string Ip(uint32_t a) {
     char s[32];
@@ -222,8 +255,8 @@ int Recv(uint32_t sock, SOCKET s, const std::vector<Span>& spans, uint32_t from,
             if (err != WSAEWOULDBLOCK) LOG_FIRST(20, "xnet: recv %X failed (%d)", sock, err);
             return -1;
         }
-        // the voice link shares the game's VDP sockets; its packets never reach the game
-        if (!audio::TakeVoiceLinkPacket(src.sin_addr.s_addr, buf.data(), n)) break;
+        // the voice link shares the game's VDP sockets and the co-op settings its PRUDP one; theirs never reach the game
+        if (!audio::TakeVoiceLinkPacket(src.sin_addr.s_addr, buf.data(), n) && !TakeCoopPacket(buf.data(), n)) break;
     }
     int done = 0;
     for (const Span& sp : spans) {
@@ -285,6 +318,10 @@ int SendOnce(SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
 
 int Send(uint32_t sock, SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
     int n = SendOnce(s, data, len, to);
+    if (n >= 0 && to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).port == htons(kPrudpPort)) {
+        std::lock_guard<std::mutex> lock(g_coop_lock);
+        g_coop_peers[to->sin_addr.s_addr] = {sock, to->sin_port, GetTickCount64()};
+    }
     if (n < 0) LOG_FIRST(20, "xnet: send %X failed (%d)", sock, WSAGetLastError());
     else if (to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).vdp) {
         {
@@ -325,8 +362,39 @@ bool TryComplete(PendingRecv& p) {
     return true;
 }
 
+// the host's settings to its PRUDP peers, every kCoopSendMs while the game says it hosts
+void SendCoop() {
+    static uint64_t last = 0;
+    uint64_t now = GetTickCount64();
+    uint32_t rate, floor;
+    if (now - last < kCoopSendMs || !g_coop_host || !g_coop_host(rate, floor)) return;
+    last = now;
+    uint8_t packet[kCoopPacket] = {};
+    std::memcpy(packet, kCoopMagic, 4);
+    packet[4] = kCoopVersion;
+    std::memcpy(packet + 8, &rate, 4);
+    std::memcpy(packet + 12, &floor, 4);
+    std::vector<std::pair<uint32_t, CoopPeer>> peers;
+    {
+        std::lock_guard<std::mutex> lock(g_coop_lock);
+        for (const auto& [address, peer] : g_coop_peers)
+            if (now - peer.at < kCoopPeerHoldMs) peers.emplace_back(address, peer);
+    }
+    for (const auto& [address, peer] : peers) {
+        Socket k = Find(peer.sock);
+        if (k.s == INVALID_SOCKET) continue;
+        sockaddr_in to{};
+        to.sin_family = AF_INET;
+        to.sin_port = peer.port;
+        to.sin_addr.s_addr = address;
+        SendOnce(k.s, packet, kCoopPacket, &to);
+        LOG_FIRST(4, "xnet: our co-op tick rate %u, input delay floor %u ms to %s", rate, floor, Ip(address).c_str());
+    }
+}
+
 void Pump() {
     for (;;) {
+        SendCoop();
         fd_set set;
         FD_ZERO(&set);
         {
@@ -393,6 +461,23 @@ bool SendVoiceLink(uint32_t address, const void* data, int len) {
     to.sin_port = route.port;
     to.sin_addr.s_addr = address;
     return SendOnce(k.s, static_cast<const uint8_t*>(data), len, &to) >= 0;
+}
+
+void SetCoopHost(bool (*host)(uint32_t& rate, uint32_t& floor)) { g_coop_host = host; }
+
+bool CoopHostValues(uint32_t& rate, uint32_t& floor) {
+    // a relaunch brings the values its predecessor had (--coop-host=rate,floor)
+    static std::once_flag carried;
+    std::call_once(carried, [] {
+        const wchar_t* p = std::wcsstr(GetCommandLineW(), L"--coop-host=");
+        unsigned r = 0, f = 0;
+        if (p && std::swscanf(p + 12, L"%u,%u", &r, &f) == 2 && !g_coop_values) StoreCoop(r, f);
+    });
+    uint64_t v = g_coop_values;
+    if (!v) return false;
+    rate = uint32_t(v >> 32) & 0x7FFFFFFF;
+    floor = uint32_t(v);
+    return true;
 }
 
 void CloseSockets() {

@@ -26,6 +26,7 @@ uint32_t KernelThunkAddress(uint32_t ordinal);
 
 namespace xnet {
 void CloseSockets();  // xdk/xnet.cpp
+bool CoopHostValues(uint32_t& rate, uint32_t& floor);
 }
 
 namespace kernel {
@@ -178,6 +179,10 @@ void Relaunch(const char* exe) {
     size_t args = line[0] == L'"' ? line.find(L'"', 1) + 1 : line.find(L' ');
     line = L"\"" + path + L"\"" + (args == std::wstring::npos ? L"" : line.substr(args));
     if (line.find(L"--relaunched") == std::wstring::npos) line += L" --relaunched";  // no boot splash again
+    // a co-op host's tick rate and input delay floor, for the next session init (game/coop_sync.cpp)
+    if (size_t at = line.find(L" --coop-host="); at != std::wstring::npos) line.erase(at, line.find(L' ', at + 1) - at);
+    if (uint32_t rate, floor; xnet::CoopHostValues(rate, floor))
+        line += L" --coop-host=" + std::to_wstring(rate) + L"," + std::to_wstring(floor);
     // this process lives on through the handover below: its ports must be free for the new one (co-op binds them again)
     xnet::CloseSockets();
     STARTUPINFOW si{sizeof(si)};
