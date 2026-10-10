@@ -42,8 +42,10 @@ bool Gameplay(uint32_t state) {
     return std::find(std::begin(kOther), std::end(kOther), state) == std::end(kOther);
 }
 
-// EPickLockSystem is the lock, EOscilloscope the hacking device; their parts, and the big keypad with its keys and
-// digits, are actors with these static meshes
+// EPickLockSystem is the lock, EOscilloscope the hacking device; their parts, the big keypad with its keys, digits
+// and door dock (the plate with the light, when the keypad opens a door), and the close-up bomb detonator
+// (EDetonator's high res copy, its laser, wires and digits; the low res one stands in the level) are actors with
+// these static meshes
 bool Model(uint32_t actor) {
     static constexpr uint32_t kParts[] = {
         unreal::Name("SCX_LP_Barrel"), unreal::Name("SCX_LP_Case"), unreal::Name("SCX_LP_PickDown"),
@@ -53,6 +55,7 @@ bool Model(uint32_t actor) {
         unreal::Name("SCX_LP_PinUp_1"), unreal::Name("SCX_LP_PinUp_2"), unreal::Name("SCX_LP_PinUp_3"),
         unreal::Name("SCX_LP_PinUp_4"), unreal::Name("SCX_LP_PinUp_5"), unreal::Name("SCX_LP_PinUp_6"),
         unreal::Name("SCX_KeyPad_B"), unreal::Name("SCX_keypad_denied"), unreal::Name("SCX_keypad_granted"),
+        unreal::Name("SCX_KeyPad_Dock_Prm_B"),
         unreal::Name("SCX_KeyPad_0_B"), unreal::Name("SCX_KeyPad_1_B"), unreal::Name("SCX_KeyPad_2_B"),
         unreal::Name("SCX_KeyPad_3_B"), unreal::Name("SCX_KeyPad_4_B"), unreal::Name("SCX_KeyPad_5_B"),
         unreal::Name("SCX_KeyPad_6_B"), unreal::Name("SCX_KeyPad_7_B"), unreal::Name("SCX_KeyPad_8_B"),
@@ -67,6 +70,17 @@ bool Model(uint32_t actor) {
         unreal::Name("SCX_osc_time"), unreal::Name("SCX_osc_time_green"), unreal::Name("SCX_osc_time_red"),
         unreal::Name("SCX_osc_time_state"), unreal::Name("SCX_osc_wave"), unreal::Name("SCX_osc_wave_blue"),
         unreal::Name("SCX_osc_wave_green1"), unreal::Name("SCX_osc_wave_green2"), unreal::Name("SCX_osc_wave_red"),
+        unreal::Name("detnr_detonator_NYC_GCS"), unreal::Name("detnr_hirez"), unreal::Name("detnr_laser_high_GCS"),
+        unreal::Name("detnr_solid_wire_01_GCS"), unreal::Name("detnr_solid_wire_02_GCS"),
+        unreal::Name("detnr_solid_wire_03_GCS"), unreal::Name("detnr_solid_wire_04_GCS"),
+        unreal::Name("detnr_cut_wire_01_GCS"), unreal::Name("detnr_cut_wire_02_GCS"),
+        unreal::Name("detnr_cut_wire_03_GCS"), unreal::Name("detnr_cut_wire_04_GCS"),
+        unreal::Name("detnr_LCD_digit_00_GCS"), unreal::Name("detnr_LCD_digit_01_GCS"),
+        unreal::Name("detnr_LCD_digit_02_GCS"), unreal::Name("detnr_LCD_digit_03_GCS"),
+        unreal::Name("detnr_LCD_digit_04_GCS"), unreal::Name("detnr_LCD_digit_05_GCS"),
+        unreal::Name("detnr_LCD_digit_06_GCS"), unreal::Name("detnr_LCD_digit_07_GCS"),
+        unreal::Name("detnr_LCD_digit_08_GCS"), unreal::Name("detnr_LCD_digit_09_GCS"),
+        unreal::Name("detnr_LCD_column_GCS"),
     };
     uint32_t mesh = unreal::NameOf(R32(actor + kStaticMesh));
     return unreal::IsA(actor, unreal::Name("EPickLockSystem")) || unreal::IsA(actor, unreal::Name("EOscilloscope")) ||
