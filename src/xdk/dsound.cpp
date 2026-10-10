@@ -51,6 +51,8 @@ struct Voice {
     bool link_voice = false;  // the game's speaker copy of a talker's voice: silent while the voice link plays it
     bool is3d = false;
     float p[3] = {}, min_dist = 1, max_dist = 1e9f;
+    float lf = 1, hf = 1;  // I3DL2 direct path: lows and highs (I3DL2Source)
+    float lp[2] = {};      // its low pass, per channel
     // ADPCM block cache
     int64_t block = -1;
     int16_t decoded[65 * 8];
@@ -71,6 +73,9 @@ thread_local std::vector<Done> t_flushed;  // run by the STREAM call that flushe
 std::atomic<int64_t> g_pumped{0};          // the last DirectSoundDoWork, steady ms
 bool g_started = false;
 uint32_t g_ds = 0;
+
+// the crossover between I3DL2's lows and highs, a one pole low pass at 1.5 kHz on the 48 kHz mix: 1 - e^(-2 pi 1500 / 48000)
+constexpr float kLowPass = 0.178f;
 
 float Db(int32_t hundredths) { return hundredths <= -10000 ? 0.0f : std::pow(10.0f, hundredths / 2000.0f); }
 
@@ -219,8 +224,15 @@ void Render(float* out, uint32_t frames) {
                 b1 = Sample(v, v.data, g, 1);
             }
             float t = float(v.pos - f);
-            out[i * 2] += (a + (a1 - a) * t) * l;
-            out[i * 2 + 1] += (b + (b1 - b) * t) * r;
+            float x0 = a + (a1 - a) * t, x1 = b + (b1 - b) * t;
+            if (v.lf != 1 || v.hf != 1) {
+                v.lp[0] += kLowPass * (x0 - v.lp[0]);
+                v.lp[1] += kLowPass * (x1 - v.lp[1]);
+                x0 = v.lp[0] * v.lf + (x0 - v.lp[0]) * v.hf;
+                x1 = v.lp[1] * v.lf + (x1 - v.lp[1]) * v.hf;
+            }
+            out[i * 2] += x0 * l;
+            out[i * 2 + 1] += x1 * r;
             v.pos += step;
         }
     }
@@ -316,6 +328,19 @@ float F32(uint32_t v) {
     float f;
     std::memcpy(&f, &v, 4);
     return f;
+}
+
+// DSI3DL2BUFFER: lDirect, lDirectHF, lRoom, lRoomHF (mB), flRoomRolloffFactor, Obstruction {lHFLevel, flLFRatio},
+// Occlusion {lHFLevel, flLFRatio}. Only the direct path (no room reverb here), as I3DL2 levels it: obstruction and
+// occlusion take lHFLevel off the highs and lHFLevel times flLFRatio off the lows. The game's sound occluders
+// (closed doors, walls) come this way: muffled and quieter.
+void I3DL2Source(Voice& v, uint32_t src) {
+    if (!src) return;
+    int32_t direct = int32_t(R32(src)), direct_hf = int32_t(R32(src + 4));
+    int32_t obstruction = int32_t(R32(src + 20)), occlusion = int32_t(R32(src + 28));
+    float obstruction_lf = F32(R32(src + 24)), occlusion_lf = F32(R32(src + 32));
+    v.lf = Db(int32_t(float(direct) + float(obstruction) * obstruction_lf + float(occlusion) * occlusion_lf));
+    v.hf = Db(direct + direct_hf + obstruction + occlusion);
 }
 
 }  // namespace
@@ -512,7 +537,10 @@ BUFFER(SetPosition, 5) {
     return 0;
 }
 BUFFER(SetVelocity, 5) { return 0; }
-BUFFER(SetI3DL2Source, 3) { return 0; }
+BUFFER(SetI3DL2Source, 3) {
+    I3DL2Source(v, a[1]);
+    return 0;
+}
 
 namespace dsound {
 
@@ -658,4 +686,7 @@ STREAM(SetPosition, 5) {
     return 0;
 }
 STREAM(SetVelocity, 5) { return 0; }
-STREAM(SetI3DL2Source, 3) { return 0; }
+STREAM(SetI3DL2Source, 3) {
+    I3DL2Source(v, a[1]);
+    return 0;
+}
