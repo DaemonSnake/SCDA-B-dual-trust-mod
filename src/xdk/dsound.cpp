@@ -39,6 +39,7 @@ struct Voice {
     uint32_t rate = 48000;
     // buffer
     uint32_t data = 0, bytes = 0, loop_start = 0, loop_len = 0;
+    uint32_t owned = 0;  // the buffer's own memory, made with it: freed by SetBufferData and Release
     bool playing = false, looping = false, paused = false;
     double pos = 0;  // frames
     uint32_t freq = 0;
@@ -304,7 +305,7 @@ uint32_t NewBuffer(uint32_t desc, uint32_t out) {
     MixBins(v, R32(desc + 16));
     v.is3d = flags & 0x10;
     if (bytes) {
-        v.data = mem::AllocContiguous(bytes, 0, 0xFFFFFFFF, 4);
+        v.data = v.owned = mem::AllocContiguous(bytes, 0, 0xFFFFFFFF, 4);
         v.bytes = bytes;
     }
     W32(out, obj);
@@ -420,6 +421,7 @@ HLE_STDCALL(IDirectSound_CreateSoundBuffer, 4) { return NewBuffer(a[1], a[2]); }
 
 BUFFER(Release, 1) {
     if (--v.refs > 0) return uint32_t(v.refs);
+    if (v.owned) mem::FreeContiguous(v.owned);
     uint32_t obj = v.obj;
     g_voices.erase(obj);
     mem::FreeSystem(obj);
@@ -427,6 +429,11 @@ BUFFER(Release, 1) {
 }
 BUFFER(Unlock, 5) { return 0; }
 BUFFER(SetBufferData, 3) {
+    // versus makes each sound's buffer at the sound's size, then hands it the sound's own data
+    if (v.owned != a[1]) {
+        if (v.owned) mem::FreeContiguous(v.owned);
+        v.owned = 0;
+    }
     v.data = a[1];
     v.bytes = a[2];
     v.pos = 0;
