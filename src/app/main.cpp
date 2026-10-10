@@ -193,7 +193,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SetForegroundWindow(hwnd);
             return 0;
         case WM_SYSKEYDOWN:
-            if (HostKey(wp, lp)) return 0;
+            // F10 comes this way on its own; with Alt held the key is Windows' (Alt+F4 closes, whatever is bound)
+            if (!(lp & (1 << 29)) && HostKey(wp, lp)) return 0;
             break;
         case WM_CLOSE:
             DestroyWindow(hwnd);
