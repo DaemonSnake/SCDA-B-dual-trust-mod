@@ -208,7 +208,7 @@ void Relaunch(const char* exe) {
 }
 
 void Shutdown(int code) {
-    LOGI("shutdown (%d)", code);
+    LOGR("Exit (%d)", code);
     logx::Flush();
     std::_Exit(code);
 }

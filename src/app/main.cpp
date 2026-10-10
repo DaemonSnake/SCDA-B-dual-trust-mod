@@ -254,8 +254,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     std::signal(SIGABRT, [](int) { app::WriteCrashDump(nullptr); });
     timeBeginPeriod(1);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    logx::Init((app::ExeDir() / "logs").string(), "scda");
+    // one log a session: a relaunch (front end to mission, story to versus) carries on its predecessor's
+    bool relaunched = std::wcsstr(GetCommandLineW(), L"--relaunched") != nullptr;
+    std::string log = app::Instance() > 1 ? "scda-" + std::to_string(app::Instance()) : "scda";
+    logx::Init((app::ExeDir() / "logs").string(), log, relaunched);
     app::Load();
+    if (relaunched && !logx::kVerbose) {
+        wchar_t exe[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        LOGR("Relaunched: %ls", std::filesystem::path(exe).filename().c_str());
+    } else {
+        app::LogSystem();
+    }
 
     app::GameFiles game;
     if (!app::FindGame(game)) return 1;

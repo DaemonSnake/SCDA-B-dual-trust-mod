@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 #include <utility>
 
 #include <toml++/toml.hpp>
@@ -108,7 +109,9 @@ void Load() {
             if (auto v = value.value<std::string>()) s.pad_buttons[std::string(id.str())] = *v;
 }
 
-void Save() {
+namespace {
+
+toml::table Table() {
     const Settings& s = Get();
     toml::table t{{"display_mode", kModes[uint32_t(s.display_mode)]},
                   {"width", int64_t(s.width)},
@@ -146,8 +149,23 @@ void Save() {
     toml::table pads;
     for (const auto& [id, value] : s.pad_buttons) pads.insert(id, value);
     t.insert("controller", pads);
+    return t;
+}
+
+}  // namespace
+
+void Save() {
     std::ofstream f(File());
-    f << t << "\n";
+    f << Table() << "\n";
+}
+
+void LogSettings() {
+    std::ostringstream text;
+    text << Table();
+    std::istringstream lines(text.str());
+    LOGR("Settings:");
+    for (std::string line; std::getline(lines, line);)
+        if (!line.empty()) LOGR("  %s", line.c_str());
 }
 
 const std::string& BootLanguage() {

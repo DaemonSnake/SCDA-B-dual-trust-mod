@@ -61,6 +61,8 @@ struct Settings {
 Settings& Get();
 void Load();
 void Save();
+void LogSettings();  // every setting into the log, as scda.toml has them
+void LogSystem();    // the machine and the settings into the log, at a run's start
 void ApplyDisplay();  // any thread
 // the language setting as this run started: the console's language setting, which the game reads at boot
 const std::string& BootLanguage();
