@@ -260,9 +260,12 @@ void StepPlayer(Settings& s, int player, int step) {
         if (SetPlayer(s, player, choices[i = StepIndex(i, step, count)])) return;
 }
 
+std::atomic<uint32_t> g_revision{0};
+
 void Changed(bool display) {
     if (display) ApplyDisplay();
     Save();
+    g_revision++;
 }
 
 enum RowId {
@@ -872,6 +875,8 @@ void DrawPanel() {
 }  // namespace
 
 bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
+
+uint32_t SettingsRevision() { return g_revision; }
 
 bool Capturing() { return g_capture >= 0; }
 

@@ -708,6 +708,15 @@ uint32_t Handler(int kind) {
 
 namespace versus {
 
+// mouse.cpp, every update with the top page: a change from F10 shows at once on our rows page
+void OptionsTick(X86Context& ctx, uint32_t top) {
+    static uint32_t revision = 0;
+    uint32_t r = app::SettingsRevision();
+    if (r == revision || !top || R32(top + 4) != Id(kRowList.page) || !g_rows.list) return;
+    revision = r;
+    Values(ctx);
+}
+
 // xbox_live.cpp's text lookup: our buttons' labels, in capitals as the stock rows, and our pages' titles until they
 // open; 0 for the rest
 uint32_t OptionsText(uint32_t section, uint32_t section2, uint32_t key) {

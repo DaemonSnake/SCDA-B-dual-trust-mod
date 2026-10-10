@@ -20,6 +20,9 @@ using namespace kernel;
 namespace game {
 void NameEntryTick(X86Context& ctx, uint32_t top);  // name_entry.cpp
 }
+namespace versus {
+void OptionsTick(X86Context& ctx, uint32_t top);  // options_menu.cpp
+}
 
 namespace {
 
@@ -344,6 +347,7 @@ X86_FUNC(sub_00188E80) {
     bool menu = Menu(u);
     input::SetMenu(menu);
     game::NameEntryTick(ctx, g_page);
+    versus::OptionsTick(ctx, g_page);
     for (int n = input::TakeMenuWheel(); menu && n; n += n > 0 ? -1 : 1) Tap(u, n > 0 ? kKeyUp : kKeyDown);
     // set and cleared on the key's edges only, as the button command does: Y's own presses keep it otherwise
     bool reload = input::EventKeyHeld(input::KeyEvent::Reload) && !menu;

@@ -106,6 +106,7 @@ void* MenuCursor();
 // options menu, drawn by the renderer each frame with the lock held
 std::recursive_mutex& UiLock();
 bool MenuOpen();
+uint32_t SettingsRevision();  // counts saved setting changes, from F10 or the in-game pages
 bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
 void DrawUi();

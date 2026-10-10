@@ -547,6 +547,12 @@ void MenuTick(X86Context& ctx) {
         LOGI("options menu: stock rows back");
         return;
     }
+    // a change from F10 shows at once
+    static uint32_t revision = 0;
+    if (uint32_t r = app::SettingsRevision(); r != revision && g_capture < 0 && g_popup_row < 0) {
+        revision = r;
+        g_take.refill = true;
+    }
     if (g_take.refill) {
         g_take.refill = false;
         Fill(ctx, std::max(0, int(int16_t(R16(g_take.list + kSelection)))));
