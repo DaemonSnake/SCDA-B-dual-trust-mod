@@ -23,10 +23,75 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 
 ### Graphics
 - **Multisample Antialiasing (MSAA)** - Enables 2x, 4x or 8x MSAA to smooth jagged edges while preserving a sharp image. MSAA does not smooth alpha-tested edges such as fences and foliage.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/150a11f4-c437-4014-9ee2-b7ee1857713b"></td>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/d84194f6-5175-4953-8390-df206cc6cedc"></td>
+    </tr>
+    <tr>
+      <td align="center">Off</td>
+      <td align="center">MSAA 8x</td>
+    </tr>
+  </table>
+</div>
+
 - **Subpixel Morphological Antialiasing (SMAA)** - Enables SMAA to smooth jagged edges across the whole frame with a softer image. SMAA also smooths alpha-tested edges such as fences and foliage, and can be combined with MSAA.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/daff599b-8bf2-4156-a3e3-a5f1ebd87617"></td>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/5dc8e76a-fcd7-4b8e-9964-f76cc1cfdde3"></td>
+    </tr>
+    <tr>
+      <td align="center">Off</td>
+      <td align="center">SMAA</td>
+    </tr>
+  </table>
+</div>
+
+
 - **Anisotropic Filtering** - Forces the selected anisotropic filtering level on all textures.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/594acdec-3a98-4dc5-ba6c-62e238db3895"></td>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/7a55879d-4f1d-49db-98c2-c687b0213c3c"></td>
+    </tr>
+    <tr>
+      <td align="center">Off</td>
+      <td align="center">Anisotropic 16x</td>
+    </tr>
+  </table>
+</div>
+
 - **Shadow Resolution** - Raises the shadow resolution from the Xbox's 512x512 (default) up to 8192x8192.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/abda5e45-ce01-4f3b-a5ca-2e71de8d0c26"></td>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/95d964c2-2f57-4e3e-aaf6-b652a70db091"></td>
+    </tr>
+    <tr>
+      <td align="center">512x512</td>
+      <td align="center">8192x8192</td>
+    </tr>
+  </table>
+</div>
+
 - **Shadow Distance** - Increases the distance at which lights and their shadows turn off by up to 8x.
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/2afe8ca6-e7f7-4279-950f-c41f3de23113"></td>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/71d0f145-272b-4244-9af9-1e290466c669"></td>
+    </tr>
+    <tr>
+      <td align="center">Shadow Distance 1x</td>
+      <td align="center">Shadow Distance 8x</td>
+    </tr>
+  </table>
+</div>
 
 ### Shader Model 3
 - **Shader Model** - Choose between Shader Model 1.1, the Xbox look, and Shader Model 3.0, which enables the Chaos Theory PC style features.
