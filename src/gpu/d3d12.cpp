@@ -47,6 +47,8 @@ namespace {
 
 constexpr int kFrames = 3;
 constexpr uint64_t kUploadSize = 64ull << 20;
+// a draw starting with less than this left in the frame's ring waits for the GPU and starts the ring over
+constexpr uint64_t kUploadReserve = 8ull << 20;
 constexpr uint32_t kSrvCount = 3 * 32768;
 constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024, kDsvCount = 256;
@@ -57,7 +59,7 @@ constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 constexpr DXGI_FORMAT kHdrFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
 constexpr float kHeadroom = 8.0f;
 // longest a frame missing draws still on the build threads keeps the last whole frame on screen instead
-constexpr auto kHoldMax = std::chrono::milliseconds(200);
+constexpr auto kHoldMax = std::chrono::milliseconds(50);
 
 const char* kBlitHlsl = R"(
 cbuffer B : register(b1) { float4 uvrect; float4 opts; };
@@ -756,6 +758,7 @@ void D3D12Backend::Submit(bool wait) {
         f.alloc->Reset();
         f.garbage.clear();
         f.used = 0;
+        f.srv = 0;
         cl_->Reset(f.alloc.Get(), nullptr);
         Begin();
     }
@@ -1822,6 +1825,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     Assembled& a = asm_;
     bool assembled = Assemble(s, prim, start, count, indices, a);
     if (!assembled) return;
+    // a versus level's first frame draws everything once (thousands of draws, over 64 MB): past the ring every upload
+    // was a buffer of its own, seconds of creating and then freeing them
+    if (frames_[frame_ % kFrames].used > kUploadSize - kUploadReserve) Submit(true);
     if (!BindTargets(s)) return;
     // screen space quads never start it: a loading screen's fade redraws over the last tone mapped picture every frame
     if (bound_rt_ && bound_ds_ && bound_rt_->fmt == kHdrFormat && !bound_rt_->hdr && bound_rt_->hdr_frame != presents_ &&

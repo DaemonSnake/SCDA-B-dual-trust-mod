@@ -44,6 +44,15 @@ echo [2/2] Game code
 echo       the first build recompiles default.xbe and sc4_adv.xbe: 30 to 90 minutes on weaker systems ...
 cmake --preset release >nul || goto :fail
 cmake --build out\build\release || goto :fail
+rem the game's shadercache\ is a link to the one at the top (not in git): deleting out loses no shaders
+if not exist shadercache mkdir shadercache
+dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
+    if exist "%OUT%\shadercache" (
+        copy /y "%OUT%\shadercache\*" shadercache\ >nul
+        rd /s /q "%OUT%\shadercache"
+    )
+    mklink /J "%OUT%\shadercache" "%CD%\shadercache" >nul
+)
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.

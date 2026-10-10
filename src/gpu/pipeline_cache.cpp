@@ -126,6 +126,27 @@ void Append(HANDLE h, const void* p, size_t n) {
     WriteFile(h, p, DWORD(n), &done, &at);
 }
 
+// the records of a file read into s.data at from; where the good ones end, 0 without a valid header. over: a record
+// replaces one with its key already indexed
+size_t Index(Shaders& s, size_t from, bool over) {
+    if (s.data.size() - from < sizeof(FileHeader)) return 0;
+    FileHeader fh;
+    std::memcpy(&fh, s.data.data() + from, sizeof(fh));
+    if (fh.magic != kShaderMagic || fh.version != kShaderVersion) return 0;
+    size_t good = from + sizeof(fh);
+    while (good + sizeof(Record) <= s.data.size()) {
+        Record r;
+        std::memcpy(&r, s.data.data() + good, sizeof(r));
+        size_t at = good + sizeof(r);
+        if (r.size > s.data.size() - at || uint32_t(Hash(s.data.data() + at, r.size)) != r.sum) break;
+        Shaders::Entry e{r.check, at, r.size};
+        if (over) s.index[r.key] = e;
+        else s.index.emplace(r.key, e);
+        good = at + r.size;
+    }
+    return good;
+}
+
 void OpenShaders(const std::filesystem::path& path) {
     Shaders& s = S();
     s.file = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
@@ -135,21 +156,7 @@ void OpenShaders(const std::filesystem::path& path) {
         return;
     }
     size_t good = 0;
-    if (ReadAll(s.file, s.data) && s.data.size() >= sizeof(FileHeader) && s.data.size() <= kMaxShaderFile) {
-        FileHeader fh;
-        std::memcpy(&fh, s.data.data(), sizeof(fh));
-        if (fh.magic == kShaderMagic && fh.version == kShaderVersion) {
-            good = sizeof(fh);
-            while (good + sizeof(Record) <= s.data.size()) {
-                Record r;
-                std::memcpy(&r, s.data.data() + good, sizeof(r));
-                size_t at = good + sizeof(r);
-                if (r.size > s.data.size() - at || uint32_t(Hash(s.data.data() + at, r.size)) != r.sum) break;
-                s.index[r.key] = {r.check, at, r.size};
-                good = at + r.size;
-            }
-        }
-    }
+    if (ReadAll(s.file, s.data) && s.data.size() <= kMaxShaderFile) good = Index(s, 0, true);
     if (good < s.data.size() || !good) {
         if (!s.data.empty()) LOGI("shader cache: %zu of %zu bytes kept", good, s.data.size());
         Truncate(s.file, good);
@@ -161,6 +168,21 @@ void OpenShaders(const std::filesystem::path& path) {
         }
     }
     LOGI("shader cache: %zu shaders, %.1f MB", s.index.size(), good / 1048576.0);
+}
+
+// the shaders a release ships, read only and after the player's own: a new player skips the compiler for them
+void OpenBase(const std::filesystem::path& path) {
+    Shaders& s = S();
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    std::vector<uint8_t> data;
+    bool ok = ReadAll(h, data) && data.size() <= kMaxShaderFile;
+    CloseHandle(h);
+    if (!ok) return;
+    size_t from = s.data.size(), before = s.index.size();
+    s.data.insert(s.data.end(), data.begin(), data.end());
+    Index(s, from, false);
+    LOGI("shader cache: %zu more from %s", s.index.size() - before, path.filename().string().c_str());
 }
 
 void OpenLibrary(ID3D12Device* dev, const std::filesystem::path& path) {
@@ -227,6 +249,7 @@ void Open(ID3D12Device* dev, uint64_t root) {
     std::filesystem::create_directories(dir, ec);
     L().root = root;
     OpenShaders(dir / "shaders.bin");
+    OpenBase(dir / "base_shaders.bin");
     // per executable: offline and versus write theirs whole
     OpenLibrary(dev, dir / (std::filesystem::path(exe).stem().wstring() + L"_pipelines.bin"));
 }
