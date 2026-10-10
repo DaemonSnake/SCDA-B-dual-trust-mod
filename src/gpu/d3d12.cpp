@@ -2061,9 +2061,10 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     cl_->SetGraphicsRootConstantBufferView(1, dc.gpu);
 
     if (cap_) {
-        fprintf(cap_, "%04u draw rt %08X ds %08X prim %u count %u vs %08X ps %08X blend %u %X %X zen %u %X zwrite %u zbias %d %.2f cull %u cw %X c0 %.3f %.3f %.3f %.3f",
+        fprintf(cap_, "%04u draw rt %08X ds %08X prim %u count %u vs %08X ps %08X blend %u %X %X zen %u %X zwrite %u zbias %d %.2f cull %u cw %X c0 %.3f %.3f %.3f %.3f tf %08X atest %g %g",
                 cap_i_++, s.rt.data, bound_ds_ ? s.zs.data : 0, prim, count, s.vs_handle, s.ps ? s.ps->handle : 0, k.blend, k.src, k.dst,
-                k.zen, k.zfunc, k.zwrite, k.zbias, k.zslope, k.cull, k.wmask, c.pc[0][0], c.pc[0][1], c.pc[0][2], c.pc[0][3]);
+                k.zen, k.zfunc, k.zwrite, k.zbias, k.zslope, k.cull, k.wmask, c.pc[0][0], c.pc[0][1], c.pc[0][2], c.pc[0][3],
+                s.rs[kRsTextureFactor], c.misc[1], c.misc[0]);
         for (int i = 0; i < 4; i++) {
             TextureDesc d;
             if (!s.textures[size_t(i)] || !Describe(s.textures[size_t(i)], d)) continue;
@@ -2072,7 +2073,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             if (res[i] && !tg && info[i].kind == kTex2D && cap_seen_.insert(d.data).second)
                 cap_tex_.push_back({res[i], sv[i].Format, d.data, d.width, d.height});
         }
-        if (count <= 6) {
+        // small draws, and a vertex program's first draw: its inputs and constants
+        if (count <= 6 || (prog && cap_sh_.insert(uint64_t(s.vs_handle) << 32 | 0xC0).second)) {
             fprintf(cap_, "\n     verts");
             uint32_t n = 0;
             for (int r = 0; r < 16; r++) n += (a.regs >> r) & 1;
