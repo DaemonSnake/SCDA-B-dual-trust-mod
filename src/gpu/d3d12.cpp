@@ -51,7 +51,14 @@ constexpr uint64_t kUploadSize = 64ull << 20;
 constexpr uint64_t kUploadReserve = 8ull << 20;
 constexpr uint32_t kSrvCount = 3 * 32768;
 constexpr uint32_t kSamplerCount = 2048;
-constexpr uint32_t kRtvCount = 1024, kDsvCount = 256;
+constexpr uint32_t kRtvCount = 1024;
+constexpr uint32_t kDsvCount = 256;
+// post pass views after the back buffers': bloom pair, exposure, ambient occlusion pair, SMAA's three
+constexpr uint32_t kBloomRtv = 0;
+constexpr uint32_t kExposureRtv = 2;
+constexpr uint32_t kAoRtv = 3;
+constexpr uint32_t kSmaaRtv = 5;
+constexpr uint32_t kPostRtvs = 8;
 constexpr uint32_t kConsoleShadows = 512;  // the shadow resolution setting that keeps the console's look
 constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 // Shader model 3.0 HDR: the scene target holds colour over kHeadroom so lights add past 1 while alpha, which the
@@ -281,6 +288,8 @@ void Color(uint32_t argb, float* o) {
     o[3] = (argb >> 24) / 255.0f;
 }
 
+constexpr uint32_t kBlendDestColor = 0x306;  // D3DBLEND_DESTCOLOR
+
 D3D12_BLEND Blend(uint32_t v, bool alpha) {
     switch (v) {
         case 0: return D3D12_BLEND_ZERO;
@@ -291,7 +300,7 @@ D3D12_BLEND Blend(uint32_t v, bool alpha) {
         case 0x303: return D3D12_BLEND_INV_SRC_ALPHA;
         case 0x304: return D3D12_BLEND_DEST_ALPHA;
         case 0x305: return D3D12_BLEND_INV_DEST_ALPHA;
-        case 0x306: return alpha ? D3D12_BLEND_DEST_ALPHA : D3D12_BLEND_DEST_COLOR;
+        case kBlendDestColor: return alpha ? D3D12_BLEND_DEST_ALPHA : D3D12_BLEND_DEST_COLOR;
         case 0x307: return alpha ? D3D12_BLEND_INV_DEST_ALPHA : D3D12_BLEND_INV_DEST_COLOR;
         case 0x308: return D3D12_BLEND_SRC_ALPHA_SAT;
         case 0x8001: case 0x8003: return D3D12_BLEND_BLEND_FACTOR;
@@ -333,7 +342,8 @@ D3D12_STENCIL_OP StencilOp(uint32_t v) {
 // edge's last half texel is drawn too, and wrapped it blends in the opposite edge (the crosshair ticks' dark lines).
 // Clamped, it takes the edge texel instead, which a wrapped texture used once over 0..1 has there anyway.
 bool UnitTexcoords(const Assembled& a) {
-    constexpr float kLo = -1e-4f, kHi = 1.0001f;
+    constexpr float kLo = -1e-4f;
+    constexpr float kHi = 1.0001f;
     if (!a.vertices.empty() || !a.vertex_count || a.vertex_count > 4096) return false;
     bool any = false;
     for (int r = 0; r < 16; r++) {
@@ -370,14 +380,56 @@ DXGI_FORMAT HostFormat(Host h) {
     }
 }
 
+constexpr uint32_t kFmtD16 = 0x2C;     // D3DFMT_D16
+constexpr uint32_t kFmtLinD16 = 0x30;  // D3DFMT_LIN_D16
+
+// TexInfo::shadow of a depth texture
+uint8_t ShadowDepthKind(uint32_t format) { return format == kFmtD16 || format == kFmtLinD16 ? 2 : 1; }
+
+// bytes per row of a 32 bit surface in guest memory, rounded to 64
+uint32_t GuestPitch(uint32_t width) { return (width * 4 + 63) & ~63u; }
+
+// rows of a texture upload start D3D12_TEXTURE_DATA_PITCH_ALIGNMENT apart
+uint32_t UploadPitch(uint32_t row_bytes) { return (row_bytes + 255) & ~255u; }
+
+D3D12_RESOURCE_DESC BufferDesc(uint64_t bytes) {
+    D3D12_RESOURCE_DESC bd{};
+    bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    bd.Width = bytes;
+    bd.Height = 1;
+    bd.DepthOrArraySize = 1;
+    bd.MipLevels = 1;
+    bd.SampleDesc.Count = 1;
+    bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    return bd;
+}
+
+// one level, one sample: callers set Flags and SampleDesc where they differ
+D3D12_RESOURCE_DESC Texture2DDesc(DXGI_FORMAT fmt, uint64_t w, uint32_t h) {
+    D3D12_RESOURCE_DESC td{};
+    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    td.Width = w;
+    td.Height = h;
+    td.DepthOrArraySize = 1;
+    td.MipLevels = 1;
+    td.Format = fmt;
+    td.SampleDesc.Count = 1;
+    return td;
+}
+
 struct Target {
     ComPtr<ID3D12Resource> res;
     bool depth = false;
-    uint32_t gw = 0, gh = 0, w = 0, h = 0;
+    uint32_t gw = 0;
+    uint32_t gh = 0;
+    uint32_t w = 0;
+    uint32_t h = 0;
     uint32_t view = 0;
     D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
-    uint32_t data = 0, bytes = 0;
-    uint64_t epoch = 0, sig = 0;  // last lock seen, guest memory as last matched
+    uint32_t data = 0;
+    uint32_t bytes = 0;
+    uint64_t epoch = 0;  // last lock seen
+    uint64_t sig = 0;    // guest memory as last matched
     bool drawn = false;           // the GPU wrote it since the last readback
     std::vector<uint8_t> read;    // what Sync left in guest memory
     // single sample copy draws read: of the target being drawn to, or a multisampled one resolved
@@ -400,7 +452,8 @@ uint64_t MemSig(uint32_t data, uint32_t total) {
 // MemSig samples a big surface and misses small writes (XFONT text): after a Sync every byte is compared
 bool Changed(const Target& t) {
     if (t.drawn || t.read.empty()) return false;
-    uint32_t row = t.gw * 4, pitch = (row + 63) & ~63u;
+    uint32_t row = t.gw * 4;
+    uint32_t pitch = GuestPitch(t.gw);
     const uint8_t* p = static_cast<const uint8_t*>(kernel::HostPtr(t.data));
     for (uint32_t y = 0; y < t.gh; y++)
         if (std::memcmp(p + size_t(y) * pitch, &t.read[size_t(y) * row], row)) return true;
@@ -423,18 +476,37 @@ struct Tex {
     TextureDesc d;
     DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN;
     uint32_t levels = 1;
-    uint64_t sig = 0, frame = 0;
+    uint64_t sig = 0;
+    uint64_t frame = 0;
     bool norm = false;  // a normalization cube
 };
 
 struct PsoKey {
-    uint64_t vs, ps;
-    uint32_t regs, topo, has_rt, has_ds;
+    uint64_t vs;
+    uint64_t ps;
+    uint32_t regs;
+    uint32_t topo;
+    uint32_t has_rt;
+    uint32_t has_ds;
     uint32_t elements[16];  // per register: DXGI format, buffer << 8, offset << 16
-    uint32_t blend, src, dst, op, wmask;
-    uint32_t zen, zwrite, zfunc;
-    uint32_t sten, sfunc, smask, swmask, sfail, szfail, spass;
-    uint32_t cull, ccw, fill;
+    uint32_t blend;
+    uint32_t src;
+    uint32_t dst;
+    uint32_t op;
+    uint32_t wmask;
+    uint32_t zen;
+    uint32_t zwrite;
+    uint32_t zfunc;
+    uint32_t sten;
+    uint32_t sfunc;
+    uint32_t smask;
+    uint32_t swmask;
+    uint32_t sfail;
+    uint32_t szfail;
+    uint32_t spass;
+    uint32_t cull;
+    uint32_t ccw;
+    uint32_t fill;
     int32_t zbias;
     float zslope;
     uint32_t rtfmt;
@@ -442,6 +514,48 @@ struct PsoKey {
     uint32_t msaa;
 };
 static_assert(sizeof(PsoKey) == 184);
+
+// Blit's settings past the source and its rectangle
+struct BlitOptions {
+    bool gamma = false;       // through the gamma lookup
+    bool alpha = false;       // the source's alpha, else 1
+    uint32_t taps = 1;        // n x n box filter per pixel
+    float mul = 1;            // colour scale
+    DXGI_FORMAT rtv = kBgra;  // the target's format
+    bool over = false;        // premultiplied over the target, which keeps its alpha
+    uint32_t samples = 1;     // the target's sample count
+};
+
+// a full screen pass's target
+struct PostTarget {
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+    DXGI_FORMAT fmt;
+    uint32_t w;
+    uint32_t h;
+    uint32_t samples = 1;
+};
+
+// what a full screen pass reads at t0 to t2
+struct PostInputs {
+    ID3D12Resource* res[3];
+    DXGI_FORMAT fmt[3];
+};
+
+// Post's settings past its target, inputs and constants
+struct PostOptions {
+    float blend = -1;  // blend factor over the target, below 0 the pass overwrites it
+    const char* hlsl = kPostHlsl;
+    const char* vs_entry = "vs";
+};
+
+// Shrink's settings past the source and the size
+struct ShrinkOptions {
+    uint32_t taps = 1;
+    // into: a copy from an earlier call to draw over again, in state into_state
+    ID3D12Resource* into = nullptr;
+    D3D12_RESOURCE_STATES into_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    float mul = 1;
+};
 
 class D3D12Backend final : public Backend {
 public:
@@ -464,7 +578,8 @@ private:
         ComPtr<ID3D12CommandAllocator> alloc;
         ComPtr<ID3D12Resource> upload;
         uint8_t* map = nullptr;
-        uint64_t used = 0, fence = 0;
+        uint64_t used = 0;
+        uint64_t fence = 0;
         std::vector<ComPtr<ID3D12Resource>> garbage;
         uint32_t srv = 0;
     };
@@ -490,19 +605,19 @@ private:
     void Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES& cur, D3D12_RESOURCE_STATES want);
     void Begin();
     void Submit(bool wait);
+    void WaitFence(uint64_t value);
+    void SetFullViewport(uint32_t w, uint32_t h);
     Target* GetTarget(const Surface& s, bool depth, bool create = true);
     void UploadTarget(Target& t, const Surface& s);
-    void Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha, uint32_t taps = 1,
-              float mul = 1, DXGI_FORMAT rtv = kBgra, bool over = false, uint32_t samples = 1);
+    void Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], const BlitOptions& o = {});
     uint32_t BlitSamplers();
     ID3D12Resource* Feedback(Target& t);
     ID3D12Resource* Flat(Target& t, D3D12_RESOURCE_STATES*& st);
     uint32_t Samples(uint32_t want);
     void EnterHdr(Target& t);
     void Resolve(Target& t);
-    bool Post(const char* entry, DXGI_FORMAT rtv, D3D12_CPU_DESCRIPTOR_HANDLE rh, uint32_t w, uint32_t h,
-              ID3D12Resource* const src[3], const DXGI_FORMAT fmt[3], const float p[8], float blend = -1,
-              uint32_t samples = 1, const char* hlsl = kPostHlsl, const char* vs_entry = "vs");
+    bool Post(const char* entry, const PostTarget& out, const PostInputs& in, const float p[8],
+              const PostOptions& o = {});
     ID3D12Resource* Smaa(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_t w, uint32_t h);
     bool BindTargets(const State& s);
     ID3D12Resource* BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& srv);
@@ -564,12 +679,12 @@ private:
     void CreateFrames();
     void CreateGammaLut();
     void LoadSettings();
-    // Present, in order
+    // Present, in call order; DrawFrame runs the three after it
     void FinishCapture(const Surface& front);
     void StartCapture();
     void UploadGammaRamp();
     void DrawFrame(Target* t, bool pillarbox, uint32_t bi);
-    ID3D12Resource* FrameSource(Target* t);
+    ID3D12Resource* PrepareShownFrame(Target* t);
     void BlitFrame(const Target& t, ID3D12Resource* r, bool pillarbox);
     void RenderUi();
     void ReleaseOldTextures();
@@ -577,10 +692,8 @@ private:
     void CountFps();
     void ApplySettings();
     float Scale() const { return scale_; }
-    // into: a copy from an earlier call to draw over again, in state into_state
     ComPtr<ID3D12Resource> Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w,
-                                  uint32_t h, uint32_t taps = 1, ID3D12Resource* into = nullptr,
-                                  D3D12_RESOURCE_STATES into_state = D3D12_RESOURCE_STATE_COPY_SOURCE, float mul = 1);
+                                  uint32_t h, const ShrinkOptions& o = {});
     bool ReadBack(ID3D12Resource* res, uint32_t w, uint32_t h, std::vector<uint8_t>& out);
     void CapSave(ID3D12Resource* res, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h,
                  const char* name, float mul = 1);
@@ -598,23 +711,34 @@ private:
     Frame frames_[kFrames];
     uint64_t frame_ = 0;
     ComPtr<ID3D12GraphicsCommandList> cl_;
-    ComPtr<ID3D12DescriptorHeap> srv_heap_, smp_heap_, rtv_heap_, dsv_heap_, ui_heap_;
-    uint32_t srv_inc_ = 0, smp_inc_ = 0, rtv_inc_ = 0, dsv_inc_ = 0;
-    std::vector<uint32_t> free_rtv_, free_dsv_;
+    ComPtr<ID3D12DescriptorHeap> srv_heap_;
+    ComPtr<ID3D12DescriptorHeap> smp_heap_;
+    ComPtr<ID3D12DescriptorHeap> rtv_heap_;
+    ComPtr<ID3D12DescriptorHeap> dsv_heap_;
+    ComPtr<ID3D12DescriptorHeap> ui_heap_;
+    uint32_t srv_inc_ = 0;
+    uint32_t smp_inc_ = 0;
+    uint32_t rtv_inc_ = 0;
+    uint32_t dsv_inc_ = 0;
+    std::vector<uint32_t> free_rtv_;
+    std::vector<uint32_t> free_dsv_;
     ComPtr<ID3D12RootSignature> root_;
     struct Source {
-        std::string text, entry, profile;
+        std::string text;
+        std::string entry;
+        std::string profile;
         ComPtr<ID3DBlob> code;
         uint8_t state = 0;  // 0 source only, 1 compiling, 2 done (no code: it failed)
     };
     std::unordered_map<uint64_t, Source> shaders_;  // build threads too, under shader_lock_
     std::mutex shader_lock_;
     std::condition_variable shader_done_;
-    std::unordered_map<uint64_t, uint64_t> vs_src_;  // program key to source hash
+    std::unordered_map<uint64_t, uint64_t> shader_src_;  // vertex and pixel program keys to source hash
     std::unordered_map<uint64_t, ComPtr<ID3D12PipelineState>> psos_;
     // async shaders: a pipeline that needs a compiler is built on the build threads, its draws skipped until it is back
     bool async_ = false;
-    bool skipped_frame_ = false, shown_ = false;
+    bool skipped_frame_ = false;
+    bool shown_ = false;
     std::chrono::steady_clock::time_point shown_t_;
     std::unordered_set<uint64_t> building_;
     std::vector<std::pair<uint64_t, ComPtr<ID3D12PipelineState>>> built_;
@@ -626,52 +750,76 @@ private:
     std::unordered_map<uint32_t, Tex> textures_;
     std::unordered_map<uint64_t, ComPtr<ID3D12PipelineState>> blit_psos_;
     // shader model 3.0 features, from the settings at each present
-    bool sm3_ = false, hdr_ = false, tone_ = false, hq_shadows_ = false;
-    uint32_t msaa_ = 1, msaa_set_ = 0;  // samples in use, app::Settings::msaa they came from
+    bool sm3_ = false;
+    bool hdr_ = false;
+    bool tone_ = false;
+    bool hq_shadows_ = false;
+    uint32_t msaa_ = 1;      // samples in use
+    uint32_t msaa_set_ = 0;  // app::Settings::msaa they came from
     // resolve: quarter size bloom pair, the exposure pixel kept across frames
-    ComPtr<ID3D12Resource> bloom_[2], expo_;
-    D3D12_RESOURCE_STATES bloom_state_[2] = {}, expo_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    uint32_t post_rtv_ = 0, bloom_w_ = 0, bloom_h_ = 0;
+    ComPtr<ID3D12Resource> bloom_[2];
+    ComPtr<ID3D12Resource> expo_;
+    D3D12_RESOURCE_STATES bloom_state_[2] = {};
+    D3D12_RESOURCE_STATES expo_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    uint32_t post_rtv_ = 0;
+    uint32_t bloom_w_ = 0;
+    uint32_t bloom_h_ = 0;
     bool expo_fresh_ = true;
     // ambient occlusion: the raw pass and its first blur, each with view z beside it
     ComPtr<ID3D12Resource> ao_[2];
     D3D12_RESOURCE_STATES ao_state_[2] = {};
-    uint32_t ao_w_ = 0, ao_h_ = 0;
+    uint32_t ao_w_ = 0;
+    uint32_t ao_h_ = 0;
     // SMAA: edges, blend weights and the blended frame, at the frame's size; its two lookups
-    ComPtr<ID3D12Resource> smaa_[3], smaa_lut_[2];
+    ComPtr<ID3D12Resource> smaa_[3];
+    ComPtr<ID3D12Resource> smaa_lut_[2];
     D3D12_RESOURCE_STATES smaa_state_[3] = {};
-    uint32_t smaa_w_ = 0, smaa_h_ = 0;
+    uint32_t smaa_w_ = 0;
+    uint32_t smaa_h_ = 0;
     DXGI_FORMAT smaa_fmt_ = DXGI_FORMAT_UNKNOWN;
     std::chrono::steady_clock::time_point expo_t_ = std::chrono::steady_clock::now();
     // one frame capture: every draw in a text file, each target as the frame leaves it, the textures it read
     FILE* cap_ = nullptr;
     std::filesystem::path cap_dir_;
-    uint32_t cap_i_ = 0, cap_rt_ = 0;
+    uint32_t cap_i_ = 0;
+    uint32_t cap_rt_ = 0;
     std::unordered_set<uint32_t> cap_seen_;
     std::unordered_set<uint64_t> cap_sh_;
     struct CapTex {
         ComPtr<ID3D12Resource> res;
         DXGI_FORMAT fmt;
-        uint32_t data, w, h;
+        uint32_t data;
+        uint32_t w;
+        uint32_t h;
     };
     std::vector<CapTex> cap_tex_;
     ComPtr<ID3D12Resource> lut_;
     D3D12_RESOURCE_STATES lut_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
     uint8_t ramp_[768] = {};
-    bool ramp_dirty_ = false, gamma_ = false;
+    bool ramp_dirty_ = false;
+    bool gamma_ = false;
     Target* bound_rt_ = nullptr;
     Target* bound_ds_ = nullptr;
     Target* draw_rt_ = nullptr;  // the draw's targets, the bound ones go when a texture's copy is drawn
     Target* draw_ds_ = nullptr;
-    uint32_t guest_w_ = 640, guest_h_ = 480, bb_w_ = 0, bb_h_ = 0;
+    uint32_t guest_w_ = 640;
+    uint32_t guest_h_ = 480;
+    uint32_t bb_w_ = 0;
+    uint32_t bb_h_ = 0;
     float scale_ = 1.0f;
     uint32_t shadow_res_ = 0;  // app::Settings::shadow_resolution the targets were made for
     // surfaces locked without a wait: copies in flight, the newest finished one goes to guest memory
     struct Late {
-        ComPtr<ID3D12Resource> rb[kFrames], down;
+        ComPtr<ID3D12Resource> rb[kFrames];
+        ComPtr<ID3D12Resource> down;
         D3D12_RESOURCE_STATES down_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        uint64_t fence[kFrames] = {}, frame[kFrames] = {}, delivered = 0;
-        uint32_t gw = 0, gh = 0, row_pitch = 0, next = 0;
+        uint64_t fence[kFrames] = {};
+        uint64_t frame[kFrames] = {};
+        uint64_t delivered = 0;
+        uint32_t gw = 0;
+        uint32_t gh = 0;
+        uint32_t row_pitch = 0;
+        uint32_t next = 0;
     };
     std::unordered_map<uint32_t, Late> late_;
     std::mutex late_lock_;                      // DeliverLate runs on the title's thread
@@ -690,6 +838,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     if (!CreateDevice()) return false;
     if (!CreateSwapChain(hwnd)) return false;
     CreateHeaps();
+    CreateBackBufferViews();
     if (!CreateRootSignature()) return false;
     CreateFrames();
     CreateGammaLut();
@@ -774,13 +923,12 @@ void D3D12Backend::CreateBackBufferViews() {
 void D3D12Backend::CreateHeaps() {
     srv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCount, true, srv_heap_);
     smp_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerCount, true, smp_heap_);
-    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + 8, false, rtv_heap_);
+    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs, false, rtv_heap_);
     post_rtv_ = kRtvCount + kFrames;
     dsv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvCount, false, dsv_heap_);
     CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1, true, ui_heap_);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
     for (uint32_t i = kDsvCount; i-- > 0;) free_dsv_.push_back(i);
-    CreateBackBufferViews();
 }
 
 bool D3D12Backend::CreateRootSignature() {
@@ -816,12 +964,7 @@ void D3D12Backend::CreateFrames() {
     for (auto& f : frames_) {
         dev_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&f.alloc));
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_UPLOAD};
-        D3D12_RESOURCE_DESC bd{};
-        bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bd.Width = kUploadSize;
-        bd.Height = bd.DepthOrArraySize = bd.MipLevels = 1;
-        bd.SampleDesc.Count = 1;
-        bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        D3D12_RESOURCE_DESC bd = BufferDesc(kUploadSize);
         dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                       IID_PPV_ARGS(&f.upload));
         f.upload->Map(0, nullptr, reinterpret_cast<void**>(&f.map));
@@ -834,12 +977,7 @@ void D3D12Backend::CreateFrames() {
 // gamma ramp as a 256 x 1 lookup
 void D3D12Backend::CreateGammaLut() {
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-    D3D12_RESOURCE_DESC td{};
-    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    td.Width = 256;
-    td.Height = td.DepthOrArraySize = td.MipLevels = 1;
-    td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    td.SampleDesc.Count = 1;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_B8G8R8A8_UNORM, 256, 1);
     dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                   IID_PPV_ARGS(&lut_));
 }
@@ -853,7 +991,8 @@ void D3D12Backend::LoadSettings() {
     tone_ = sm3_ && set.tone_mapping;
     hq_shadows_ = sm3_ && set.hq_soft_shadows;
     async_ = set.async_shaders;
-    msaa_ = Samples(msaa_set_ = set.msaa);
+    msaa_set_ = set.msaa;
+    msaa_ = Samples(msaa_set_);
 }
 
 void D3D12Backend::Begin() {
@@ -871,8 +1010,7 @@ void D3D12Backend::Submit(bool wait) {
     Frame& f = frames_[frame_ % kFrames];
     f.fence = fence_value_;
     if (wait) {
-        fence_->SetEventOnCompletion(fence_value_, event_);
-        WaitForSingleObject(event_, INFINITE);
+        WaitFence(fence_value_);
         f.alloc->Reset();
         f.garbage.clear();
         f.used = 0;
@@ -884,6 +1022,18 @@ void D3D12Backend::Submit(bool wait) {
 
 void D3D12Backend::Flush() { Submit(true); }
 
+void D3D12Backend::WaitFence(uint64_t value) {
+    fence_->SetEventOnCompletion(value, event_);
+    WaitForSingleObject(event_, INFINITE);
+}
+
+void D3D12Backend::SetFullViewport(uint32_t w, uint32_t h) {
+    D3D12_VIEWPORT vp{0, 0, float(w), float(h), 0, 1};
+    D3D12_RECT sc{0, 0, LONG(w), LONG(h)};
+    cl_->RSSetViewports(1, &vp);
+    cl_->RSSetScissorRects(1, &sc);
+}
+
 D3D12Backend::Alloc D3D12Backend::Upload(uint64_t size, uint64_t align) {
     Frame& f = frames_[frame_ % kFrames];
     uint64_t o = (f.used + align - 1) & ~(align - 1);
@@ -894,12 +1044,7 @@ D3D12Backend::Alloc D3D12Backend::Upload(uint64_t size, uint64_t align) {
     // too big for the ring: a buffer of its own, released with the frame
     ComPtr<ID3D12Resource> r;
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_UPLOAD};
-    D3D12_RESOURCE_DESC bd{};
-    bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    bd.Width = (size + 0xFFFF) & ~0xFFFFull;
-    bd.Height = bd.DepthOrArraySize = bd.MipLevels = 1;
-    bd.SampleDesc.Count = 1;
-    bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    D3D12_RESOURCE_DESC bd = BufferDesc((size + 0xFFFF) & ~0xFFFFull);
     dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                   IID_PPV_ARGS(&r));
     uint8_t* p = nullptr;
@@ -963,11 +1108,7 @@ Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
     t.h = std::max(1u, uint32_t(std::lround(gh * sc)));
     if (shadow) LOGI("d3d12: shadow map %ux%u", t.w, t.h);
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-    D3D12_RESOURCE_DESC td{};
-    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    td.Width = t.w;
-    td.Height = t.h;
-    td.DepthOrArraySize = td.MipLevels = 1;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_UNKNOWN, t.w, t.h);
     // the scene, its depth and the colour surfaces drawn with that depth; the game's own maps and chains stay as
     // they are
     t.samples = gw == guest_w_ && gh == guest_h_ ? msaa_ : 1;
@@ -1007,7 +1148,7 @@ Target* D3D12Backend::GetTarget(const Surface& s, bool depth, bool create) {
         cl_->ClearRenderTargetView(Cpu(rtv_heap_.Get(), t.view, rtv_inc_), black, 0, nullptr);
     }
     t.data = data;
-    t.bytes = ((gw * 4 + 63) & ~63u) * gh;
+    t.bytes = GuestPitch(gw) * gh;
     if (depth) t.bytes = gw * gh * 4;
     t.epoch = DirtyEpoch(data);
     t.sig = MemSig(data, t.bytes);
@@ -1064,7 +1205,7 @@ void D3D12Backend::UploadTarget(Target& t, const Surface& s) {
         LOG_FIRST(4, "d3d12: CPU pixels drawn over target %08X", t.data);
         pitch = t.gw * 4;
         px.assign(t.read.size(), 0);
-        uint32_t guest_pitch = (pitch + 63) & ~63u;
+        uint32_t guest_pitch = GuestPitch(t.gw);
         const uint8_t* guest = static_cast<const uint8_t*>(kernel::HostPtr(t.data));
         for (uint32_t y = 0; y < t.gh; y++) {
             for (uint32_t x = 0; x < t.gw; x++) {
@@ -1079,20 +1220,15 @@ void D3D12Backend::UploadTarget(Target& t, const Surface& s) {
     } else {
         DecodeLevel(d, 0, 0, static_cast<const uint8_t*>(kernel::HostPtr(d.data)), nullptr, px, pitch);
     }
-    uint32_t w = d.width, h = d.height;
+    uint32_t w = d.width;
+    uint32_t h = d.height;
     ComPtr<ID3D12Resource> tex;
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-    D3D12_RESOURCE_DESC td{};
-    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    td.Width = w;
-    td.Height = h;
-    td.DepthOrArraySize = td.MipLevels = 1;
-    td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    td.SampleDesc.Count = 1;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_B8G8R8A8_UNORM, w, h);
     dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                   IID_PPV_ARGS(&tex));
-    uint32_t row = (w * 4 + 255) & ~255u;
-    Alloc a = Upload(uint64_t(row) * h, 512);
+    uint32_t row = UploadPitch(w * 4);
+    Alloc a = Upload(uint64_t(row) * h, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     for (uint32_t y = 0; y < h; y++) std::memcpy(a.cpu + size_t(y) * row, &px[size_t(y) * pitch], w * 4);
     D3D12_TEXTURE_COPY_LOCATION dst{tex.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
     D3D12_TEXTURE_COPY_LOCATION src{a.res, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
@@ -1105,12 +1241,10 @@ void D3D12Backend::UploadTarget(Target& t, const Surface& s) {
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), t.view, rtv_inc_);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     bound_rt_ = bound_ds_ = nullptr;
-    D3D12_VIEWPORT vp{0, 0, float(t.w), float(t.h), 0, 1};
-    D3D12_RECT sc{0, 0, LONG(t.w), LONG(t.h)};
-    cl_->RSSetViewports(1, &vp);
-    cl_->RSSetScissorRects(1, &sc);
+    SetFullViewport(t.w, t.h);
     float uv[4] = {0, 0, 1, 1};
-    Blit(tex.Get(), kBgra, uv, false, true, 1, t.hdr ? 1 / kHeadroom : 1, t.fmt, over, t.samples);
+    float mul = t.hdr ? 1 / kHeadroom : 1;
+    Blit(tex.Get(), kBgra, uv, {.alpha = true, .mul = mul, .rtv = t.fmt, .over = over, .samples = t.samples});
     frames_[frame_ % kFrames].garbage.push_back(tex);
     t.epoch = DirtyEpoch(t.data);
     t.sig = MemSig(t.data, t.bytes);
@@ -1142,8 +1276,7 @@ uint32_t D3D12Backend::BlitSamplers() {
     return si;
 }
 
-void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha,
-                        uint32_t taps, float mul, DXGI_FORMAT rtv, bool over, uint32_t samples) {
+void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], const BlitOptions& o) {
     uint32_t slot = SrvSlots(2);
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
     sv.Format = fmt;
@@ -1156,9 +1289,9 @@ void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect
     uint32_t si = BlitSamplers();
     Alloc cb = Upload(256, 256);
     float c[8] = {uvrect[0], uvrect[1], uvrect[2], uvrect[3],
-                  gamma ? 1.0f : 0.0f, alpha ? 1.0f : 0.0f, float(taps), mul};
+                  o.gamma ? 1.0f : 0.0f, o.alpha ? 1.0f : 0.0f, float(o.taps), o.mul};
     std::memcpy(cb.cpu, c, sizeof(c));
-    cl_->SetPipelineState(BlitPipeline(rtv, over, samples));
+    cl_->SetPipelineState(BlitPipeline(o.rtv, o.over, o.samples));
     cl_->SetGraphicsRootConstantBufferView(0, cb.gpu);
     cl_->SetGraphicsRootConstantBufferView(1, cb.gpu);
     cl_->SetGraphicsRootDescriptorTable(2, Gpu(srv_heap_.Get(), slot, srv_inc_));
@@ -1266,15 +1399,16 @@ ID3D12PipelineState* D3D12Backend::BlitPipeline(DXGI_FORMAT rtv, bool over, uint
     return pso.Get();
 }
 
-bool D3D12Backend::Post(const char* entry, DXGI_FORMAT rtv, D3D12_CPU_DESCRIPTOR_HANDLE rh, uint32_t w, uint32_t h,
-                        ID3D12Resource* const src[3], const DXGI_FORMAT fmt[3], const float p[8], float blend,
-                        uint32_t samples, const char* hlsl, const char* vs_entry) {
-    uint64_t key = Hash(entry, std::strlen(entry), uint64_t(rtv) << 1 | (blend >= 0 ? 1 : 0) | uint64_t(samples) << 40);
+bool D3D12Backend::Post(const char* entry, const PostTarget& out, const PostInputs& in, const float p[8],
+                        const PostOptions& o) {
+    uint64_t key = Hash(entry, std::strlen(entry),
+                        uint64_t(out.fmt) << 1 | (o.blend >= 0 ? 1 : 0) | uint64_t(out.samples) << 40);
     auto& pso = blit_psos_[key];
     if (!pso) {
-        uint64_t hv, hp;
-        ID3DBlob* vs = Compile(hlsl, vs_entry, "vs_5_0", hv);
-        ID3DBlob* ps = Compile(hlsl, entry, "ps_5_0", hp);
+        uint64_t hv;
+        uint64_t hp;
+        ID3DBlob* vs = Compile(o.hlsl, o.vs_entry, "vs_5_0", hv);
+        ID3DBlob* ps = Compile(o.hlsl, entry, "ps_5_0", hp);
         if (!vs || !ps) return false;
         D3D12_GRAPHICS_PIPELINE_STATE_DESC d{};
         d.pRootSignature = root_.Get();
@@ -1282,7 +1416,7 @@ bool D3D12Backend::Post(const char* entry, DXGI_FORMAT rtv, D3D12_CPU_DESCRIPTOR
         d.PS = {ps->GetBufferPointer(), ps->GetBufferSize()};
         auto& b = d.BlendState.RenderTarget[0];
         b.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-        if (blend >= 0) {
+        if (o.blend >= 0) {
             b.BlendEnable = TRUE;
             b.SrcBlend = b.SrcBlendAlpha = D3D12_BLEND_BLEND_FACTOR;
             b.DestBlend = b.DestBlendAlpha = D3D12_BLEND_INV_BLEND_FACTOR;
@@ -1294,28 +1428,25 @@ bool D3D12Backend::Post(const char* entry, DXGI_FORMAT rtv, D3D12_CPU_DESCRIPTOR
         d.RasterizerState.DepthClipEnable = TRUE;
         d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         d.NumRenderTargets = 1;
-        d.RTVFormats[0] = rtv;
-        d.SampleDesc.Count = samples;
+        d.RTVFormats[0] = out.fmt;
+        d.SampleDesc.Count = out.samples;
         if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return false;
     }
     uint32_t slot = SrvSlots(4);
     for (int i = 0; i < 4; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 3 && src[i] ? fmt[i] : kBgra;
+        sv.Format = i < 3 && in.res[i] ? in.fmt[i] : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(i < 3 ? src[i] : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        dev_->CreateShaderResourceView(i < 3 ? in.res[i] : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Alloc cb = Upload(256, 256);
     std::memcpy(cb.cpu, p, 8 * sizeof(float));
-    cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
-    D3D12_VIEWPORT vp{0, 0, float(w), float(h), 0, 1};
-    D3D12_RECT sc{0, 0, LONG(w), LONG(h)};
-    cl_->RSSetViewports(1, &vp);
-    cl_->RSSetScissorRects(1, &sc);
-    if (blend >= 0) {
-        float f[4] = {blend, blend, blend, blend};
+    cl_->OMSetRenderTargets(1, &out.rtv, FALSE, nullptr);
+    SetFullViewport(out.w, out.h);
+    if (o.blend >= 0) {
+        float f[4] = {o.blend, o.blend, o.blend, o.blend};
         cl_->OMSetBlendFactor(f);
     }
     cl_->SetPipelineState(pso.Get());
@@ -1372,12 +1503,9 @@ void D3D12Backend::EnterHdr(Target& t) {
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), t.view, rtv_inc_);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     bound_rt_ = bound_ds_ = nullptr;
-    D3D12_VIEWPORT vp{0, 0, float(t.w), float(t.h), 0, 1};
-    D3D12_RECT sc{0, 0, LONG(t.w), LONG(t.h)};
-    cl_->RSSetViewports(1, &vp);
-    cl_->RSSetScissorRects(1, &sc);
+    SetFullViewport(t.w, t.h);
     float uv[4] = {0, 0, 1, 1};
-    Blit(fb, t.fmt, uv, false, true, 1, 1 / kHeadroom, t.fmt, false, t.samples);
+    Blit(fb, t.fmt, uv, {.alpha = true, .mul = 1 / kHeadroom, .rtv = t.fmt, .samples = t.samples});
     t.hdr = true;
 }
 
@@ -1391,20 +1519,15 @@ void D3D12Backend::Resolve(Target& t) {
     t.hdr = false;
     ID3D12Resource* fb = Feedback(t);
     if (!fb) return;
-    uint32_t bw = std::max(1u, t.w / 4), bh = std::max(1u, t.h / 4);
-    auto rtv = [&](int i) { return Cpu(rtv_heap_.Get(), post_rtv_ + i, rtv_inc_); };
+    uint32_t bw = std::max(1u, t.w / 4);
+    uint32_t bh = std::max(1u, t.h / 4);
+    auto rtv = [&](uint32_t i) { return Cpu(rtv_heap_.Get(), post_rtv_ + i, rtv_inc_); };
     auto make = [&](ComPtr<ID3D12Resource>& r, D3D12_RESOURCE_STATES& st, DXGI_FORMAT f, uint32_t w, uint32_t h,
-                    int view) {
+                    uint32_t view) {
         if (r) frames_[frame_ % kFrames].garbage.push_back(r);
         r.Reset();
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-        D3D12_RESOURCE_DESC td{};
-        td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        td.Width = w;
-        td.Height = h;
-        td.DepthOrArraySize = td.MipLevels = 1;
-        td.Format = f;
-        td.SampleDesc.Count = 1;
+        D3D12_RESOURCE_DESC td = Texture2DDesc(f, w, h);
         td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         st = D3D12_RESOURCE_STATE_RENDER_TARGET;
         if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, st, nullptr, IID_PPV_ARGS(&r))))
@@ -1416,13 +1539,13 @@ void D3D12Backend::Resolve(Target& t) {
         bloom_w_ = bw;
         bloom_h_ = bh;
         for (int i = 0; i < 2; i++)
-            if (!make(bloom_[i], bloom_state_[i], DXGI_FORMAT_R16G16B16A16_FLOAT, bw, bh, i)) return;
+            if (!make(bloom_[i], bloom_state_[i], DXGI_FORMAT_R16G16B16A16_FLOAT, bw, bh, kBloomRtv + i)) return;
     }
     if (!expo_) {
-        if (!make(expo_, expo_state_, DXGI_FORMAT_R16_FLOAT, 1, 1, 2)) return;
+        if (!make(expo_, expo_state_, DXGI_FORMAT_R16_FLOAT, 1, 1, kExposureRtv)) return;
         // new memory can hold NaN, which the blend would keep forever
         float one[4] = {1, 1, 1, 1};
-        cl_->ClearRenderTargetView(rtv(2), one, 0, nullptr);
+        cl_->ClearRenderTargetView(rtv(kExposureRtv), one, 0, nullptr);
         expo_fresh_ = true;
     }
     // exposure follows the scene over about a second
@@ -1432,45 +1555,38 @@ void D3D12Backend::Resolve(Target& t) {
     float a = expo_fresh_ ? 1.0f : 1.0f - std::exp(-dt * 1.5f);
     expo_fresh_ = false;
     const DXGI_FORMAT half = DXGI_FORMAT_R16G16B16A16_FLOAT;
-    ID3D12Resource* in[3] = {fb, nullptr, nullptr};
-    DXGI_FORMAT fmt[3] = {t.fmt, half, DXGI_FORMAT_R16_FLOAT};
+    PostInputs in{{fb, nullptr, nullptr}, {t.fmt, half, DXGI_FORMAT_R16_FLOAT}};
     Transition(expo_.Get(), expo_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
     float pe[8] = {kHeadroom, 0.4f, tone_ ? 0.7f : 1.0f, 1.0f};
-    Post("exposure", DXGI_FORMAT_R16_FLOAT, rtv(2), 1, 1, in, fmt, pe, a);
+    Post("exposure", {rtv(kExposureRtv), DXGI_FORMAT_R16_FLOAT, 1, 1}, in, pe, {.blend = a});
     Transition(expo_.Get(), expo_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    in[2] = expo_.Get();
+    in.res[2] = expo_.Get();
     Transition(bloom_[0].Get(), bloom_state_[0], D3D12_RESOURCE_STATE_RENDER_TARGET);
     float pb[8] = {kHeadroom, 0, 0, 0, 1.0f / t.w, 1.0f / t.h};
-    Post("bright", half, rtv(0), bw, bh, in, fmt, pb);
+    Post("bright", {rtv(kBloomRtv), half, bw, bh}, in, pb);
     for (int pass = 0; pass < 2; pass++) {
-        int from = pass, to = 1 - pass;
+        int from = pass;
+        int to = 1 - pass;
         Transition(bloom_[from].Get(), bloom_state_[from], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         Transition(bloom_[to].Get(), bloom_state_[to], D3D12_RESOURCE_STATE_RENDER_TARGET);
-        ID3D12Resource* b[3] = {bloom_[from].Get(), nullptr, nullptr};
-        DXGI_FORMAT bf[3] = {half, half, half};
+        PostInputs b{{bloom_[from].Get(), nullptr, nullptr}, {half, half, half}};
         float pp[8] = {0, 0, 0, 0, pass ? 0 : 1.0f / bw, pass ? 1.0f / bh : 0};
-        Post("blur", half, rtv(to), bw, bh, b, bf, pp);
+        Post("blur", {rtv(kBloomRtv + to), half, bw, bh}, b, pp);
     }
     Transition(bloom_[0].Get(), bloom_state_[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    in[1] = bloom_[0].Get();
+    in.res[1] = bloom_[0].Get();
     Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     float pt[8] = {kHeadroom, tone_ ? 1.0f : 0.0f, 0.6f, 0};
-    Post("tone", t.fmt, Cpu(rtv_heap_.Get(), t.view, rtv_inc_), t.w, t.h, in, fmt, pt, -1, t.samples);
+    Post("tone", {Cpu(rtv_heap_.Get(), t.view, rtv_inc_), t.fmt, t.w, t.h, t.samples}, in, pt);
 }
 
 // the frame as it is shown, src in the pixel shader resource state: SMAA's blend of it, null when it can't run
 ID3D12Resource* D3D12Backend::Smaa(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
     static const std::string hlsl = std::string(kSmaaConfig) + kSmaaHlsl + kSmaaPasses;
-    auto rtv = [&](int i) { return Cpu(rtv_heap_.Get(), post_rtv_ + 5 + i, rtv_inc_); };
+    auto rtv = [&](uint32_t i) { return Cpu(rtv_heap_.Get(), post_rtv_ + kSmaaRtv + i, rtv_inc_); };
     auto texture = [&](ComPtr<ID3D12Resource>& r, DXGI_FORMAT f, uint32_t tw, uint32_t th, D3D12_RESOURCE_STATES st) {
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-        D3D12_RESOURCE_DESC td{};
-        td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        td.Width = tw;
-        td.Height = th;
-        td.DepthOrArraySize = td.MipLevels = 1;
-        td.Format = f;
-        td.SampleDesc.Count = 1;
+        D3D12_RESOURCE_DESC td = Texture2DDesc(f, tw, th);
         if (st == D3D12_RESOURCE_STATE_RENDER_TARGET) td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         return SUCCEEDED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, st, nullptr, IID_PPV_ARGS(&r)));
     };
@@ -1478,7 +1594,8 @@ ID3D12Resource* D3D12Backend::Smaa(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_
         auto lookup = [&](ComPtr<ID3D12Resource>& r, DXGI_FORMAT f, uint32_t tw, uint32_t th, uint32_t bpp,
                           const uint8_t* data) {
             if (!texture(r, f, tw, th, D3D12_RESOURCE_STATE_COPY_DEST)) return false;
-            uint32_t row = tw * bpp, pitch = (row + 255) & ~255u;
+            uint32_t row = tw * bpp;
+            uint32_t pitch = UploadPitch(row);
             Alloc a = Upload(uint64_t(pitch) * th, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
             for (uint32_t y = 0; y < th; y++) std::memcpy(a.cpu + size_t(y) * pitch, data + size_t(y) * row, row);
             D3D12_TEXTURE_COPY_LOCATION dl{r.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
@@ -1522,20 +1639,21 @@ ID3D12Resource* D3D12Backend::Smaa(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_
     float p[8] = {1.0f / w, 1.0f / h, float(w), float(h)};
     Transition(smaa_[0].Get(), smaa_state_[0], D3D12_RESOURCE_STATE_RENDER_TARGET);
     cl_->ClearRenderTargetView(rtv(0), clear, 0, nullptr);
-    ID3D12Resource* edges[3] = {src, nullptr, nullptr};
-    DXGI_FORMAT ef[3] = {fmt, fmt, fmt};
-    if (!Post("smaa_edges", f[0], rtv(0), w, h, edges, ef, p, -1, 1, hlsl.c_str(), "vs_edges")) return nullptr;
+    PostInputs edges{{src, nullptr, nullptr}, {fmt, fmt, fmt}};
+    if (!Post("smaa_edges", {rtv(0), f[0], w, h}, edges, p, {.hlsl = hlsl.c_str(), .vs_entry = "vs_edges"}))
+        return nullptr;
     Transition(smaa_[0].Get(), smaa_state_[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     Transition(smaa_[1].Get(), smaa_state_[1], D3D12_RESOURCE_STATE_RENDER_TARGET);
     cl_->ClearRenderTargetView(rtv(1), clear, 0, nullptr);
-    ID3D12Resource* weights[3] = {smaa_[0].Get(), smaa_lut_[0].Get(), smaa_lut_[1].Get()};
-    DXGI_FORMAT wf[3] = {f[0], DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM};
-    if (!Post("smaa_weights", f[1], rtv(1), w, h, weights, wf, p, -1, 1, hlsl.c_str(), "vs_weights")) return nullptr;
+    PostInputs weights{{smaa_[0].Get(), smaa_lut_[0].Get(), smaa_lut_[1].Get()},
+                       {f[0], DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM}};
+    if (!Post("smaa_weights", {rtv(1), f[1], w, h}, weights, p, {.hlsl = hlsl.c_str(), .vs_entry = "vs_weights"}))
+        return nullptr;
     Transition(smaa_[1].Get(), smaa_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     Transition(smaa_[2].Get(), smaa_state_[2], D3D12_RESOURCE_STATE_RENDER_TARGET);
-    ID3D12Resource* blend[3] = {src, smaa_[1].Get(), nullptr};
-    DXGI_FORMAT bf[3] = {fmt, f[1], fmt};
-    if (!Post("smaa_blend", fmt, rtv(2), w, h, blend, bf, p, -1, 1, hlsl.c_str(), "vs_blend")) return nullptr;
+    PostInputs blend{{src, smaa_[1].Get(), nullptr}, {fmt, f[1], fmt}};
+    if (!Post("smaa_blend", {rtv(2), fmt, w, h}, blend, p, {.hlsl = hlsl.c_str(), .vs_entry = "vs_blend"}))
+        return nullptr;
     Transition(smaa_[2].Get(), smaa_state_[2], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     return smaa_[2].Get();
 }
@@ -1555,16 +1673,12 @@ void D3D12Backend::Occlusion(const State& s, const float p[6]) {
                     std::clamp<LONG>(LONG((v.y + v.h) * sc), 0, rt->h)};
     if (rect.right <= rect.left || rect.bottom <= rect.top || zr <= 0) return;
     const DXGI_FORMAT fmt = DXGI_FORMAT_R16G16_FLOAT;
-    auto rtv = [&](int i) { return Cpu(rtv_heap_.Get(), post_rtv_ + 3 + i, rtv_inc_); };
+    auto rtv = [&](uint32_t i) { return Cpu(rtv_heap_.Get(), post_rtv_ + kAoRtv + i, rtv_inc_); };
     if (!ao_[1] || ao_w_ != rt->w || ao_h_ != rt->h) {
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-        D3D12_RESOURCE_DESC td{};
-        td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        td.Width = ao_w_ = rt->w;
-        td.Height = ao_h_ = rt->h;
-        td.DepthOrArraySize = td.MipLevels = 1;
-        td.Format = fmt;
-        td.SampleDesc.Count = 1;
+        ao_w_ = rt->w;
+        ao_h_ = rt->h;
+        D3D12_RESOURCE_DESC td = Texture2DDesc(fmt, ao_w_, ao_h_);
         td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         for (int i = 0; i < 2; i++) {
             if (ao_[i]) frames_[frame_ % kFrames].garbage.push_back(ao_[i]);
@@ -1805,7 +1919,7 @@ ID3D12Resource* D3D12Backend::BindTargetTexture(const State& s, int stage, const
     sv.Format = t.depth ? DXGI_FORMAT_R24_UNORM_X8_TYPELESS : t.fmt;
     // the console reads the pixels it is about to overwrite: give the draw a copy
     if (feedback) return Feedback(t);
-    if (t.depth) info.shadow = d.format == 0x2C || d.format == 0x30 ? 2 : 1;
+    if (t.depth) info.shadow = ShadowDepthKind(d.format);
     D3D12_RESOURCE_STATES* st;
     ID3D12Resource* r = Flat(t, st);
     if (r) Transition(r, *st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1849,7 +1963,7 @@ bool D3D12Backend::CreateTexture(Tex& tx, const TextureDesc& d, const FormatInfo
     return true;
 }
 
-void CheckNormCube(Tex& tx, const TextureDesc& d, const FormatInfo& fi, uint32_t f, const std::vector<uint8_t>& px,
+void UpdateNormCube(Tex& tx, const TextureDesc& d, const FormatInfo& fi, uint32_t f, const std::vector<uint8_t>& px,
                    uint32_t pitch) {
     // a normalization cube: each face's centre points along its axis, 255 or 0 there, 128 across
     if (!f) tx.norm = fi.host == Host::BGRA8 && d.width >= 8 && px.size() >= size_t(d.width / 2 + 1) * pitch;
@@ -1884,7 +1998,7 @@ void D3D12Backend::UploadTextureLevel(Tex& tx, uint32_t f, uint32_t l, const std
     UINT64 bytes;
     uint32_t sub = f * tx.levels + l;
     dev_->GetCopyableFootprints(&rd, sub, 1, 0, &fp, &rows, &row_size, &bytes);
-    Alloc a = Upload(bytes, 512);
+    Alloc a = Upload(bytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     CopyLevelRows(a.cpu, fp, rows, row_size, px, pitch);
     fp.Offset = a.off;
     D3D12_TEXTURE_COPY_LOCATION dl{tx.res.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
@@ -1903,7 +2017,7 @@ void D3D12Backend::UploadTexture(Tex& tx, const TextureDesc& d, const FormatInfo
         for (uint32_t l = 0; l < tx.levels; l++) {
             uint32_t pitch;
             DecodeLevel(d, l, f, p, nullptr, px, pitch);
-            if (d.cube && !l) CheckNormCube(tx, d, fi, f, px, pitch);
+            if (d.cube && !l) UpdateNormCube(tx, d, fi, f, px, pitch);
             UploadTextureLevel(tx, f, l, px, pitch);
         }
     Transition(tx.res.Get(), st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1958,7 +2072,7 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
         }
     }
     TextureView(tx, d, sv);
-    if (fi.depth) info.shadow = d.format == 0x2C || d.format == 0x30 ? 2 : 1;
+    if (fi.depth) info.shadow = ShadowDepthKind(d.format);
     if (tx.norm && d.cube && sm3_) info.flags |= kTexNormCube;
     return tx.res.Get();
 }
@@ -2047,11 +2161,11 @@ std::string VertexHlsl(const State& s, const Assembled& a, bool prog, const Fixe
 
 uint64_t D3D12Backend::FindVertexShader(uint64_t vkey, const State& s, const Assembled& a, bool prog, bool quad,
                                         const FixedKey& fk) {
-    auto vit = vs_src_.find(vkey);
-    if (vit != vs_src_.end()) return vit->second;
+    auto vit = shader_src_.find(vkey);
+    if (vit != shader_src_.end()) return vit->second;
     std::string src = VertexHlsl(s, a, prog, fk);
     uint64_t vh = Register(quad ? QuadHlsl(std::move(src)) : src, "main", "vs_5_0");
-    vs_src_[vkey] = vh;
+    shader_src_[vkey] = vh;
     return vh;
 }
 
@@ -2068,10 +2182,10 @@ constexpr uint64_t kPixelKeySalt = 0x9E3779B97F4A7C15ull;
 
 uint64_t D3D12Backend::FindPixelShader(const PixelKey& pk, uint64_t pkh) {
     // pixel shaders share the map with vertex shaders, the salt keeps their keys apart
-    auto pit = vs_src_.find(pkh ^ kPixelKeySalt);
-    if (pit != vs_src_.end()) return pit->second;
+    auto pit = shader_src_.find(pkh ^ kPixelKeySalt);
+    if (pit != shader_src_.end()) return pit->second;
     uint64_t ph = Register(PixelHlsl(pk), "main", "ps_5_0");
-    vs_src_[pkh ^ kPixelKeySalt] = ph;
+    shader_src_[pkh ^ kPixelKeySalt] = ph;
     return ph;
 }
 
@@ -2168,7 +2282,7 @@ void FillCombinerConstants(const State& s, DrawConstants& c) {
 void D3D12Backend::FillHdrConstants(const PsoKey& k, DrawConstants& c) {
     // colour lands over the headroom unless the blend multiplies it with what the target holds
     uint32_t src_factor = k.blend ? k.src : 1;
-    c.hdr[0] = bound_rt_ && bound_rt_->hdr && src_factor != 0 && src_factor != 0x306 ? 1 / kHeadroom : 1;
+    c.hdr[0] = bound_rt_ && bound_rt_->hdr && src_factor != 0 && src_factor != kBlendDestColor ? 1 / kHeadroom : 1;
     c.hdr[1] = kHeadroom;
     c.hdr[2] = hq_shadows_ ? 1.5f : 0.0f;
 }
@@ -2610,8 +2724,9 @@ void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count, 
             cl_->RSSetViewports(1, &vp);
             cl_->RSSetScissorRects(1, &sc);
             float uv[4] = {x0 / s->gw, y0 / s->gh, (x1 - x0) / s->gw, (y1 - y0) / s->gh};
-            Blit(sr, s->fmt, uv, false, true, uint32_t(std::ceil(std::max(ss / ds, 1.0f) - 1e-3f)),
-                 !same && d->hdr ? 1 / kHeadroom : 1, d->fmt, false, d->samples);
+            uint32_t taps = uint32_t(std::ceil(std::max(ss / ds, 1.0f) - 1e-3f));
+            float mul = !same && d->hdr ? 1 / kHeadroom : 1;
+            Blit(sr, s->fmt, uv, {.alpha = true, .taps = taps, .mul = mul, .rtv = d->fmt, .samples = d->samples});
         }
         d->drawn = true;
         bound_rt_ = bound_ds_ = nullptr;
@@ -2663,10 +2778,7 @@ void D3D12Backend::ResizeSwap() {
     if (w == bb_w_ && h == bb_h_) return;
     Flush();
     for (auto& f : frames_) {
-        if (f.fence) {
-            fence_->SetEventOnCompletion(f.fence, event_);
-            WaitForSingleObject(event_, INFINITE);
-        }
+        if (f.fence) WaitFence(f.fence);
     }
     for (auto& b : bb_) b.Reset();
     swap_->ResizeBuffers(kFrames, w, h, DXGI_FORMAT_B8G8R8A8_UNORM, tearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
@@ -2705,8 +2817,9 @@ void D3D12Backend::StartCapture() {
 }
 
 void D3D12Backend::UploadGammaRamp() {
+    constexpr uint32_t kRampBytes = 256 * 4;  // one BGRA texel per ramp entry
     ramp_dirty_ = false;
-    Alloc a = Upload(256 * 4 + 512, 512);
+    Alloc a = Upload(kRampBytes + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     bool identity = true;
     for (int i = 0; i < 256; i++) {
         uint8_t* p = a.cpu + i * 4;
@@ -2721,11 +2834,12 @@ void D3D12Backend::UploadGammaRamp() {
     D3D12_TEXTURE_COPY_LOCATION dl{lut_.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
     D3D12_TEXTURE_COPY_LOCATION sl{a.res, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
     sl.PlacedFootprint.Offset = a.off;
-    sl.PlacedFootprint.Footprint = {DXGI_FORMAT_B8G8R8A8_UNORM, 256, 1, 1, 1024};
+    sl.PlacedFootprint.Footprint = {DXGI_FORMAT_B8G8R8A8_UNORM, 256, 1, 1, kRampBytes};
     cl_->CopyTextureRegion(&dl, 0, 0, 0, &sl, nullptr);
 }
 
-ID3D12Resource* D3D12Backend::FrameSource(Target* t) {
+// what the frame shows: the target made readable, SMAA's blend of it when that is on
+ID3D12Resource* D3D12Backend::PrepareShownFrame(Target* t) {
     D3D12_RESOURCE_STATES* st = nullptr;
     ID3D12Resource* r = t ? Flat(*t, st) : nullptr;
     if (r) {
@@ -2748,7 +2862,7 @@ void D3D12Backend::BlitFrame(const Target& t, ID3D12Resource* r, bool pillarbox)
     D3D12_RECT sc{0, 0, LONG(bb_w_), LONG(bb_h_)};
     cl_->RSSetViewports(1, &vp);
     cl_->RSSetScissorRects(1, &sc);
-    if (r) Blit(r, t.fmt, uv, gamma_, false);
+    if (r) Blit(r, t.fmt, uv, {.gamma = gamma_});
 }
 
 void D3D12Backend::RenderUi() {
@@ -2765,7 +2879,7 @@ void D3D12Backend::RenderUi() {
 
 void D3D12Backend::DrawFrame(Target* t, bool pillarbox, uint32_t bi) {
     D3D12_RESOURCE_STATES bs = D3D12_RESOURCE_STATE_PRESENT;
-    ID3D12Resource* r = FrameSource(t);
+    ID3D12Resource* r = PrepareShownFrame(t);
     Transition(bb_[bi].Get(), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), kRtvCount + bi, rtv_inc_);
     float black[4] = {0, 0, 0, 1};
@@ -2778,24 +2892,24 @@ void D3D12Backend::DrawFrame(Target* t, bool pillarbox, uint32_t bi) {
 }
 
 void D3D12Backend::ReleaseOldTextures() {
+    constexpr uint64_t kSweepEvery = 60;    // presents between sweeps
+    constexpr size_t kTexturesKept = 2048;  // no sweep below this many
+    constexpr uint64_t kIdleFrames = 600;
     // textures unused for ten seconds go, levels stream theirs in and out
-    if (presents_ % 60 == 0 && textures_.size() > 2048)
-        for (auto it = textures_.begin(); it != textures_.end();) {
-            if (it->second.frame + 600 < presents_) {
-                frames_[frame_ % kFrames].garbage.push_back(it->second.res);
-                it = textures_.erase(it);
-            } else {
-                ++it;
-            }
+    if (presents_ % kSweepEvery != 0 || textures_.size() <= kTexturesKept) return;
+    for (auto it = textures_.begin(); it != textures_.end();) {
+        if (it->second.frame + kIdleFrames < presents_) {
+            frames_[frame_ % kFrames].garbage.push_back(it->second.res);
+            it = textures_.erase(it);
+        } else {
+            ++it;
         }
+    }
 }
 
 void D3D12Backend::ResetFrame() {
     Frame& f = frames_[frame_ % kFrames];
-    if (f.fence && fence_->GetCompletedValue() < f.fence) {
-        fence_->SetEventOnCompletion(f.fence, event_);
-        WaitForSingleObject(event_, INFINITE);
-    }
+    if (f.fence && fence_->GetCompletedValue() < f.fence) WaitFence(f.fence);
     f.alloc->Reset();
     f.garbage.clear();
     f.used = 0;
@@ -2862,7 +2976,11 @@ void D3D12Backend::ApplySettings() {
     async_ = set.async_shaders;
     cache::SaveWhenIdle();
     bool hdr = sm3_ && set.hdr_rendering;
-    uint32_t msaa = set.msaa == msaa_set_ ? msaa_ : Samples(msaa_set_ = set.msaa);
+    uint32_t msaa = msaa_;
+    if (set.msaa != msaa_set_) {
+        msaa_set_ = set.msaa;
+        msaa = Samples(msaa_set_);
+    }
     if (std::fabs(want - scale_) > 1e-4f || shadows != shadow_res_ || hdr != hdr_ || msaa != msaa_) {
         hdr_ = hdr;
         msaa_ = msaa;
@@ -2896,7 +3014,7 @@ void D3D12Backend::Sync(uint32_t data, uint32_t) {
     std::vector<uint8_t> px;
     if (!ReadBack(src, t.gw, t.gh, px)) return;
     // color targets are 32 bit linear in guest memory, the pitch rounds to 64 bytes
-    uint32_t pitch = (t.gw * 4 + 63) & ~63u;
+    uint32_t pitch = GuestPitch(t.gw);
     for (uint32_t y = 0; y < t.gh; y++)
         std::memcpy(static_cast<uint8_t*>(kernel::HostPtr(data)) + size_t(y) * pitch, &px[size_t(y) * t.gw * 4],
                     t.gw * 4);
@@ -2917,7 +3035,8 @@ bool D3D12Backend::DeliverLate(uint32_t data) {
     auto it = late_.find(data);
     if (it == late_.end()) return false;
     Late& l = it->second;
-    uint64_t done = fence_->GetCompletedValue(), now = presents_seen_.load();
+    uint64_t done = fence_->GetCompletedValue();
+    uint64_t now = presents_seen_.load();
     int best = -1;
     for (int i = 0; i < kFrames; i++)
         if (l.fence[i] && l.fence[i] <= done && now - l.frame[i] <= uint64_t(kFrames) + 1 &&
@@ -2931,7 +3050,7 @@ bool D3D12Backend::DeliverLate(uint32_t data) {
         // the last row is not padded to the pitch: a range to the end of the pitch fails to map
         D3D12_RANGE rr{0, size_t(l.row_pitch) * (l.gh - 1) + l.gw * 4};
         if (FAILED(l.rb[best]->Map(0, &rr, reinterpret_cast<void**>(&p)))) return false;
-        uint32_t pitch = (l.gw * 4 + 63) & ~63u;
+        uint32_t pitch = GuestPitch(l.gw);
         uint8_t* dst = static_cast<uint8_t*>(kernel::HostPtr(data));
         for (uint32_t y = 0; y < l.gh; y++) std::memcpy(dst + size_t(y) * pitch, p + size_t(y) * l.row_pitch, l.gw * 4);
         D3D12_RANGE none{0, 0};
@@ -2967,7 +3086,8 @@ void D3D12Backend::RecordLate(uint32_t data) {
     ID3D12Resource* src = Flat(t, st);
     if (!src) return;
     if (t.w != t.gw || t.h != t.gh || t.fmt != kBgra) {
-        ComPtr<ID3D12Resource> down = Shrink(src, *st, t.fmt, t.gw, t.gh, 1, l.down.Get(), l.down_state);
+        ShrinkOptions reuse{.into = l.down.Get(), .into_state = l.down_state};
+        ComPtr<ID3D12Resource> down = Shrink(src, *st, t.fmt, t.gw, t.gh, reuse);
         if (!down) return;
         l.down = down;
         l.down_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
@@ -2978,16 +3098,12 @@ void D3D12Backend::RecordLate(uint32_t data) {
     D3D12_RESOURCE_DESC rd = src->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     UINT rows;
-    UINT64 row_size, bytes;
+    UINT64 row_size;
+    UINT64 bytes;
     dev_->GetCopyableFootprints(&rd, 0, 1, 0, &fp, &rows, &row_size, &bytes);
     if (!l.rb[slot]) {
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_READBACK};
-        D3D12_RESOURCE_DESC bd{};
-        bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bd.Width = bytes;
-        bd.Height = bd.DepthOrArraySize = bd.MipLevels = 1;
-        bd.SampleDesc.Count = 1;
-        bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        D3D12_RESOURCE_DESC bd = BufferDesc(bytes);
         if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST,
                                                  nullptr, IID_PPV_ARGS(&l.rb[slot]))))
             return;
@@ -3004,21 +3120,14 @@ void D3D12Backend::RecordLate(uint32_t data) {
 
 // filters src into a new w x h target, left as a copy source
 ComPtr<ID3D12Resource> D3D12Backend::Shrink(ID3D12Resource* src, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt,
-                                            uint32_t w, uint32_t h, uint32_t taps, ID3D12Resource* into,
-                                            D3D12_RESOURCE_STATES into_state, float mul) {
+                                            uint32_t w, uint32_t h, const ShrinkOptions& o) {
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-    D3D12_RESOURCE_DESC td{};
-    td.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    td.Width = w;
-    td.Height = h;
-    td.DepthOrArraySize = td.MipLevels = 1;
-    td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    td.SampleDesc.Count = 1;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_B8G8R8A8_UNORM, w, h);
     td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     D3D12_CLEAR_VALUE cv{};
     cv.Format = td.Format;
-    ComPtr<ID3D12Resource> down = into;
-    D3D12_RESOURCE_STATES ds = into ? into_state : D3D12_RESOURCE_STATE_RENDER_TARGET;
+    ComPtr<ID3D12Resource> down = o.into;
+    D3D12_RESOURCE_STATES ds = o.into ? o.into_state : D3D12_RESOURCE_STATE_RENDER_TARGET;
     if (free_rtv_.empty()) return nullptr;
     if (down) Transition(down.Get(), ds, D3D12_RESOURCE_STATE_RENDER_TARGET);
     else if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -3029,12 +3138,9 @@ ComPtr<ID3D12Resource> D3D12Backend::Shrink(ID3D12Resource* src, D3D12_RESOURCE_
     Transition(src, st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     bound_rt_ = bound_ds_ = nullptr;
-    D3D12_VIEWPORT vp{0, 0, float(w), float(h), 0, 1};
-    D3D12_RECT sc{0, 0, LONG(w), LONG(h)};
-    cl_->RSSetViewports(1, &vp);
-    cl_->RSSetScissorRects(1, &sc);
+    SetFullViewport(w, h);
     float uv[4] = {0, 0, 1, 1};
-    Blit(src, fmt, uv, false, true, taps, mul);
+    Blit(src, fmt, uv, {.alpha = true, .taps = o.taps, .mul = o.mul});
     Transition(down.Get(), ds, D3D12_RESOURCE_STATE_COPY_SOURCE);
     return down;
 }
@@ -3044,16 +3150,12 @@ bool D3D12Backend::ReadBack(ID3D12Resource* res, uint32_t w, uint32_t h, std::ve
     D3D12_RESOURCE_DESC rd = res->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     UINT rows;
-    UINT64 row_size, bytes;
+    UINT64 row_size;
+    UINT64 bytes;
     dev_->GetCopyableFootprints(&rd, 0, 1, 0, &fp, &rows, &row_size, &bytes);
     ComPtr<ID3D12Resource> rb;
     D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_READBACK};
-    D3D12_RESOURCE_DESC bd{};
-    bd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    bd.Width = bytes;
-    bd.Height = bd.DepthOrArraySize = bd.MipLevels = 1;
-    bd.SampleDesc.Count = 1;
-    bd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    D3D12_RESOURCE_DESC bd = BufferDesc(bytes);
     if (FAILED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                              IID_PPV_ARGS(&rb))))
         return false;
@@ -3072,7 +3174,7 @@ bool D3D12Backend::ReadBack(ID3D12Resource* res, uint32_t w, uint32_t h, std::ve
 
 void D3D12Backend::CapSave(ID3D12Resource* res, D3D12_RESOURCE_STATES& st, DXGI_FORMAT fmt, uint32_t w, uint32_t h,
                            const char* name, float mul) {
-    ComPtr<ID3D12Resource> down = Shrink(res, st, fmt, w, h, 1, nullptr, D3D12_RESOURCE_STATE_COPY_SOURCE, mul);
+    ComPtr<ID3D12Resource> down = Shrink(res, st, fmt, w, h, {.mul = mul});
     std::vector<uint8_t> px;
     if (!down || !ReadBack(down.Get(), w, h, px)) return;
     FILE* f = _wfopen((cap_dir_ / (std::string(name) + ".bmp")).c_str(), L"wb");
