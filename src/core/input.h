@@ -57,8 +57,8 @@ std::u16string TakeChars();  // typed since the last call, backspace as '\b'
 void MovieFrame();
 bool Movie();
 
-// What the player looks through, set by the game side each input update. In the EEV and the sticky camera
-// the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
+// What the player looks through, set by the game side each input update. In the EEV (the sniper scope too) and the
+// sticky camera the wheel zooms instead of stepping the walking speed. The sticky camera zooms at zoom_speed degrees a second at full stick.
 // A scripted event (in-game cinematic) is skipped with Start, which Enter presses there as well as Escape.
 // On a ledge, a narrow ladder, a pipe, a rope, rappelling, in a vent or carrying a body the move keys push the stick
 // fully: climbing wants aForward past 0.9, which slow walking speeds never reach. Lockpicking turns the move keys into

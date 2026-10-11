@@ -1,7 +1,7 @@
-// The EEV and the sticky camera with the mouse wheel. Both are states of the player controller.
-// EEV: the pad's left stick click (ZoomInOut) steps EEEV.ZoomIdx through FOVs and wraps. The wheel sets a target
-// level instead, up zooms in and down zooms out, stopping at the ends, and the click is tapped until the level
-// is reached. Sticky camera: the input side zooms it with the stick and remaps its keys.
+// The EEV, the sniper scope and the sticky camera with the mouse wheel. All are states of the player controller.
+// EEV and sniper scope: the pad's left stick click (ZoomInOut) steps EEEV.ZoomIdx or the scope's FOVIndex through
+// FOVs and wraps. The wheel sets a target level instead, up zooms in and down zooms out, stopping at the ends, and the
+// click is tapped until the level is reached. Sticky camera: the input side zooms it with the stick and remaps its keys.
 // Scripted events (in-game cinematics): s_ScriptedEvent's ProcessPauseMenu skips them, so Enter presses Start too.
 // Aiming with no interaction in reach, the pad's A reloads; the keyboard has a reload key instead.
 #include <algorithm>
@@ -22,22 +22,22 @@ constexpr uint16_t kLeftThumb = 1 << 6;
 // a tap the game did not act on (EEV busy scanning or hacking) drops the target
 constexpr auto kTapTimeout = std::chrono::milliseconds(400);
 
-bool g_in_eev = false;
+uint32_t g_zoomer = 0;  // the EEV or scope being zoomed, 0 for none
 int g_target = 0, g_last = 0;
 bool g_tapping = false;
 std::chrono::steady_clock::time_point g_tap_time;
 
-void Eev(uint32_t pc) {
-    uint32_t eev_offset = unreal::Offset(pc, unreal::Name("EEV"));
-    uint32_t eev = eev_offset ? R32(pc + eev_offset) : 0;
-    uint32_t zoom = eev ? unreal::Offset(eev, unreal::Name("ZoomIdx")) : 0;
-    uint32_t fovs = eev ? unreal::Offset(eev, unreal::Name("FOVs")) : 0;
+// zoom: the object's level index, fovs: its FOVs array (+0 data, +4 count)
+void Zoom(uint32_t object, uint32_t zoom, uint32_t fovs) {
     int notches = input::TakeWheel();
-    if (!zoom || !fovs) return;
-    int level = int(R32(eev + zoom)), count = int(R32(eev + fovs + 4));
+    if (!object || !zoom || !fovs) {
+        g_zoomer = 0;
+        return;
+    }
+    int level = int(R32(object + zoom)), count = int(R32(object + fovs + 4));
     auto now = std::chrono::steady_clock::now();
-    if (!g_in_eev) {
-        g_in_eev = true;
+    if (object != g_zoomer) {
+        g_zoomer = object;
         g_target = g_last = level;
         g_tapping = false;
     }
@@ -57,6 +57,34 @@ void Eev(uint32_t pc) {
         g_tapping = true;
         g_tap_time = now;
     }
+}
+
+void Eev(uint32_t pc) {
+    uint32_t eev_offset = unreal::Offset(pc, unreal::Name("EEV"));
+    uint32_t eev = eev_offset ? R32(pc + eev_offset) : 0;
+    Zoom(eev, eev ? unreal::Offset(eev, unreal::Name("ZoomIdx")) : 0,
+         eev ? unreal::Offset(eev, unreal::Name("FOVs")) : 0);
+}
+
+// EMainGun.GetScope: the sniper attachment while it is the active one; the default scope has a single FOV
+void Sniper(uint32_t pc) {
+    uint32_t gun_offset = unreal::Offset(pc, unreal::Name("ActiveGun"));
+    uint32_t gun = gun_offset ? R32(pc + gun_offset) : 0;
+    uint32_t active = gun ? unreal::Offset(gun, unreal::Name("ActiveAttach")) : 0;
+    uint32_t sniper = gun ? unreal::Offset(gun, unreal::Name("Sniper")) : 0;
+    uint32_t scope = active && sniper && R32(gun + active) == R32(gun + sniper) ? R32(gun + sniper) : 0;
+    Zoom(scope, scope ? unreal::Offset(scope, unreal::Name("FOVIndex")) : 0,
+         scope ? unreal::Offset(scope, unreal::Name("FOVs")) : 0);
+}
+
+// s_PlayerSniping and the states extending it
+bool Sniping(uint32_t state) {
+    static constexpr uint32_t kSniping[] = {
+        unreal::Name("s_PlayerSniping"),         unreal::Name("s_RappellingSniping"),
+        unreal::Name("s_DualRappellingSniping"), unreal::Name("s_SplitSniping"),
+        unreal::Name("s_OverTrainSniping"),      unreal::Name("s_TeamShouldersSniping"),
+    };
+    return std::find(std::begin(kSniping), std::end(kSniping), state) != std::end(kSniping);
 }
 
 bool Targeting(uint32_t state) {
@@ -89,7 +117,8 @@ void UpdateView(uint32_t viewport) {
     uint32_t state = unreal::StateOf(pc);
     input::View view = input::View::Normal;
     float zoom_speed = 0.0f;
-    if (state == unreal::Name("s_EEV")) {
+    bool sniping = Sniping(state);
+    if (state == unreal::Name("s_EEV") || sniping) {
         view = input::View::Eev;
     } else if (state == unreal::Name("s_ScriptedEvent")) {
         view = input::View::ScriptedEvent;
@@ -118,8 +147,9 @@ void UpdateView(uint32_t viewport) {
     input::SetView(view, zoom_speed);
     input::SetInteractReloads(InteractReloads(pc, state));
     input::SetTargeting(Targeting(state));
-    if (view == input::View::Eev) Eev(pc);
-    else g_in_eev = false;
+    if (view == input::View::Eev && sniping) Sniper(pc);
+    else if (view == input::View::Eev) Eev(pc);
+    else g_zoomer = 0;
 }
 
 }  // namespace game
