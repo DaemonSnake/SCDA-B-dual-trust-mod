@@ -875,7 +875,6 @@ private:
     bool sm3_ = false;
     bool hdr_ = false;
     bool tone_ = false;
-    bool hq_shadows_ = false;
     uint32_t msaa_ = 1;      // samples in use
     uint32_t msaa_set_ = 0;  // app::Settings::msaa they came from
     // resolve: quarter size bloom pair, the exposure pixel kept across frames
@@ -1116,10 +1115,9 @@ void D3D12Backend::LoadSettings() {
     msaa_ = Samples(msaa_set_);
 }
 
-// tone mapping, high quality shadows and async shaders from the settings; sm3_ is set before
+// tone mapping and async shaders from the settings; sm3_ is set before
 void D3D12Backend::LatchFeatureSettings(const app::Settings& set) {
     tone_ = sm3_ && set.tone_mapping;
-    hq_shadows_ = sm3_ && set.hq_soft_shadows;
     async_ = set.async_shaders;
 }
 
@@ -2347,7 +2345,7 @@ ID3D12Resource* D3D12Backend::BindGuestTexture(int stage, const TextureDesc& d, 
     }
     FillTextureView(tx, d, stages.sv[stage]);
     if (fi.depth) info.shadow = ShadowDepthKind(d.format);
-    if (tx.norm && d.cube && sm3_) info.flags |= kTexNormCube;
+    if (tx.norm && d.cube && hdr_) info.flags |= kTexNormCube;
     return tx.res.Get();
 }
 
@@ -2616,14 +2614,11 @@ void FillCombinerConstants(const State& s, DrawConstants& c) {
     Color(s.rs[kRsTextureFactor], c.tfactor);
 }
 
-constexpr float kSoftShadowRadius = 1.5f;  // in shadow map texels, with the high quality shadows option
-
 void D3D12Backend::FillHdrConstants(const PsoKey& k, DrawConstants& c) {
     // colour lands over the headroom unless the blend multiplies it with what the target holds
     uint32_t src_factor = k.blend ? k.src : 1;
     c.hdr[0] = bound_rt_ && bound_rt_->hdr && src_factor != 0 && src_factor != kBlendDestColor ? 1 / kHeadroom : 1;
     c.hdr[1] = kHeadroom;
-    c.hdr[2] = hq_shadows_ ? kSoftShadowRadius : 0.0f;
 }
 
 constexpr float kGlowBoxTexels = 3.0f;  // console texels across the box each wide tap averages

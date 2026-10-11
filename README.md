@@ -113,7 +113,6 @@ The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/
 
 - **HDR Rendering** - Enables Shader Model 3 HDR rendering.
 - **Tone Mapping** - Enables Shader Model 3 tone mapping.
-- **High Quality Soft Shadows** - Enables Shader Model 3 soft shadows.
 
 ### Input
 - **Mouse and Keyboard** - Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
