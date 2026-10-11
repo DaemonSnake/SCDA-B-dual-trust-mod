@@ -209,7 +209,7 @@ float4 smaa_blend(SmaaBlendV i) : SV_Target { return SMAANeighborhoodBlendingPS(
 // from the scene's depth: occlusion pass, then a blur across and one down that multiplies it into the colour
 // stencil bit 0 is the world, the sky is drawn where it is clear and counts as the far plane
 const char* kAoHlsl = R"(
-cbuffer A : register(b1) { float4 proj; float4 zp; float4 vp; float4 opt; };
+cbuffer A : register(b1) { float4 proj; float4 zp; float4 vp; float4 opt; float4 fog; };
 #ifdef MS
 Texture2DMS<float> depth : register(t0);
 Texture2DMS<uint2> stencil : register(t2);
@@ -269,9 +269,11 @@ float2 occlusion_blur(float4 pos : SV_Position) : SV_Target {
     float z, a = Smooth(pos.xy, z);
     return float2(a, z);
 }
+// fog: the game's, already blended over the scene, fades the occlusion out as it thickens
 float4 occlusion_apply(float4 pos : SV_Position) : SV_Target {
-    float z;
-    return float4(Smooth(pos.xy, z).xxx, 1);
+    float z, a = Smooth(pos.xy, z);
+    float fogged = fog.z * saturate(fog.x * z + fog.y);
+    return float4(lerp(a, 1, fogged).xxx, 1);
 }
 )";
 
@@ -583,7 +585,7 @@ public:
     void RecordLate(uint32_t data) override;
     void Flush() override;
     void SetGamma(const uint8_t* ramp) override;
-    void Occlusion(const State& s, const float p[6]) override;
+    void Occlusion(const State& s, const float p[kOcclusionParams]) override;
 
 private:
     struct Frame {
@@ -674,7 +676,7 @@ private:
     };
     // what the passes share: kAoHlsl's constants, the scene rectangle and viewport, the depth's sample count
     struct AoFrame {
-        float c[16];
+        float c[20];
         D3D12_RECT rect;
         D3D12_VIEWPORT vp;
         uint32_t depth_samples;
@@ -1971,7 +1973,7 @@ bool D3D12Backend::DrawAoPass(const AoFrame& f, const AoPass& pass) {
     if (!pso) return false;
     uint32_t slot = AllocSrvSlots(4);
     CreateAoViews(slot, pass, ms);
-    float c[16];
+    decltype(f.c) c;
     std::memcpy(c, f.c, sizeof(c));
     // kAoHlsl's opt.zw: this pass's blur step
     c[14] = pass.step_x;
@@ -2007,7 +2009,7 @@ void D3D12Backend::DrawOcclusionPasses(Target& rt, Target& ds, const AoFrame& f)
 }
 
 // p: 1 / the projection's x and y scale, its x and y centre, then view z = p[4] / (ndc depth - p[5])
-void D3D12Backend::Occlusion(const State& s, const float p[6]) {
+void D3D12Backend::Occlusion(const State& s, const float p[kOcclusionParams]) {
     Target* rt = FindTarget(s.rt, false);
     Target* ds = FindTarget(s.zs, true);
     // the frame's own scene only, views drawn to smaller targets are left
@@ -2028,9 +2030,10 @@ void D3D12Backend::Occlusion(const State& s, const float p[6]) {
               rt->w, rt->h, ds->samples, 1 / p[0], 1 / p[1], p[4], p[5]);
     float rect_w = float(rect.right - rect.left);
     float rect_h = float(rect.bottom - rect.top);
-    // kAoHlsl's proj, zp, vp and opt; each pass sets its blur step in opt.zw
+    // kAoHlsl's proj, zp, vp, opt and fog; each pass sets its blur step in opt.zw
     AoFrame f{.c = {p[0], p[1], p[2], p[3], p[4] * zr, v.min_z + p[5] * zr, 0, 0,
-                    float(rect.left), float(rect.top), rect_w, rect_h, kAoRadius, kAoMaxSpan * rect_h, 0, 0},
+                    float(rect.left), float(rect.top), rect_w, rect_h, kAoRadius, kAoMaxSpan * rect_h, 0, 0,
+                    p[6], p[7], p[8], 0},
               .rect = rect,
               .vp = {0, 0, float(rt->w), float(rt->h), 0, 1},
               .depth_samples = ds->samples};

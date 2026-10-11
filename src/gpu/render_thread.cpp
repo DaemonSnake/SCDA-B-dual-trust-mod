@@ -203,10 +203,10 @@ public:
         cur_->cmds.push_back(c);
     }
 
-    void Occlusion(const State& s, const float p[6]) override {
+    void Occlusion(const State& s, const float p[kOcclusionParams]) override {
         SendState(s);
         Cmd c{Op::Occlusion};
-        c.data = Put(p, 6 * sizeof(float));
+        c.data = Put(p, kOcclusionParams * sizeof(float));
         cur_->cmds.push_back(c);
         Use(s.rt.header);
         Use(s.zs.header);
@@ -421,7 +421,7 @@ private:
             case Op::Flush: inner_->Flush(); break;
             case Op::Gamma: inner_->SetGamma(data); break;
             case Op::Occlusion: {
-                float p[6];
+                float p[kOcclusionParams];
                 std::memcpy(p, data, sizeof(p));
                 inner_->Occlusion(state_, p);
                 break;

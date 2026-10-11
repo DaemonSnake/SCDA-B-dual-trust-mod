@@ -111,6 +111,51 @@ void SetComplex(uint32_t rs, uint32_t v) {
     W32(kRenderState + rs * 4, v);
 }
 
+// The game fogs a surface in a pass of its own: the fog colour blended over it by the alpha of a 64 x 1 ramp, looked
+// up at c116, a plane along the view depth. The frame's latest one tells ambient occlusion how thick the fog is.
+constexpr uint32_t kFogPlane = 116;
+constexpr uint32_t kClipW = 107;  // the transform's row that gives clip w, the view depth
+constexpr uint32_t kFogRampStage = 3;
+constexpr uint32_t kFogRampWidth = 64;
+constexpr uint32_t kBlendSrcAlpha = 0x302;
+constexpr uint32_t kBlendInvSrcAlpha = 0x303;
+
+// fog amount at view depth z: amount * saturate(slope * z + offset)
+struct Fog {
+    float slope = 0;
+    float offset = 0;
+    float amount = 0;
+};
+Fog g_fog;
+
+uint32_t Simple(uint32_t method) { return g_state.simple[method >> 2]; }
+
+bool IsFogPass() {
+    if (!Simple(gpu::kMBlendEnable)) return false;
+    if (Simple(gpu::kMSrcBlend) != kBlendSrcAlpha || Simple(gpu::kMDestBlend) != kBlendInvSrcAlpha) return false;
+    gpu::TextureDesc ramp;
+    if (!gpu::Describe(g_state.textures[kFogRampStage], ramp)) return false;
+    return ramp.width == kFogRampWidth && ramp.height == 1;
+}
+
+float Dot3(const std::array<float, 4>& a, const std::array<float, 4>& b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+void LatchFog() {
+    if (!IsFogPass()) return;
+    const auto& plane = g_state.vsc[kFogPlane];
+    const auto& depth = g_state.vsc[kClipW];
+    float depth_len2 = Dot3(depth, depth);
+    if (depth_len2 <= 0) return;
+    float slope = Dot3(plane, depth) / depth_len2;
+    std::array<float, 4> rest = {plane[0] - slope * depth[0], plane[1] - slope * depth[1], plane[2] - slope * depth[2]};
+    // only a plane parallel to the view depth is distance fog
+    if (slope <= 0 || Dot3(rest, rest) > 1e-6f * Dot3(plane, plane)) return;
+    uint32_t color = Simple(gpu::kMPsConstant0);
+    g_fog = {slope, plane[3] - slope * depth[3], (color >> 24) / 255.0f};
+}
+
 }  // namespace
 
 gpu::State& State() { return g_state; }
@@ -125,7 +170,8 @@ void ViewScale(float xy) {
 void Occlusion(const float* m) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (!g_backend || m[11] != 1.0f || m[15] != 0.0f || !m[0] || !m[5]) return;
-    const float p[6] = {1 / m[0], 1 / m[5], m[8], m[9], m[14], m[10]};
+    const float p[gpu::kOcclusionParams] = {1 / m[0], 1 / m[5], m[8], m[9], m[14], m[10],
+                                            g_fog.slope, g_fog.offset, g_fog.amount};
     g_backend->Occlusion(g_state, p);
 }
 
@@ -361,6 +407,7 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
         LOGI("d3d: frame %u shown %s, Swap from %08X", g_presents.load(), gpu::g_splash ? "4:3" : "full width", R32(ctx.esp));
     gpu::g_shown_splash = gpu::g_splash.load();
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]), gpu::g_shown_splash);
+    g_fog = {};
     app::Pace();
     // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
     uint32_t last = g_buffers[g_buffer_count - 1], data = R32(last + 4), lk = R32(last + 8);
@@ -738,6 +785,7 @@ HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    LatchFog();
     if (!gpu::g_in_splash) gpu::g_splash = false;
     if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
     return 0;
@@ -746,6 +794,7 @@ HLE_STDCALL(D3DDevice_DrawVertices, 3) {
 HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    LatchFog();
     if (!gpu::g_in_splash) gpu::g_splash = false;
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
@@ -785,6 +834,7 @@ HLE_STDCALL(D3DDevice_DrawVerticesUP, 4) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (!g_backend || !a[1] || !a[3]) return 0;
     SyncDeferred();
+    LatchFog();
     if (!gpu::g_in_splash) gpu::g_splash = false;
     auto stream = g_state.streams[0];
     g_state.streams[0] = {UpVertices(a[2], a[1] * a[3]), a[3]};
