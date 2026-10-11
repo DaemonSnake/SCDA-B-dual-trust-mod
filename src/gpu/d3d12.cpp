@@ -1899,6 +1899,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     pk.quad = quad;
     uint64_t pkh = Hash(&pk, sizeof(pk));
     uint64_t ph;
+    // pixel shaders share the map with vertex shaders, the salt keeps their keys apart
     auto pit = vs_src_.find(pkh ^ 0x9E3779B97F4A7C15ull);
     if (pit != vs_src_.end()) {
         ph = pit->second;

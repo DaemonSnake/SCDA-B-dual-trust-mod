@@ -136,7 +136,7 @@ void Occlusion(const float* m) {
 
 using namespace d3d;
 
-// ---------------------------------------------------------------- device
+// device
 
 HLE_STDCALL(Direct3D_CreateDevice, 6) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -160,7 +160,7 @@ HLE_STDCALL(Direct3D_CreateDevice, 6) {
     g_depth = 0;
     if (auto_depth) {
         uint32_t zf = gpu::LinearDepthFormat(depth_fmt);
-        g_depth = NewSurface(w, h, zf, zf == 0x30 || zf == 0x31 ? 2 : 4);
+        g_depth = NewSurface(w, h, zf, zf == 0x30 || zf == 0x31 ? 2 : 4);  // 0x30 LIN_D16, 0x31 LIN_F16
     }
     if (!g_backend) {
         g_backend = gpu::CreateBackend();
@@ -188,13 +188,13 @@ HLE_STDCALL(Direct3D_CreateDevice, 6) {
 
 HLE_STDCALL(D3DDevice_Release, 0) { return 1; }
 
-// ---------------------------------------------------------------- synchronisation, the renderer never runs behind
+// synchronisation, the renderer never runs behind
 
 HLE_STDCALL(D3D_BlockOnResource, 1) {
     uint32_t res = a[0];
     if (res && g_backend) {
         std::lock_guard<std::recursive_mutex> lock(g_lock);
-        uint32_t type = R32(res) & 0x70000;
+        uint32_t type = R32(res) & 0x70000;  // 0x40000 texture, 0x50000 surface
         if (type == 0x40000 || type == 0x50000) {
             uint32_t data = mem::VirtualFromPhysical(R32(res + 4));
             g_backend->Sync(data, 0);
@@ -230,7 +230,7 @@ HLE_STDCALL(D3DResource_IsBusy, 1) {
     if (!res) return 0;
     // set on the device, a surface also through its texture
     uint32_t common = R32(res), parent = (common & 0x70000) == 0x50000 ? R32(res + 0x14) : 0;
-    if ((common & 0x780000) || (parent && (R32(parent) & 0x780000))) return 1;
+    if ((common & 0x780000) || (parent && (R32(parent) & 0x780000))) return 1;  // internal reference count
     return g_backend && g_backend->Busy(res) ? 1 : 0;
 }
 HLE_STDCALL(D3D_BlockOnTime, 2) { return 0; }
@@ -298,7 +298,7 @@ HLE_STDCALL(D3DDevice_SetGammaRamp, 2) {
     return 0;
 }
 
-// ---------------------------------------------------------------- targets and presentation
+// targets and presentation
 
 HLE_STDCALL(D3DDevice_SetRenderTarget, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -415,7 +415,7 @@ HLE_STDCALL(D3DDevice_SetScreenSpaceOffset, 2) {
     return 0;
 }
 
-// ---------------------------------------------------------------- render states
+// render states
 
 HLE_FASTCALL(D3DDevice_SetRenderState_Simple, 0) {
     uint32_t method = ctx.ecx & 0x1FFC, value = ctx.edx;
@@ -531,7 +531,7 @@ X86_FUNC(GUEST(D3DDevice_LightEnable)) {
     GUEST_ORIG(D3DDevice_LightEnable)(ctx, base);
 }
 
-// ---------------------------------------------------------------- resources in use
+// resources in use
 
 HLE_STDCALL(D3DDevice_SetTexture, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -587,7 +587,7 @@ HLE_STDCALL(D3DDevice_SetIndices, 2) {
     return 0;
 }
 
-// ---------------------------------------------------------------- shaders
+// shaders
 
 HLE_STDCALL(D3DDevice_CreateVertexShader, 4) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -736,7 +736,7 @@ HLE_STDCALL(D3DDevice_SetPixelShaderConstant, 3) {
     return 0;
 }
 
-// ---------------------------------------------------------------- drawing
+// drawing
 
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);

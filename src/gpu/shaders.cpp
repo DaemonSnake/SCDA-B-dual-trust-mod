@@ -55,7 +55,7 @@ cbuffer DC : register(b1) {
 };
 )";
 
-// ---------------------------------------------------------------- vertex programs
+// vertex programs
 
 const char* kVsHelpers = R"(
 float4 xmul(float4 a, float4 b) { return (a == 0 || b == 0) ? (float4)0 : a * b; }
@@ -235,7 +235,7 @@ const char* kVsPrologue = R"(
     float4 oT0 = float4(0, 0, 0, 1), oT1 = float4(0, 0, 0, 1), oT2 = float4(0, 0, 0, 1), oT3 = float4(0, 0, 0, 1);
 )";
 
-// ---------------------------------------------------------------- combiners
+// combiners
 
 struct In {
     uint32_t reg, chan, mod;

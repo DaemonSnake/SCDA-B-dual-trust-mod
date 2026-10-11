@@ -248,7 +248,7 @@ float DepthTexel(uint32_t fmt, const uint8_t* p) {
             std::memcpy(&f, &bits, 4);
             return f;
         }
-        default: {
+        default: {  // 16 bit float without sign
             uint32_t bits = (uint32_t(s) << 11) + 0x3C000000u;
             float f;
             std::memcpy(&f, &bits, 4);
@@ -273,7 +273,7 @@ bool Describe(uint32_t header, TextureDesc& d) {
     using namespace kernel;
     if (!header) return false;
     uint32_t common = R32(header);
-    uint32_t type = common & 0x70000;
+    uint32_t type = common & 0x70000;  // 0x40000 texture, 0x50000 surface
     if (type != 0x40000 && type != 0x50000) return false;
     uint32_t fmt = R32(header + 12), size = R32(header + 16);
     d.data = mem::VirtualFromPhysical(R32(header + 4));
@@ -486,7 +486,7 @@ bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, u
     return true;
 }
 
-// ---------------------------------------------------------------- declarations
+// declarations
 
 static uint32_t TypeSize(uint32_t t) {
     uint32_t kind = t & 15, count = (t >> 4) & 15;
@@ -536,7 +536,7 @@ void ParseDeclaration(VertexShader& vs) {
     vs.stream_stride[size_t(stream)] = std::max(vs.stream_stride[size_t(stream)], offset);
 }
 
-// ---------------------------------------------------------------- pixel shader constants
+// pixel shader constants
 
 uint32_t PackColor(const std::array<float, 4>& c) {
     auto q = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };

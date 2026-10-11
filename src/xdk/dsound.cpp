@@ -369,7 +369,7 @@ void I3DL2Source(Voice& v, uint32_t src) {
 
 }  // namespace
 
-// ---------------------------------------------------------------- device
+// device
 
 HLE_STDCALL(DirectSoundCreate, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -454,7 +454,7 @@ HLE_STDCALL(XAudioDownloadEffectsImage, 4) {
     return 0;
 }
 
-// ---------------------------------------------------------------- buffers
+// buffers
 
 HLE_STDCALL(DirectSoundCreateBuffer, 2) { return NewBuffer(a[0], a[1]); }
 HLE_STDCALL(IDirectSound_CreateSoundBuffer, 4) { return NewBuffer(a[1], a[2]); }
@@ -503,7 +503,7 @@ BUFFER(Stop, 1) {
     return 0;
 }
 BUFFER(SetLoopRegion, 3) {
-    if (a[1] > v.bytes || a[2] > v.bytes - a[1]) return 0x88780032u;
+    if (a[1] > v.bytes || a[2] > v.bytes - a[1]) return 0x88780032u;  // DSERR_INVALIDCALL
     v.loop_start = a[1];
     v.loop_len = a[2] ? a[2] : v.bytes - a[1];
     return 0;
@@ -525,7 +525,7 @@ BUFFER(SetCurrentPosition, 2) {
 BUFFER(Lock, 8) {
     uint32_t off = a[1], n = a[2];
     if (a[7] & 1) n = v.bytes;  // DSBLOCK_ENTIREBUFFER
-    if (!v.bytes) return 0x80004005u;
+    if (!v.bytes) return 0x80004005u;  // E_FAIL
     off %= v.bytes;
     uint32_t first = std::min(n, v.bytes - off);
     W32(a[3], v.data + off);
@@ -582,7 +582,7 @@ void MuteForVoiceLink(uint32_t stream) {
 
 }  // namespace dsound
 
-// ---------------------------------------------------------------- streams, the object carries the XDK's own vtable
+// streams, the object carries the XDK's own vtable
 
 HLE_STDCALL(DirectSoundCreateStream, 2) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
