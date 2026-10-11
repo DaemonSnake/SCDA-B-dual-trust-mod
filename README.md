@@ -5,11 +5,13 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
 
 ## Installation
-- Put your game files in the `assets` folder. This can be an ISO, or the extracted data files.
-- Run `SCDA.exe`.
-- Recomp settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with F10 by default.
- <img width="1920" height="1080" alt="{9A8865E6-89EC-4E10-866A-C3E71944E6C9}" src="https://github.com/user-attachments/assets/d13e1fb6-ba97-4067-84e1-c2362d66d7c4" />
+The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/releases) can be found in the Releases page.
 
+- Place your game files in the `assets` folder. This can be an ISO, or the extracted data files.
+- Run `SCDA.exe`.
+- Recomp Settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with <kbd>F10</kbd> by default.
+
+<img width="1920" height="1080" alt="Recomp Settings" src="https://github.com/user-attachments/assets/d13e1fb6-ba97-4067-84e1-c2362d66d7c4"/>
 
 ## Features
 ### Display
@@ -139,6 +141,24 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
 ### Miscellaneous
 - **Boot Splash** - Place a `SplinterCell4Logo.png` (or `.bmp`) beside the exe to display a splash screen at launch.
 - **Custom Menu Cursor** - Place a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
+
+## Playing Online
+Co-op and Versus can be played online by connecting directly to the host's IP address. No third-party programs are needed.
+- Press F10 by default to open the Settings overlay.
+- Enter the host's IP address in **Coop Join IP** for Co-op or **Versus Join IP** for Versus.
+- From the Co-op or Versus menu, select LAN and join the host's session from the list.
+
+### Hosting a Game Session
+As the host, you must port forward the following ports on your router so other players can connect to you:
+
+| Protocol | Port |
+|----------|------|
+| UDP      | 9100 |
+| UDP      | 1000 |
+| UDP      | 1010 |
+
+> [!TIP]
+> If you're unable to port forward, such as when your connection is behind CGNAT, or would like to keep your IP address private, you can use a virtual LAN service to play together instead.
 
 ## System Requirements
 ### Minimum
