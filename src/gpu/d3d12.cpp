@@ -505,7 +505,7 @@ private:
     ID3D12Resource* BindTexture(const State& s, int stage, TexInfo& info, D3D12_SHADER_RESOURCE_VIEW_DESC& srv);
     bool tex_rt_[4] = {};  // stage samples a render target
     float tex_wide_[4] = {};  // host texels per console texel of a target read into a smaller one, 0 otherwise
-    uint32_t Samplers(const State& s, const TexInfo info[4], bool clamp);
+    uint32_t Samplers(const State& s, const TexInfo info[4], const D3D12_SHADER_RESOURCE_VIEW_DESC sv[4], bool clamp);
     // shaders by source hash: Register keeps the source, Shader finds the bytecode on disk or compiles it; with compile
     // false it only looks, and sets pending where the compiler is needed
     uint64_t Register(std::string src, const char* entry, const char* profile);
@@ -600,6 +600,8 @@ private:
     bool ramp_dirty_ = false, gamma_ = false;
     Target* bound_rt_ = nullptr;
     Target* bound_ds_ = nullptr;
+    Target* draw_rt_ = nullptr;  // the draw's targets, the bound ones go when a texture's copy is drawn
+    Target* draw_ds_ = nullptr;
     uint32_t guest_w_ = 640, guest_h_ = 480, bb_w_ = 0, bb_h_ = 0;
     float scale_ = 1.0f;
     uint32_t shadow_res_ = 0;  // app::Settings::shadow_resolution the targets were made for
@@ -1675,8 +1677,8 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
     auto tit = targets_.find(uint64_t(d.data) << 1 | (fi.depth ? 1 : 0));
     if (tit != targets_.end() && !d.cube && d.depth == 1 && !fi.compressed) {
         Target& t = tit->second;
-        if (&t == bound_ds_) return nullptr;
-        bool feedback = &t == bound_rt_;
+        if (&t == draw_ds_) return nullptr;
+        bool feedback = &t == draw_rt_;
         tex_rt_[stage] = true;
         if (!t.depth && CpuWrote(t)) {
             Surface su;
@@ -1797,7 +1799,7 @@ ID3D12Resource* D3D12Backend::BindTexture(const State& s, int stage, TexInfo& in
     return tx.res.Get();
 }
 
-uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4], bool clamp) {
+uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4], const D3D12_SHADER_RESOURCE_VIEW_DESC sv[4], bool clamp) {
     D3D12_SAMPLER_DESC sd[4] = {};
     uint32_t aniso = app::Get().aniso;
     for (int i = 0; i < 4; i++) {
@@ -1809,7 +1811,8 @@ uint32_t D3D12Backend::Samplers(const State& s, const TexInfo info[4], bool clam
         D3D12_FILTER_TYPE fmip = mip == 2 ? D3D12_FILTER_TYPE_LINEAR : D3D12_FILTER_TYPE_POINT;
         sd[i].Filter = D3D12_FILTER(fmin << 4 | fmag << 2 | fmip);
         uint32_t an = min == 3 || mag == 3 ? std::max<uint32_t>(t[kTssMaxAnisotropy], 1) : 1;
-        if (aniso && lin(min) && !info[i].shadow) an = aniso;
+        // forced only where the title filters across mip levels and the texture has them
+        if (aniso && lin(min) && mip && sv[i].Texture2D.MipLevels > 1 && !info[i].shadow) an = aniso;
         if (an > 1) {
             sd[i].Filter = D3D12_FILTER_ANISOTROPIC;
             sd[i].MaxAnisotropy = std::min<uint32_t>(an, 16);
@@ -1887,6 +1890,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     TexInfo info[4];
     D3D12_SHADER_RESOURCE_VIEW_DESC sv[4];
     ID3D12Resource* res[4];
+    draw_rt_ = bound_rt_;
+    draw_ds_ = bound_ds_;
     for (int i = 0; i < 4; i++) res[i] = BindTexture(s, i, info[i], sv[i]);
     // textures may have recorded copies that unbound the targets
     if (!BindTargets(s)) return;
@@ -2143,7 +2148,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         dev_->CreateShaderResourceView(res[i], &sv[i], Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     cl_->SetGraphicsRootDescriptorTable(2, Gpu(srv_heap_.Get(), slot, srv_inc_));
-    cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), Samplers(s, info, UnitTexcoords(a)), smp_inc_));
+    cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), Samplers(s, info, sv, UnitTexcoords(a)), smp_inc_));
 
     // viewport covers the target, the guest viewport is in the shader; scissor clips to it
     float W = float(bound_rt_ ? bound_rt_->w : bound_ds_->w), H = float(bound_rt_ ? bound_rt_->h : bound_ds_->h);

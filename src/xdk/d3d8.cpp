@@ -226,7 +226,12 @@ HLE_STDCALL(D3DResource_BlockUntilNotBusy, 1) {
 }
 HLE_STDCALL(D3DResource_IsBusy, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
-    return a[0] && g_backend && g_backend->Busy(a[0]) ? 1 : 0;
+    uint32_t res = a[0];
+    if (!res) return 0;
+    // set on the device, a surface also through its texture
+    uint32_t common = R32(res), parent = (common & 0x70000) == 0x50000 ? R32(res + 0x14) : 0;
+    if ((common & 0x780000) || (parent && (R32(parent) & 0x780000))) return 1;
+    return g_backend && g_backend->Busy(res) ? 1 : 0;
 }
 HLE_STDCALL(D3D_BlockOnTime, 2) { return 0; }
 HLE_STDCALL(D3DDevice_BlockOnFence, 1) {
@@ -764,15 +769,16 @@ uint32_t UpVertices(uint32_t src, uint32_t bytes) {
         std::memset(HostPtr(g_up_header), 0, 20);
         W32(g_up_header, 1);
     }
-    bytes = std::min((bytes + 63) & ~63u, kUpHalf);
-    uint32_t pos = g_up_pos + bytes > kUpRing ? 0 : g_up_pos;
-    uint32_t from = g_up_pos ? (g_up_pos - 1) / kUpHalf : 1, to = (pos + bytes - 1) / kUpHalf;
+    bytes = std::min(bytes, kUpHalf);
+    uint32_t room = (bytes + 63) & ~63u;
+    uint32_t pos = g_up_pos + room > kUpRing ? 0 : g_up_pos;
+    uint32_t from = g_up_pos ? (g_up_pos - 1) / kUpHalf : 1, to = (pos + room - 1) / kUpHalf;
     if (to != from) {
         g_up_fence[from] = g_backend->Fence();
         g_backend->WaitFence(g_up_fence[to]);
     }
     std::memcpy(HostPtr(g_up_ring + pos), HostPtr(src), bytes);
-    g_up_pos = pos + bytes;
+    g_up_pos = pos + room;
     W32(g_up_header + 4, mem::PhysicalFromVirtual(g_up_ring + pos));
     return g_up_header;
 }
