@@ -16,3 +16,10 @@ X86_FUNC(GUEST(_CIasin)) {
     X87_ST(0) = std::asin(X87_ST(0));
     ctx.esp += 4;
 }
+
+// pow's body, reached from pow and _CIpow: x and y above the return address, y in st0. Its inf or NaN test on x is
+// the same kind of branch and was never taken.
+X86_FUNC(GUEST(crt_pow)) {
+    X87_ST(0) = std::pow(double(X86_MEMF64(ctx.esp + 4)), double(X86_MEMF64(ctx.esp + 12)));
+    ctx.esp += 4;
+}

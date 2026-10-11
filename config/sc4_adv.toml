@@ -43,6 +43,7 @@ CDirectSoundStream_SetVelocity                       = 0x2BD0DF
 CDirectSoundStream_SetVolume                         = 0x2BC38D
 closesocket                                          = 0x2D9400
 connect                                              = 0x2D9455
+crt_pow                                              = 0x20F29C
 D3D_BlockOnResource                                  = 0x288BE0
 D3D_BlockOnTime                                      = 0x2888B0
 D3D_InitDefaultState                                 = 0x2874F0
