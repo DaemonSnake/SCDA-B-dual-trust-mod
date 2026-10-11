@@ -17,7 +17,4 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
     )
     mklink /J "%OUT%\shadercache" "%CD%\shadercache" >nul
 )
-rem this PC's compiled shaders (GPU independent) as the ones a new player starts with; their own shaders.bin is left alone
-mkdir "%OUT%\release\shadercache"
-if exist shadercache\shaders.bin copy /y shadercache\shaders.bin "%OUT%\release\shadercache\base_shaders.bin" >nul
-7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets" ".\%OUT%\release\shadercache"
+7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets"
