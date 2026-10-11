@@ -191,6 +191,7 @@ Mode Output() {
 }
 
 float Aspect() {
+    if (g_scope_view.load(std::memory_order_relaxed)) return 4.0f / 3.0f;
     // asked per frame and per HUD quad: the desktop mode lookup only runs when the resolution setting changes
     static std::atomic<uint64_t> key{~0ull};
     static std::atomic<float> aspect{16.0f / 9.0f};

@@ -40,11 +40,12 @@ static_assert(Crc32("P_hud") == 0x330C9548);
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC;
 
 // Centre: 4:3 in the middle; Fill: the same, images touching a page side are stretched out to the screen
-// side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round;
+// side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round; Bars: as
+// Extend, the strips drawn black;
 // Left, Right: 4:3 against that side; Stretch: page width over screen width;
 // Spread: centred, image edges further than kKeep from the middle move out to the screen sides;
 // Open: not decided here, its children are placed one by one
-enum class Mode { Centre, Fill, Extend, Left, Right, Stretch, Spread, Open };
+enum class Mode { Centre, Fill, Extend, Bars, Left, Right, Stretch, Spread, Open };
 
 struct Rule {
     uint32_t id;
@@ -94,11 +95,18 @@ struct Page {
 
 // pages not listed are menus: Fill. The scope's side strips hold the outer ring's left and right arcs, which
 // stretching bulges: Extend repeats their outer edge instead. The open file page draws its own comms box and legend
-// over P_Computer's, so it is placed the same way or both show
+// over P_Computer's, so it is placed the same way or both show. The OPSAT's backdrop has side shades fading to black at
+// its edges: stretched, the fade was drawn out and broken by the seam where they end; the sides are black past them
 constexpr Page kPages[] = {
     {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay, Mode::Extend},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
     {kFileView, kOverlay},
+    {"P_Opsat", kMenu, Mode::Bars},           {"P_Goals", kMenu, Mode::Bars},
+    {"P_Goals_details", kMenu, Mode::Bars},   {"P_Map", kMenu, Mode::Bars},
+    {"P_Notes", kMenu, Mode::Bars},           {"P_DataFile", kMenu, Mode::Bars},
+    {"P_Datas", kMenu, Mode::Bars},           {"P_Equipment", kMenu, Mode::Bars},
+    {"P_Communications", kMenu, Mode::Bars},  {"P_PDA", kMenu, Mode::Bars},
+    {"P_Trust", kMenu, Mode::Bars},           {"P_Videos", kMenu, Mode::Bars},
 };
 
 constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8;  // page units
@@ -111,7 +119,7 @@ const Page* g_page = nullptr;
 uint32_t g_drawing = 0;  // the Magma page drawing
 bool g_hud_seen = false, g_decided = false;
 bool g_in_level = false;  // P_hud was drawn last frame
-bool g_sniper_seen = false, g_scope = false;  // P_Sniper drawn this frame, and last frame
+bool g_sniper_seen = false;  // P_Sniper drawn this frame
 
 // magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil
 void FlushCanvas(X86Context& ctx) {
@@ -168,7 +176,7 @@ X86_EXTERN_FUNC(__imp__sub_0028F090);
 X86_FUNC(sub_0028F090) {
     uint32_t screen = R32(kMagmaScreen);
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
-    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Bars || g_mode == Mode::Spread;
     if (!edges || !app::Widescreen() || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
     uint32_t esp = ctx.esp, util = ctx.ecx, args = esp + 4;
     float k = app::Narrow(), w = float(int(R32(util + 0x28))), unit = w / sw, side = w * (1 - k) / (2 * k);
@@ -203,14 +211,19 @@ X86_FUNC(sub_0028F090) {
                 x(i) = from == lo ? -side : w + side;
                 continue;
             }
-            // the inner vertex takes its edge partner's texel, so the strip repeats the edge column
+            // the inner vertex takes its edge partner's texel and colour, so the strip repeats the edge column (the
+            // OPSAT's side shades fade by vertex alpha: with the inner colour kept, the strip faded too)
             for (int j = 0; j < 4; j++)
                 if (was(j, 0) == from && was(j, 1) == was(i, 1)) {
                     G<float>(args + i * 0x14 + 8) = was(j, 2);
                     G<float>(args + i * 0x14 + 12) = was(j, 3);
+                    G<uint32_t>(args + i * 0x14 + 16) = saved[j * 5 + 4];
                 }
             x(i) = from;
         }
+        constexpr uint32_t kOpaqueBlack = 0xFF000000;
+        if (g_mode == Mode::Bars)
+            for (int i = 0; i < 4; i++) G<uint32_t>(args + i * 0x14 + 16) = kOpaqueBlack;
         ctx.esp = esp;
         ctx.ecx = util;
         __imp__sub_0028F090(ctx, base);
@@ -244,7 +257,7 @@ X86_FUNC(sub_002CC260) {
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
     if (ret != 0x2BD973 || g_offset < 0 || sw <= 0 || !app::Widescreen()) return;
     int l = int16_t(R16(state + 8)), r = int16_t(R16(state + 0xA));
-    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Spread;
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Bars || g_mode == Mode::Spread;
     float k = app::Narrow();
     auto narrow = [&](int x) { return int(std::lround(x * k + g_offset * (1 - k) * sw)); };
     W16(state + 8, uint16_t(int16_t(edges && l <= kSlack ? -1 : narrow(l))));
@@ -307,6 +320,7 @@ X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == Crc32("P_hud");
+    g_sniper_seen |= id == Crc32("P_Sniper");
     g_loading = false;
     if (app::g_hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
         ctx.esp += 4;
@@ -360,6 +374,8 @@ X86_FUNC(sub_002303E8) {
     g_offset = g_hud_seen ? kNone : kCentre;
     g_in_level = g_hud_seen;
     g_hud_seen = false;
+    app::g_scope_next = g_sniper_seen;
+    g_sniper_seen = false;
 }
 
 // ShowScreen's fade draw (thiscall(alpha, blend, r, g, b, 1), ret 0x18): one quad, stage 0 the picture, stage 1 the
