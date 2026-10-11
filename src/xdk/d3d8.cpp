@@ -359,7 +359,6 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
         LOGI("d3d: frame %u shown %s, Swap from %08X", g_presents.load(), gpu::g_splash ? "4:3" : "full width", R32(ctx.esp));
     gpu::g_shown_splash = gpu::g_splash.load();
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]), gpu::g_shown_splash);
-    app::g_scope_view = app::g_scope_next.load();
     app::Pace();
     // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
     uint32_t last = g_buffers[g_buffer_count - 1], data = R32(last + 4), lk = R32(last + 8);

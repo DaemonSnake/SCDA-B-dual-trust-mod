@@ -75,11 +75,7 @@ Mode Output();
 float RenderScale(uint32_t guest_height);
 // tangent of the fov setting's half angle over that of the game's 75 degrees
 float FovScale();
-// The sniper scope is built for 4:3 (its blur, mask and vignette): a frame that shows it is drawn and shown 4:3,
-// pillarboxed, as on a 4:3 TV. Next: P_Sniper drawn this frame (hud.cpp); view: taken at the Swap (d3d8.cpp), so a
-// frame is drawn and shown in one shape
-inline std::atomic<bool> g_scope_next{false}, g_scope_view{false};
-// the output's shape, 4:3 at the narrowest and while the scope shows: the frame is shown that wide
+// the output's shape, 4:3 at the narrowest: the frame is shown that wide
 float Aspect();
 // the share of the frame's width a 4:3 picture takes
 inline float Narrow() { return 4.0f / 3.0f / Aspect(); }

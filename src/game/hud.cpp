@@ -13,6 +13,7 @@
 #include "app/app.h"
 #include "game/loading.h"
 #include "gpu/backend.h"
+#include "xdk/d3d8.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -40,12 +41,15 @@ static_assert(Crc32("P_hud") == 0x330C9548);
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC;
 
 // Centre: 4:3 in the middle; Fill: the same, images touching a page side are stretched out to the screen
-// side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round; Bars: as
-// Extend, the strips drawn black;
+// side; Extend: the same, but a strip repeating the edge texels is drawn instead, so shapes stay round, and a piece
+// no wider than kFade (the scope's edge fades) moves out whole to the screen side; Bars: as Extend, the strips
+// drawn black; Shade: a piece against one side keeps its inner kBand in place and stretches the rest out to the screen
+// side, sampling kInset texels in from its outer edge (the scope's side strips: the ring's outer band ends in their
+// inner part, then plain vignette and the horizontal crosshair line, and a clear texel column at the outer edge);
 // Left, Right: 4:3 against that side; Stretch: page width over screen width;
 // Spread: centred, image edges further than kKeep from the middle move out to the screen sides;
 // Open: not decided here, its children are placed one by one
-enum class Mode { Centre, Fill, Extend, Bars, Left, Right, Stretch, Spread, Open };
+enum class Mode { Centre, Fill, Extend, Bars, Shade, Left, Right, Stretch, Spread, Open };
 
 struct Rule {
     uint32_t id;
@@ -76,6 +80,15 @@ constexpr Rule kOverlay[] = {
     {0x478A341D, Mode::Left},  // P_Sniper's instance of the comms area, its name not recovered
 };
 
+// P_Sniper: the overlay rules, and the side strips (1..65 and 576..640, top and bottom halves) beside its ring quarters
+constexpr Rule kSniper[] = {
+    {"A_noise", Mode::Stretch}, {"A_goggles", Mode::Stretch}, {"A_Goggles", Mode::Stretch},
+    {"A_timer", Mode::Right},   {"A_Communications", Mode::Left},
+    {0xA2ADD30F, Mode::Centre}, {0x640C6602, Mode::Centre},
+    {0x478A341D, Mode::Left},
+    {0x91397FB6, Mode::Shade},  {0x5944B3FC, Mode::Shade}, {0xE1538B39, Mode::Shade}, {0x5E2977E5, Mode::Shade},
+};
+
 // every menu page's button legend (A, B, X, Y), an instance of system.mgm's area, name not recovered
 constexpr Rule kMenu[] = {
     {0xCF490E0F, Mode::Left},
@@ -98,7 +111,7 @@ struct Page {
 // over P_Computer's, so it is placed the same way or both show. The OPSAT's backdrop has side shades fading to black at
 // its edges: stretched, the fade was drawn out and broken by the seam where they end; the sides are black past them
 constexpr Page kPages[] = {
-    {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kOverlay, Mode::Extend},
+    {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kSniper, Mode::Extend},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
     {kFileView, kOverlay},
     {"P_Opsat", kMenu, Mode::Bars},           {"P_Goals", kMenu, Mode::Bars},
@@ -109,7 +122,8 @@ constexpr Page kPages[] = {
     {"P_Trust", kMenu, Mode::Bars},           {"P_Videos", kMenu, Mode::Bars},
 };
 
-constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8;  // page units
+constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8, kFade = 32;  // page units
+constexpr float kInset = 1.5f, kBand = 24.0f;  // texels, taken as page units
 // share of the width a 4:3 page leaves spare that goes left of it
 constexpr float kLeft = 0.0f, kCentre = 0.5f, kRight = 1.0f, kNone = -1.0f;
 
@@ -119,7 +133,6 @@ const Page* g_page = nullptr;
 uint32_t g_drawing = 0;  // the Magma page drawing
 bool g_hud_seen = false, g_decided = false;
 bool g_in_level = false;  // P_hud was drawn last frame
-bool g_sniper_seen = false;  // P_Sniper drawn this frame
 
 // magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil
 void FlushCanvas(X86Context& ctx) {
@@ -176,7 +189,8 @@ X86_EXTERN_FUNC(__imp__sub_0028F090);
 X86_FUNC(sub_0028F090) {
     uint32_t screen = R32(kMagmaScreen);
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
-    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Bars || g_mode == Mode::Spread;
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Shade || g_mode == Mode::Extend || g_mode == Mode::Bars ||
+                 g_mode == Mode::Spread;
     if (!edges || !app::Widescreen() || sw <= 0 || R32(ctx.esp) != 0x2A1186) return __imp__sub_0028F090(ctx, base);
     uint32_t esp = ctx.esp, util = ctx.ecx, args = esp + 4;
     float k = app::Narrow(), w = float(int(R32(util + 0x28))), unit = w / sw, side = w * (1 - k) / (2 * k);
@@ -187,13 +201,45 @@ X86_FUNC(sub_0028F090) {
     }
     float lo = std::min({x(0), x(1), x(2), x(3)}), hi = std::max({x(0), x(1), x(2), x(3)});
     bool left = lo <= kSlack * unit, right = hi >= w - kSlack * unit;
-    if (g_mode == Mode::Fill) {
+    if (g_mode == Mode::Shade && left != right && hi - lo >= (kBand + kMinWidth) * unit) {
+        uint32_t saved[23];
+        std::memcpy(saved, &G<uint32_t>(args), sizeof saved);
+        auto was = [&](int i, int field) { return std::bit_cast<float>(saved[i * 5 + field]); };
+        float edge = left ? lo : hi, cut = left ? hi - kBand * unit : lo + kBand * unit;
+        float far = left ? -side - unit : w + side + unit;
+        for (int pass = 0; pass < 2; pass++) {  // the inner part in place, then the outer part stretched
+            std::memcpy(&G<uint32_t>(args), saved, sizeof saved);
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 4; j++) {
+                    if (was(j, 0) == was(i, 0) || was(j, 1) != was(i, 1)) continue;
+                    float xi = was(i, 0), xj = was(j, 0), ui = was(i, 2), uj = was(j, 2);
+                    float& u = G<float>(args + i * 0x14 + 8);
+                    bool outer = xi == edge;
+                    if (outer == (pass == 0)) {
+                        x(i) = cut;
+                        u = ui + (uj - ui) * (cut - xi) / (xj - xi);
+                    } else if (outer) {
+                        x(i) = far;
+                        u = ui + (uj - ui) * kInset * unit / std::fabs(xj - xi);
+                    }
+                }
+            ctx.esp = esp;
+            ctx.ecx = util;
+            __imp__sub_0028F090(ctx, base);
+        }
+        return;
+    }
+    if (g_mode == Mode::Fill || g_mode == Mode::Shade) {
         if (hi - lo >= kMinWidth * unit)
             for (int i = 0; i < 4; i++) {
                 // one page unit past the screen side: exactly on it, the last pixel column is left uncovered
                 if (left && x(i) == lo) x(i) = -side - unit;
                 if (right && x(i) == hi) x(i) = w + side + unit;
             }
+        return __imp__sub_0028F090(ctx, base);
+    }
+    if (g_mode == Mode::Extend && (left || right) && hi - lo <= kFade * unit) {
+        for (int i = 0; i < 4; i++) x(i) += left ? -side : side;
         return __imp__sub_0028F090(ctx, base);
     }
     uint32_t saved[23];
@@ -257,11 +303,79 @@ X86_FUNC(sub_002CC260) {
     int sw = screen ? int16_t(R16(screen + 0x84)) : 0;
     if (ret != 0x2BD973 || g_offset < 0 || sw <= 0 || !app::Widescreen()) return;
     int l = int16_t(R16(state + 8)), r = int16_t(R16(state + 0xA));
-    bool edges = g_mode == Mode::Fill || g_mode == Mode::Extend || g_mode == Mode::Bars || g_mode == Mode::Spread;
+    bool edges = g_mode == Mode::Fill || g_mode == Mode::Shade || g_mode == Mode::Extend || g_mode == Mode::Bars ||
+                 g_mode == Mode::Spread;
     float k = app::Narrow();
     auto narrow = [&](int x) { return int(std::lround(x * k + g_offset * (1 - k) * sw)); };
     W16(state + 8, uint16_t(int16_t(edges && l <= kSlack ? -1 : narrow(l))));
     W16(state + 0xA, uint16_t(int16_t(edges && r >= sw - kSlack ? sw + 1 : narrow(r))));
+}
+
+// Scope blur pass (sub_002F117E, thiscall(width, height)): c67..c71 hold uv = v * c71 + c70 for quads over the whole
+// screen. Its first draw tests the scope's opening mask, a 256x256 alpha texture, for alpha 0 into the stencil, and the
+// blurred scene is drawn where the stencil is set. Widescreen, the mask's u is narrowed to the 4:3 middle so the
+// opening stays round under the P_Sniper ring while the blur fills the screen, and it is tested at half alpha,
+// filtered and clamped, so its edge follows the circle instead of the magnified texels. Only that draw is changed:
+// the states are put back at the next draw's commit or when the pass returns, each one only if nothing set it since.
+namespace {
+constexpr uint32_t kMaskDraw = 0x2F1477;  // the mask draw's state commit returns here
+constexpr uint32_t kStage0 = SYM(D3D_DeferredTextureState);
+constexpr uint32_t kMaskTss[3] = {gpu::kTssAddressU, gpu::kTssMagFilter, gpu::kTssMinFilter};
+constexpr uint32_t kMaskTssValue[3] = {3, 2, 2};  // clamp, linear, linear
+constexpr uint32_t kEqual = 0x202, kLess = 0x201, kHalf = 0x80;
+constexpr size_t kC70 = 96 + 70, kC71 = 96 + 71;
+
+struct Mask {
+    bool set = false;
+    std::array<float, 4> c70, c71, n70, n71;
+    uint32_t func, ref, tss[3];
+} g_mask;
+
+void Unmask() {
+    if (!std::exchange(g_mask.set, false)) return;
+    std::lock_guard<std::recursive_mutex> lock(d3d::Lock());
+    auto& s = d3d::State();
+    if (s.vsc[kC70] == g_mask.n70) s.vsc[kC70] = g_mask.c70;
+    if (s.vsc[kC71] == g_mask.n71) s.vsc[kC71] = g_mask.c71;
+    uint32_t& func = s.simple[gpu::kMAlphaFunc >> 2];
+    uint32_t& ref = s.simple[gpu::kMAlphaRef >> 2];
+    if (func == kLess && ref == kHalf) func = g_mask.func, ref = g_mask.ref;
+    for (int i = 0; i < 3; i++)
+        if (R32(kStage0 + kMaskTss[i] * 4) == kMaskTssValue[i]) W32(kStage0 + kMaskTss[i] * 4, g_mask.tss[i]);
+}
+}  // namespace
+
+X86_EXTERN_FUNC(__imp__sub_002E3EC4);
+X86_FUNC(sub_002E3EC4) {
+    uint32_t ret = R32(ctx.esp);
+    Unmask();
+    __imp__sub_002E3EC4(ctx, base);
+    if (ret != kMaskDraw || !app::Widescreen()) return;
+    std::lock_guard<std::recursive_mutex> lock(d3d::Lock());
+    auto& s = d3d::State();
+    float k = app::Narrow();
+    g_mask.c70 = g_mask.n70 = s.vsc[kC70];
+    g_mask.c71 = g_mask.n71 = s.vsc[kC71];
+    g_mask.n71[0] = g_mask.c71[0] / k;
+    g_mask.n70[0] = (1 - g_mask.n71[0]) / 2;
+    s.vsc[kC70] = g_mask.n70;
+    s.vsc[kC71] = g_mask.n71;
+    uint32_t& func = s.simple[gpu::kMAlphaFunc >> 2];
+    uint32_t& ref = s.simple[gpu::kMAlphaRef >> 2];
+    g_mask.func = func;
+    g_mask.ref = ref;
+    if (func == kEqual && ref == 0) func = kLess, ref = kHalf;
+    for (int i = 0; i < 3; i++) {
+        g_mask.tss[i] = R32(kStage0 + kMaskTss[i] * 4);
+        W32(kStage0 + kMaskTss[i] * 4, kMaskTssValue[i]);
+    }
+    g_mask.set = true;
+}
+
+X86_EXTERN_FUNC(__imp__sub_002F117E);
+X86_FUNC(sub_002F117E) {
+    __imp__sub_002F117E(ctx, base);
+    Unmask();
 }
 
 namespace {
@@ -320,7 +434,6 @@ X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == Crc32("P_hud");
-    g_sniper_seen |= id == Crc32("P_Sniper");
     g_loading = false;
     if (app::g_hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
         ctx.esp += 4;
@@ -374,8 +487,6 @@ X86_FUNC(sub_002303E8) {
     g_offset = g_hud_seen ? kNone : kCentre;
     g_in_level = g_hud_seen;
     g_hud_seen = false;
-    app::g_scope_next = g_sniper_seen;
-    g_sniper_seen = false;
 }
 
 // ShowScreen's fade draw (thiscall(alpha, blend, r, g, b, 1), ret 0x18): one quad, stage 0 the picture, stage 1 the
