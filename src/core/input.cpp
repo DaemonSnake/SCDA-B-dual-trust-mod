@@ -326,7 +326,8 @@ constexpr Name kNames[] = {
     {'A', "A"}, {'B', "B"}, {'C', "C"}, {'D', "D"}, {'E', "E"}, {'F', "F"}, {'G', "G"}, {'H', "H"}, {'I', "I"},
     {'J', "J"}, {'K', "K"}, {'L', "L"}, {'M', "M"}, {'N', "N"}, {'O', "O"}, {'P', "P"}, {'Q', "Q"}, {'R', "R"},
     {'S', "S"}, {'T', "T"}, {'U', "U"}, {'V', "V"}, {'W', "W"}, {'X', "X"}, {'Y', "Y"}, {'Z', "Z"},
-    {'0', "0"}, {'1', "1"}, {'2', "2"}, {'3', "3"}, {'4', "4"}, {'5', "5"}, {'6', "6"}, {'7', "7"}, {'8', "8"}, {'9', "9"},
+    {'0', "0"}, {'1', "1"}, {'2', "2"}, {'3', "3"}, {'4', "4"}, {'5', "5"}, {'6', "6"}, {'7', "7"}, {'8', "8"},
+    {'9', "9"},
     {VK_F1, "F1"}, {VK_F2, "F2"}, {VK_F4, "F4"}, {VK_F5, "F5"}, {VK_F6, "F6"}, {VK_F7, "F7"},
     {VK_F8, "F8"}, {VK_F9, "F9"}, {VK_F10, "F10"}, {VK_F11, "F11"}, {VK_F12, "F12"},
     {VK_NUMPAD0, "Numpad0"}, {VK_NUMPAD1, "Numpad1"}, {VK_NUMPAD2, "Numpad2"}, {VK_NUMPAD3, "Numpad3"},
@@ -391,83 +392,88 @@ bool HeldKeys(KeyEvent event) {
 bool Bound(KeyEvent event, int vk) {
     std::lock_guard lock(g_bind_lock);
     for (size_t i = 0; i < kCount; i++)
-        if (kActions[i].event == event && std::find(g_binds[i].begin(), g_binds[i].end(), vk) != g_binds[i].end()) return true;
+        if (kActions[i].event == event && std::find(g_binds[i].begin(), g_binds[i].end(), vk) != g_binds[i].end())
+            return true;
     return false;
 }
 std::atomic<uint64_t> g_capture_ms{0};  // PressedKey
-bool Mouse(int vk) { return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2; }
+bool Mouse(int vk) {
+    return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2;
+}
 
-void Keyboard(Pad& p) {
-    std::array<std::vector<int>, kCount> binds;
-    {
-        std::lock_guard lock(g_bind_lock);
-        binds = g_binds;
-    }
-    bool menu = g_menu;
-    if (g_settle) {
-        for (auto& b : binds)
-            for (int vk : b)
-                if (Down(vk)) return;
-        for (int vk : kArrows)
-            if (Down(vk)) return;
-        // Enter and Backspace act in menus bound or not: an Enter that just came off interact in a capture would
-        // otherwise press A on the row and start another
-        if (Down(VK_BACK) || Down(VK_RETURN)) return;
-        g_settle = false;
-    }
+bool KeysSettling(const std::array<std::vector<int>, kCount>& binds) {
+    for (auto& b : binds)
+        for (int vk : b)
+            if (Down(vk)) return true;
+    for (int vk : kArrows)
+        if (Down(vk)) return true;
+    // Enter and Backspace act in menus bound or not: an Enter that just came off interact in a capture would
+    // otherwise press A on the row and start another
+    if (Down(VK_BACK) || Down(VK_RETURN)) return true;
+    g_settle = false;
+    return false;
+}
+
+void SettleMouse() {
     if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
         !Down(VK_XBUTTON2))
         g_settle_mouse = false;
-    bool no_mouse = menu || g_pointer || g_settle_mouse;
-    bool camera = View(g_view.load()) == View::StickyCamera && !menu;
-    View view = View(g_view.load());
-    bool keypad = view == View::Keypad && !menu;
-    bool back = g_opsat || (view == View::BackOut && !menu) || keypad;
-    int move[4] = {};
-    uint32_t keys = 0;
-    for (size_t i = 0; i < kCount; i++) {
-        if (kActions[i].button == kHostKey) continue;
-        bool held = false;
-        // in a menu the mouse buttons belong to the cursor
-        for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
-        if (kActions[i].play_only && menu) held = false;
-        // typing a name: only the pause key still presses
-        if (g_text && kActions[i].button != 8 + 4) held = false;
-        if (!held) {
-            g_down_as[i] = 0;
-            continue;
-        }
-        keys |= 1u << i;
-        if (kActions[i].event != KeyEvent::None && g_net) {
-            if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
-            if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[0] = 0xFF;
-            g_down_as[i] = 1;
-            continue;
-        }
-        if (kActions[i].event != KeyEvent::None) {
-            if (!g_down_as[i]) g_events |= 1u << int(kActions[i].event);
-            g_down_as[i] = 1;
-            continue;
-        }
-        // latched for the press, so an interaction coming into reach does not start one under a held key
-        if (!g_down_as[i] && kActions[i].button == 0 && g_interact_reloads && !menu) g_down_as[i] = -1;
-        int b = g_down_as[i] - 1;  // -2: held as no button
-        if (b == -1) {
-            int button = kActions[i].button;
-            b = camera                    ? Remapped(kCameraRemap, button)
-                : g_map                 ? Remapped(kMapRemap, button)
-                : back                  ? Remapped(kOpsatRemap, button)
-                : menu && !g_pause_menu ? Remapped(kMenuRemap, button)
-                                        : button;
-            g_down_as[i] = b < 0 ? -1 : b + 1;
-            if (b >= 16) g_pick_last = b - 16;
-        }
-        if (b < 0) continue;
-        if (b >= 16) move[b - 16] = 1;
-        else if (b < 8) p.analog[b] = 0xFF;
-        else p.buttons |= uint16_t(1u << (b - 8));
-        if (b == 0 && g_title) p.buttons |= kStart;
+}
+
+bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu) {
+    bool held = false;
+    // in a menu the mouse buttons belong to the cursor
+    for (int vk : vks) held |= Down(vk) && !(no_mouse && Mouse(vk));
+    if (kActions[i].play_only && menu) held = false;
+    // typing a name: only the pause key still presses
+    if (g_text && kActions[i].button != 8 + 4) held = false;
+    return held;
+}
+
+// false when action i is no event, so it presses a button
+bool PressEvent(size_t i, Pad& p) {
+    if (kActions[i].event == KeyEvent::None) return false;
+    if (g_net) {
+        if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
+        if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[0] = 0xFF;
+        g_down_as[i] = 1;
+        return true;
     }
+    if (!g_down_as[i]) g_events |= 1u << int(kActions[i].event);
+    g_down_as[i] = 1;
+    return true;
+}
+
+int RemapTarget(int button, bool camera, bool back, bool menu) {
+    if (camera) return Remapped(kCameraRemap, button);
+    if (g_map) return Remapped(kMapRemap, button);
+    if (back) return Remapped(kOpsatRemap, button);
+    if (menu && !g_pause_menu) return Remapped(kMenuRemap, button);
+    return button;
+}
+
+int HeldTarget(size_t i, bool camera, bool back, bool menu) {
+    // latched for the press, so an interaction coming into reach does not start one under a held key
+    if (!g_down_as[i] && kActions[i].button == 0 && g_interact_reloads && !menu) g_down_as[i] = -1;
+    int b = g_down_as[i] - 1;  // -2: held as no button
+    if (b == -1) {
+        int button = kActions[i].button;
+        b = RemapTarget(button, camera, back, menu);
+        g_down_as[i] = b < 0 ? -1 : b + 1;
+        if (b >= 16) g_pick_last = b - 16;
+    }
+    return b;
+}
+
+void PressTarget(int b, Pad& p, int (&move)[4]) {
+    if (b < 0) return;
+    if (b >= 16) move[b - 16] = 1;
+    else if (b < 8) p.analog[b] = 0xFF;
+    else p.buttons |= uint16_t(1u << (b - 8));
+    if (b == 0 && g_title) p.buttons |= kStart;
+}
+
+void PressMenuKeys(Pad& p, bool menu, bool keypad) {
     if ((Down(VK_BACK) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
     // a synced session has no menu cursor, so a click confirms as A does
     if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[0] = 0xFF;
@@ -479,6 +485,9 @@ void Keyboard(Pad& p) {
     if (g_title && g_press_counts) p.buttons |= kStart;
     if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs)
         p.buttons |= kStart;
+}
+
+void NoteKeysHeld(uint32_t keys) {
     // the mask's top bits: 27 to 30 the arrows, 31 Backspace
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
     keys |= uint32_t(Down(VK_BACK)) << 31;
@@ -487,46 +496,61 @@ void Keyboard(Pad& p) {
         g_keyboard_ms = NowMs();
         if (was_pad) RefreshCursor();
     }
-    int x = move[3] - move[2], y = move[0] - move[1];
-    // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
-    float v = full ? 1.0f : g_speed == 0 && g_targeting ? kSlowestTargeting : kSpeeds[g_speed];
+}
+
+float StickSpeed(bool full) {
+    float v;
+    if (full) v = 1.0f;
+    else if (g_speed == 0 && g_targeting) v = kSlowestTargeting;
+    else v = kSpeeds[g_speed];
     if (kVersus && !full) v = g_speed ? 1.0f : kVersusWalk;
+    return v;
+}
+
+float NotchSeconds(bool camera) {
+    float zoom_speed = g_zoom_speed;
+    if (camera && zoom_speed > 0.0f) return kNotchDegrees / zoom_speed;
+    if (g_map) return kMapNotchSeconds;
+    return 0.0f;
+}
+
+// returns y, held by the wheel's notches still to zoom
+int WheelZoom(bool camera, int y) {
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
     g_zoom_time = now;
-    float zoom_speed = g_zoom_speed;
-    float notch = camera && zoom_speed > 0.0f ? kNotchDegrees / zoom_speed : g_map ? kMapNotchSeconds : 0.0f;
+    float notch = NotchSeconds(camera);
     if (notch <= 0.0f) {
         g_zoom_left = 0.0f;
-    } else {
-        if (int notches = g_wheel.exchange(0)) {
-            if (notches * g_zoom_left < 0.0f) g_zoom_left = 0.0f;
-            g_zoom_left += float(notches) * notch;
-        }
-        if (g_zoom_left > 0.0f) g_zoom_left = std::max(0.0f, g_zoom_left - seconds);
-        if (g_zoom_left < 0.0f) g_zoom_left = std::min(0.0f, g_zoom_left + seconds);
-        if (!y && g_zoom_left != 0.0f) y = g_zoom_left > 0.0f ? 1 : -1;
+        return y;
     }
-    if (int ax = Down(VK_RIGHT) - Down(VK_LEFT), ay = Down(VK_UP) - Down(VK_DOWN); ax || ay) {
-        x = ax;
-        y = ay;
-        v = 1.0f;
+    if (int notches = g_wheel.exchange(0)) {
+        if (notches * g_zoom_left < 0.0f) g_zoom_left = 0.0f;
+        g_zoom_left += float(notches) * notch;
     }
-    // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
-    // as fast as one. Not where the full stick is forced: a ledge climb wants aForward past 0.9.
-    if (x && y && !full) {
-        float zone = kVersus ? kVersusDeadZone : kDeadZone;
-        v = zone + (v - zone) * 0.70710678f;
-        if (kVersus) v = std::max(v, kVersusFloor);  // a walking diagonal cannot keep the straight speed there
-    }
-    if (x) p.lx = int16_t(float(x) * v * 32767.0f);
-    if (y) p.ly = int16_t(float(y) * v * 32767.0f);
-    if (View(g_view.load()) != View::Lockpick || menu) {
-        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
-        g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
-        return;
-    }
+    if (g_zoom_left > 0.0f) g_zoom_left = std::max(0.0f, g_zoom_left - seconds);
+    if (g_zoom_left < 0.0f) g_zoom_left = std::min(0.0f, g_zoom_left + seconds);
+    if (!y && g_zoom_left != 0.0f) y = g_zoom_left > 0.0f ? 1 : -1;
+    return y;
+}
+
+void ArrowStick(int& x, int& y, float& v) {
+    int ax = Down(VK_RIGHT) - Down(VK_LEFT);
+    int ay = Down(VK_UP) - Down(VK_DOWN);
+    if (!ax && !ay) return;
+    x = ax;
+    y = ay;
+    v = 1.0f;
+}
+
+float DiagonalSpeed(float v) {
+    float zone = kVersus ? kVersusDeadZone : kDeadZone;
+    v = zone + (v - zone) * 0.70710678f;
+    if (kVersus) v = std::max(v, kVersusFloor);  // a walking diagonal cannot keep the straight speed there
+    return v;
+}
+
+void PickStick(Pad& p, const int (&move)[4]) {
     bool held = g_pick_last >= 0 && move[g_pick_last];
     for (int i = 0; i < 4 && !held; i++)
         if (move[i]) g_pick_last = i, held = true;
@@ -534,6 +558,54 @@ void Keyboard(Pad& p) {
     float length = held ? 1.0f : kPickRest;
     p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
     p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
+}
+
+void Keyboard(Pad& p) {
+    std::array<std::vector<int>, kCount> binds;
+    {
+        std::lock_guard lock(g_bind_lock);
+        binds = g_binds;
+    }
+    bool menu = g_menu;
+    if (g_settle && KeysSettling(binds)) return;
+    SettleMouse();
+    bool no_mouse = menu || g_pointer || g_settle_mouse;
+    bool camera = View(g_view.load()) == View::StickyCamera && !menu;
+    View view = View(g_view.load());
+    bool keypad = view == View::Keypad && !menu;
+    bool back = g_opsat || (view == View::BackOut && !menu) || keypad;
+    int move[4] = {};
+    uint32_t keys = 0;
+    for (size_t i = 0; i < kCount; i++) {
+        if (kActions[i].button == kHostKey) continue;
+        if (!ActionHeld(i, binds[i], no_mouse, menu)) {
+            g_down_as[i] = 0;
+            continue;
+        }
+        keys |= 1u << i;
+        if (PressEvent(i, p)) continue;
+        PressTarget(HeldTarget(i, camera, back, menu), p, move);
+    }
+    PressMenuKeys(p, menu, keypad);
+    NoteKeysHeld(keys);
+    int x = move[3] - move[2];
+    int y = move[0] - move[1];
+    // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
+    bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
+    float v = StickSpeed(full);
+    y = WheelZoom(camera, y);
+    ArrowStick(x, y, v);
+    // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
+    // as fast as one. Not where the full stick is forced: a ledge climb wants aForward past 0.9.
+    if (x && y && !full) v = DiagonalSpeed(v);
+    if (x) p.lx = int16_t(float(x) * v * 32767.0f);
+    if (y) p.ly = int16_t(float(y) * v * 32767.0f);
+    if (View(g_view.load()) != View::Lockpick || menu) {
+        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
+        g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
+        return;
+    }
+    PickStick(p, move);
 }
 
 // the cursor stays where the drag started, so it hovers nothing on the way
@@ -564,7 +636,8 @@ void AddPad(SDL_JoystickID id) {
     if (slot == std::end(g_pads)) return;
     *slot = SDL_OpenGamepad(id);
     const char* name = *slot ? SDL_GetGamepadName(*slot) : SDL_GetError();
-    LOGI("input: controller %d %s: %s", int(slot - g_pads) + 1, *slot ? "plugged in" : "failed to open", name ? name : "");
+    LOGI("input: controller %d %s: %s", int(slot - g_pads) + 1, *slot ? "plugged in" : "failed to open",
+         name ? name : "");
 }
 
 void RemovePad(SDL_JoystickID id) {
@@ -688,7 +761,8 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
     for (int b = kPadControls; b < kPadButtons; b++) raw[b] = (buttons & kPadMasks[b]) ? 0xFF : 0;
     p.buttons = 0;
     std::fill(std::begin(p.analog), std::end(p.analog), uint8_t(0));
-    bool held = std::any_of(std::begin(raw), std::end(raw), [](uint8_t v) { return v > XINPUT_GAMEPAD_TRIGGER_THRESHOLD; });
+    bool held = std::any_of(std::begin(raw), std::end(raw),
+                            [](uint8_t v) { return v > XINPUT_GAMEPAD_TRIGGER_THRESHOLD; });
     if (g_pad_settle[size_t(slot)] && held) return;
     g_pad_settle[size_t(slot)] = false;
     bool play = !g_menu && !g_title;
@@ -716,11 +790,13 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
 
 void ApplyPadBinds() {
     for (int b = 0; b < kPadButtons; b++)
-        g_pad_map[size_t(b)] = std::ranges::any_of(kPadActions, [b](const PadAction& a) { return a.button == b; }) ? -1 : 0;
+        g_pad_map[size_t(b)] =
+            std::ranges::any_of(kPadActions, [b](const PadAction& a) { return a.button == b; }) ? -1 : 0;
     for (size_t i = 0; i < kPadCount; i++) {
         const PadAction& a = kPadActions[i];
         if (g_pad_binds[i] >= 0)
-            g_pad_map[size_t(g_pad_binds[i])] = (a.event != KeyEvent::None ? kEventTarget + int(a.event) : a.button) + 1;
+            g_pad_map[size_t(g_pad_binds[i])] =
+                (a.event != KeyEvent::None ? kEventTarget + int(a.event) : a.button) + 1;
     }
 }
 
@@ -971,7 +1047,8 @@ bool AnswerKey(int vk) {
             return false;
     }
     if ((vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) || (vk >= 0x88 && vk <= 0x9F) ||
-        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) || Bound(KeyEvent::SettingsPanel, vk))
+        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) ||
+        Bound(KeyEvent::SettingsPanel, vk))
         return false;
     return Down(vk);
 }
@@ -1104,7 +1181,8 @@ bool ConsoleChar(unsigned c) {
     if (kConsoleAction >= kCount) return false;
     for (int vk : g_binds[kConsoleAction])
         // MapVirtualKey's top bit flags a dead key
-        if (unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF; k && towupper(wint_t(c)) == towupper(wint_t(k)))
+        if (unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF;
+            k && towupper(wint_t(c)) == towupper(wint_t(k)))
             return true;
     return false;
 }
@@ -1247,7 +1325,8 @@ Pad Poll(int port) {
                 bool was_keyboard = KeyboardActive();
                 g_pad_ms = NowMs();
                 // the menu cursor goes now rather than at the next mouse move
-                if (was_keyboard) PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+                if (was_keyboard)
+                    PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
             }
         }
     }

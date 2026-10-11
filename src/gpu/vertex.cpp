@@ -153,6 +153,207 @@ uint32_t TypeBytes(uint32_t t) {
     }
 }
 
+constexpr uint32_t kResData = 4;
+
+void ResetAssembled(Assembled& out) {
+    out.vertices.clear();
+    out.indices.clear();
+    out.regs = 0;
+    out.vertex_count = 0;
+    out.topology = Topology::Triangles;
+    out.strip = false;
+    out.decode = 0;
+    out.buffer_count = 0;
+    out.index_src = nullptr;
+    out.index16 = false;
+    out.index_count = out.draw_count = 0;
+    out.base_vertex = 0;
+}
+
+// the declaration's register layout, or the one an FVF handle stands for
+const VertexShader* PickLayout(const State& s, VertexShader& fvf_layout, Assembled& out) {
+    if (!(s.vs_handle & 1)) {
+        FvfInputs(s.vs_handle, fvf_layout);
+        out.pretransformed = (s.vs_handle & 0xE) == 0x4;
+        return &fvf_layout;
+    }
+    out.pretransformed = false;
+    return s.vs.get();
+}
+
+void IndexRange(const uint8_t* ip, uint32_t count, uint32_t& first, uint32_t& last) {
+    uint16_t lo16 = 0xFFFF;
+    uint16_t hi16 = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        uint16_t v;
+        std::memcpy(&v, ip + i * 2, 2);
+        lo16 = std::min(lo16, v);
+        hi16 = std::max(hi16, v);
+    }
+    first = lo16;
+    last = hi16;
+}
+
+// logical vertex numbers in draw order
+uint32_t DrawVertex(const State& s, const uint8_t* ip, uint32_t start, uint32_t i) {
+    if (!ip) return start + i;
+    uint16_t v;
+    std::memcpy(&v, ip + i * 2, 2);
+    return v + s.base_vertex;
+}
+
+// the input registers fed by a bound stream, also marked in out.regs
+int CollectRegs(const State& s, const VertexShader& layout, int* regs, Assembled& out) {
+    int nregs = 0;
+    for (int r = 0; r < 16; r++) {
+        const auto& in = layout.inputs[size_t(r)];
+        if (in.stream < 0 || !in.type || in.type == 0x02) continue;
+        const auto& st = s.streams[size_t(in.stream)];
+        if (!st.vb) continue;
+        regs[nregs++] = r;
+        out.regs |= uint16_t(1u << r);
+    }
+    return nregs;
+}
+
+uint32_t StrideOf(const State& s, const VertexShader& layout, const VertexShader::Input& in) {
+    const auto& st = s.streams[size_t(in.stream)];
+    return st.stride ? st.stride : layout.stream_stride[size_t(in.stream)];
+}
+
+bool RawReadable(const State& s, const VertexShader& layout, const int* regs, int nregs) {
+    bool raw = true;
+    for (int k = 0; k < nregs && raw; k++) {
+        const auto& in = layout.inputs[size_t(regs[k])];
+        HostElement he = HostFormat(in.type);
+        uint32_t stride = StrideOf(s, layout, in);
+        raw = he.format && stride && stride % 4 == 0 && in.offset < 0x10000 &&
+              in.offset % std::min<uint32_t>(he.bytes, 4) == 0;
+        if (!raw) {
+            LOG_FIRST(32, "vertex: converted on the CPU: v%d type %02X offset %u stride %u", regs[k], in.type,
+                      in.offset, stride);
+        }
+    }
+    return raw;
+}
+
+void GatherVertices(const State& s, const uint8_t* ip, uint32_t start, uint32_t count, const uint8_t* data,
+                    uint32_t stride, std::vector<uint8_t>& g) {
+    g.resize(size_t(count) * stride);
+    for (uint32_t i = 0; i < count; i++) {
+        std::memcpy(&g[size_t(i) * stride], data + size_t(DrawVertex(s, ip, start, i)) * stride, stride);
+    }
+}
+
+// returns the buffer slot the stream got
+int AddRawBuffer(const State& s, const VertexShader& layout, const VertexShader::Input& in, const uint8_t* ip,
+                 uint32_t start, uint32_t count, uint32_t lo, uint32_t span, bool dense, Assembled& out) {
+    using namespace kernel;
+    const auto& st = s.streams[size_t(in.stream)];
+    uint32_t stride = StrideOf(s, layout, in);
+    const uint8_t* data = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + kResData))));
+    int slot = int(out.buffer_count);
+    if (dense) {
+        out.buffers[out.buffer_count++] = {data + size_t(lo) * stride, span * stride, stride};
+    } else {
+        auto& g = out.gathered[out.buffer_count];
+        GatherVertices(s, ip, start, count, data, stride, g);
+        out.buffers[out.buffer_count++] = {g.data(), count * stride, stride};
+    }
+    return slot;
+}
+
+// primitives the input assembler draws without a rebuilt index list
+bool NativePrimitive(uint32_t prim) {
+    return prim == 1 || prim == 2 || prim == 4 || prim == 5 || prim == 6;
+}
+
+Topology NativeTopology(uint32_t prim) {
+    if (prim == 1) return Topology::Points;
+    if (prim <= 4) return Topology::Lines;
+    return Topology::Triangles;
+}
+
+uint32_t MinVertices(uint32_t prim) {
+    if (prim == 1) return 1u;
+    if (prim <= 4) return 2u;
+    return 3u;
+}
+
+bool DrawNative(uint32_t prim, const uint8_t* ip, bool dense, uint32_t first, uint32_t count, Assembled& out) {
+    out.strip = prim == 4 || prim == 6;
+    out.topology = NativeTopology(prim);
+    if (ip && dense) {
+        out.index_src = ip;
+        out.index16 = true;
+        out.index_count = count;
+        out.base_vertex = -int32_t(first);
+    } else {
+        out.draw_count = count;
+    }
+    return count >= MinVertices(prim);
+}
+
+bool UseIndexList(Assembled& out) {
+    out.index_src = out.indices.data();
+    out.index_count = uint32_t(out.indices.size());
+    return out.index_count != 0;
+}
+
+bool AssembleRaw(const State& s, const VertexShader& layout, const int* regs, int nregs, uint32_t prim,
+                 uint32_t start, uint32_t count, const uint8_t* ip, uint32_t first, uint32_t lo, uint32_t span,
+                 Assembled& out) {
+    // sparse indices: the vertices they read, copied in draw order
+    bool dense = uint64_t(span) <= uint64_t(count) * 4 + 1024;
+    int slot[16];
+    std::fill(std::begin(slot), std::end(slot), -1);
+    for (int k = 0; k < nregs; k++) {
+        const auto& in = layout.inputs[size_t(regs[k])];
+        if (slot[in.stream] < 0) {
+            slot[in.stream] = AddRawBuffer(s, layout, in, ip, start, count, lo, span, dense, out);
+        }
+        HostElement he = HostFormat(in.type);
+        out.elements[size_t(regs[k])] = {he.format, uint8_t(slot[in.stream]), uint16_t(in.offset)};
+        out.decode |= uint64_t(he.decode) << (regs[k] * 4);
+    }
+    out.vertex_count = dense ? span : count;
+    if (NativePrimitive(prim)) return DrawNative(prim, ip, dense, first, count, out);
+    auto local = [&](uint32_t i) { return dense ? DrawVertex(s, ip, start, i) - lo : i; };
+    ListIndices(prim, count, local, out.indices, out.topology);
+    return UseIndexList(out);
+}
+
+// converted on the CPU: each element to a float4, vertices in range order when the indices are dense
+bool AssembleConverted(const State& s, const VertexShader& layout, const int* regs, int nregs, uint32_t prim,
+                       uint32_t start, uint32_t count, const uint8_t* ip, uint32_t lo, uint32_t span,
+                       Assembled& out) {
+    using namespace kernel;
+    std::vector<uint32_t> seq(count);
+    for (uint32_t i = 0; i < count; i++) seq[i] = DrawVertex(s, ip, start, i);
+    bool ranged = uint64_t(span) <= uint64_t(count) * 2 + 64;
+    uint32_t n = ranged ? span : count;
+    out.vertex_count = n;
+    out.vertices.resize(size_t(n) * nregs * 4);
+    for (int k = 0; k < nregs; k++) {
+        const auto& in = layout.inputs[size_t(regs[k])];
+        const auto& st = s.streams[size_t(in.stream)];
+        uint32_t data = mem::VirtualFromPhysical(R32(st.vb + kResData));
+        uint32_t stride = StrideOf(s, layout, in);
+        const uint8_t* src = static_cast<const uint8_t*>(HostPtr(data + in.offset));
+        for (uint32_t v = 0; v < n; v++) {
+            uint32_t id = ranged ? lo + v : seq[v];
+            Convert(in.type, src + size_t(id) * stride, &out.vertices[(size_t(v) * nregs + k) * 4]);
+        }
+        out.elements[size_t(regs[k])] = {DXGI_FORMAT_R32G32B32A32_FLOAT, 0, uint16_t(k * 16)};
+    }
+    out.buffer_count = 1;
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(out.vertices.data());
+    out.buffers[0] = {bytes, uint32_t(out.vertices.size() * 4), uint32_t(nregs * 16)};
+    auto local = [&](uint32_t i) { return ranged ? seq[i] - lo : i; };
+    ListIndices(prim, count, local, out.indices, out.topology);
+    return UseIndexList(out);
+}
+
 }  // namespace
 
 void FvfInputs(uint32_t fvf, VertexShader& vs) {
@@ -185,150 +386,28 @@ void FvfInputs(uint32_t fvf, VertexShader& vs) {
 }
 
 bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
-    using namespace kernel;
-    out.vertices.clear();
-    out.indices.clear();
-    out.regs = 0;
-    out.vertex_count = 0;
-    out.topology = Topology::Triangles;
-    out.strip = false;
-    out.decode = 0;
-    out.buffer_count = 0;
-    out.index_src = nullptr;
-    out.index16 = false;
-    out.index_count = out.draw_count = 0;
-    out.base_vertex = 0;
+    ResetAssembled(out);
     if (!count || prim < 1 || prim > 10) return false;
 
     VertexShader fvf_layout;
-    const VertexShader* layout = s.vs.get();
-    if (!(s.vs_handle & 1)) {
-        FvfInputs(s.vs_handle, fvf_layout);
-        layout = &fvf_layout;
-        out.pretransformed = (s.vs_handle & 0xE) == 0x4;
-    } else {
-        out.pretransformed = false;
-    }
+    const VertexShader* layout = PickLayout(s, fvf_layout, out);
     if (!layout) return false;
 
     // the vertex range the draw reads
-    uint32_t first = 0, last = count - 1;
-    if (ip) {
-        uint16_t lo16 = 0xFFFF, hi16 = 0;
-        for (uint32_t i = 0; i < count; i++) {
-            uint16_t v;
-            std::memcpy(&v, ip + i * 2, 2);
-            lo16 = std::min(lo16, v);
-            hi16 = std::max(hi16, v);
-        }
-        first = lo16;
-        last = hi16;
-    }
-    // logical vertex numbers in draw order
-    auto at = [&](uint32_t i) -> uint32_t {
-        if (!ip) return start + i;
-        uint16_t v;
-        std::memcpy(&v, ip + i * 2, 2);
-        return v + s.base_vertex;
-    };
+    uint32_t first = 0;
+    uint32_t last = count - 1;
+    if (ip) IndexRange(ip, count, first, last);
     uint32_t lo = ip ? first + s.base_vertex : start;
     uint32_t span = last - first + 1;
 
     int regs[16];
-    int nregs = 0;
-    for (int r = 0; r < 16; r++) {
-        const auto& in = layout->inputs[size_t(r)];
-        if (in.stream < 0 || !in.type || in.type == 0x02) continue;
-        const auto& st = s.streams[size_t(in.stream)];
-        if (!st.vb) continue;
-        regs[nregs++] = r;
-        out.regs |= uint16_t(1u << r);
-    }
+    int nregs = CollectRegs(s, *layout, regs, out);
     if (!nregs) return false;
-    auto stride_of = [&](const VertexShader::Input& in) {
-        const auto& st = s.streams[size_t(in.stream)];
-        return st.stride ? st.stride : layout->stream_stride[size_t(in.stream)];
-    };
 
     // the guest's own vertices when the input assembler can read every element of them
-    bool raw = true;
-    for (int k = 0; k < nregs && raw; k++) {
-        const auto& in = layout->inputs[size_t(regs[k])];
-        HostElement he = HostFormat(in.type);
-        uint32_t stride = stride_of(in);
-        raw = he.format && stride && stride % 4 == 0 && in.offset < 0x10000 && in.offset % std::min<uint32_t>(he.bytes, 4) == 0;
-        if (!raw) LOG_FIRST(32, "vertex: converted on the CPU: v%d type %02X offset %u stride %u", regs[k], in.type, in.offset, stride);
-    }
-    if (raw) {
-        // sparse indices: the vertices they read, copied in draw order
-        bool dense = uint64_t(span) <= uint64_t(count) * 4 + 1024;
-        int slot[16];
-        std::fill(std::begin(slot), std::end(slot), -1);
-        for (int k = 0; k < nregs; k++) {
-            const auto& in = layout->inputs[size_t(regs[k])];
-            if (slot[in.stream] < 0) {
-                const auto& st = s.streams[size_t(in.stream)];
-                uint32_t stride = stride_of(in);
-                const uint8_t* data = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + 4))));
-                slot[in.stream] = int(out.buffer_count);
-                if (dense) {
-                    out.buffers[out.buffer_count++] = {data + size_t(lo) * stride, span * stride, stride};
-                } else {
-                    auto& g = out.gathered[out.buffer_count];
-                    g.resize(size_t(count) * stride);
-                    for (uint32_t i = 0; i < count; i++) std::memcpy(&g[size_t(i) * stride], data + size_t(at(i)) * stride, stride);
-                    out.buffers[out.buffer_count++] = {g.data(), count * stride, stride};
-                }
-            }
-            HostElement he = HostFormat(in.type);
-            out.elements[size_t(regs[k])] = {he.format, uint8_t(slot[in.stream]), uint16_t(in.offset)};
-            out.decode |= uint64_t(he.decode) << (regs[k] * 4);
-        }
-        out.vertex_count = dense ? span : count;
-        if (prim == 1 || prim == 2 || prim == 4 || prim == 5 || prim == 6) {
-            out.strip = prim == 4 || prim == 6;
-            out.topology = prim == 1 ? Topology::Points : prim <= 4 ? Topology::Lines : Topology::Triangles;
-            if (ip && dense) {
-                out.index_src = ip;
-                out.index16 = true;
-                out.index_count = count;
-                out.base_vertex = -int32_t(first);
-            } else {
-                out.draw_count = count;
-            }
-            return count >= (prim == 1 ? 1u : prim <= 4 ? 2u : 3u);
-        }
-        ListIndices(prim, count, [&](uint32_t i) { return dense ? at(i) - lo : i; }, out.indices, out.topology);
-        out.index_src = out.indices.data();
-        out.index_count = uint32_t(out.indices.size());
-        return out.index_count != 0;
-    }
-
-    // converted on the CPU: each element to a float4, vertices in range order when the indices are dense
-    std::vector<uint32_t> seq(count);
-    for (uint32_t i = 0; i < count; i++) seq[i] = at(i);
-    bool ranged = uint64_t(span) <= uint64_t(count) * 2 + 64;
-    uint32_t n = ranged ? span : count;
-    out.vertex_count = n;
-    out.vertices.resize(size_t(n) * nregs * 4);
-    for (int k = 0; k < nregs; k++) {
-        const auto& in = layout->inputs[size_t(regs[k])];
-        const auto& st = s.streams[size_t(in.stream)];
-        uint32_t data = mem::VirtualFromPhysical(R32(st.vb + 4));
-        uint32_t stride = stride_of(in);
-        const uint8_t* src = static_cast<const uint8_t*>(HostPtr(data + in.offset));
-        for (uint32_t v = 0; v < n; v++) {
-            uint32_t id = ranged ? lo + v : seq[v];
-            Convert(in.type, src + size_t(id) * stride, &out.vertices[(size_t(v) * nregs + k) * 4]);
-        }
-        out.elements[size_t(regs[k])] = {DXGI_FORMAT_R32G32B32A32_FLOAT, 0, uint16_t(k * 16)};
-    }
-    out.buffer_count = 1;
-    out.buffers[0] = {reinterpret_cast<const uint8_t*>(out.vertices.data()), uint32_t(out.vertices.size() * 4), uint32_t(nregs * 16)};
-    ListIndices(prim, count, [&](uint32_t i) { return ranged ? seq[i] - lo : i; }, out.indices, out.topology);
-    out.index_src = out.indices.data();
-    out.index_count = uint32_t(out.indices.size());
-    return out.index_count != 0;
+    bool raw = RawReadable(s, *layout, regs, nregs);
+    if (raw) return AssembleRaw(s, *layout, regs, nregs, prim, start, count, ip, first, lo, span, out);
+    return AssembleConverted(s, *layout, regs, nregs, prim, start, count, ip, lo, span, out);
 }
 
 }  // namespace gpu

@@ -97,10 +97,13 @@ std::vector<Mode> Modes() {
     for (DWORD i = 0; EnumDisplaySettingsW(nullptr, i, &dm); i++) {
         if (dm.dmBitsPerPel < 32 || dm.dmPelsWidth < 640) continue;
         Mode m{dm.dmPelsWidth, dm.dmPelsHeight};
-        if (std::none_of(modes.begin(), modes.end(), [&](const Mode& o) { return o.width == m.width && o.height == m.height; }))
+        if (std::none_of(modes.begin(), modes.end(),
+                         [&](const Mode& o) { return o.width == m.width && o.height == m.height; }))
             modes.push_back(m);
     }
-    std::sort(modes.begin(), modes.end(), [](const Mode& a, const Mode& b) { return a.width != b.width ? a.width > b.width : a.height > b.height; });
+    std::sort(modes.begin(), modes.end(), [](const Mode& a, const Mode& b) {
+        return a.width != b.width ? a.width > b.width : a.height > b.height;
+    });
     return modes;
 }
 
@@ -147,7 +150,8 @@ int OptionRow(const char* label, const char* value) {
     int step = 0;
     ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(row_w, row_h));
     if (ImGui::IsItemFocused()) {
-        ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_Header));
+        ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                                  ImGui::GetColorU32(ImGuiCol_Header));
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft)) step = -1;
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight)) step = 1;
     }
@@ -251,7 +255,8 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone, kPushToTalk, kSensitivity, kInvertMouse,
+    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
+    kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage
 };
 
@@ -264,7 +269,8 @@ constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 bool VersusHides(int id) {
     if (!kVersus) return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kHqShadows || id == kAmbientOcclusion ||
-           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate || id == kInputDelay;
+           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate ||
+           id == kInputDelay;
 }
 
 constexpr Row kSettingsRows[] = {
@@ -325,6 +331,12 @@ const std::vector<Row>& PadRows() {
     return list;
 }
 
+bool& ShaderModel3Flag(Settings& s, int id) {
+    if (id == kHdr) return s.hdr_rendering;
+    if (id == kToneMapping) return s.tone_mapping;
+    return s.hq_soft_shadows;
+}
+
 // steps the value first when step is not zero; a copy of the settings only reads what a step gives
 std::string RowText(int id, int step, Settings& s = Get()) {
     char text[64] = "";
@@ -339,7 +351,8 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         }
         case kResolution: {
             static const std::vector<Mode> modes = Modes();
-            Mode desktop = Desktop(), m = s.width && s.height ? Mode{s.width, s.height} : desktop;
+            Mode desktop = Desktop();
+            Mode m = s.width && s.height ? Mode{s.width, s.height} : desktop;
             int i = 0;
             for (size_t k = 0; k < modes.size(); k++)
                 if (modes[k].width == m.width && modes[k].height == m.height) i = int(k);
@@ -356,7 +369,9 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         }
         case kRenderResolution: {
             // 20% to 200% in steps of 5
-            if (step) s.render_percent = 20 + 5 * uint32_t(StepIndex((std::clamp(int(s.render_percent), 20, 200) - 20) / 5, step, 37));
+            if (step)
+                s.render_percent =
+                    20 + 5 * uint32_t(StepIndex((std::clamp(int(s.render_percent), 20, 200) - 20) / 5, step, 37));
             Mode out = Output();
             std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
                           out.height * s.render_percent / 100);
@@ -411,7 +426,7 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         case kToneMapping:
         case kHqShadows: {
             // shader model 3.0 features, off at 1.1
-            bool& on = id == kHdr ? s.hdr_rendering : id == kToneMapping ? s.tone_mapping : s.hq_soft_shadows;
+            bool& on = ShaderModel3Flag(s, id);
             if (s.shader_model < 3) return "OFF";
             Flip(on, step);
             std::snprintf(text, sizeof(text), "%s", OnOff(on));
@@ -426,7 +441,8 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));
             break;
         case kLanguage: {
-            int count = int(std::size(kLanguages)), i = 0;
+            int count = int(std::size(kLanguages));
+            int i = 0;
             while (i < count - 1 && s.language != kLanguages[i]) i++;
             if (step) s.language = kLanguages[i = StepIndex(i, step, count)];
             std::snprintf(text, sizeof(text), s.language == BootLanguage() ? "%s" : "%s (RESTART)", kLanguageNames[i]);
@@ -661,7 +677,9 @@ void PlayerRow(const char* label, int player) {
     if (ImGui::BeginCombo("##device", Ui(PortText(s.players[player])).c_str())) {
         for (const Port& c : PlayerList(s, player)) {
             bool current = SamePort(c, s.players[player]);
-            if (ImGui::Selectable(Ui(ChoiceText(s, player, c)).c_str(), current) && !current && SetPlayer(s, player, c)) Changed(false);
+            if (ImGui::Selectable(Ui(ChoiceText(s, player, c)).c_str(), current) && !current &&
+                SetPlayer(s, player, c))
+                Changed(false);
             if (current) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
@@ -735,7 +753,8 @@ void DrawRows(int page) {
             bool keys = r.kind == Kind::Bind;
             std::vector<std::string> boxes = keys ? KeyBoxes(size_t(r.id)) : std::vector<std::string>{rows::Value(r)};
             int cleared = -1;
-            int box = BindRow(r.label, boxes, g_capture == r.id ? g_capture_slot : -1, keys ? "PRESS A KEY" : "PRESS A BUTTON", cleared);
+            int box = BindRow(r.label, boxes, g_capture == r.id ? g_capture_slot : -1,
+                              keys ? "PRESS A KEY" : "PRESS A BUTTON", cleared);
             if (box >= 0 && g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1) {
                 g_capture_slot = box;
                 g_capture = r.id;
@@ -788,7 +807,8 @@ void DrawTabs() {
     ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, kHeading);
     ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
     if (ImGui::BeginTabBar("##pages")) {
-        float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x * float(shown - 1)) / float(shown);
+        float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x * float(shown - 1)) /
+                  float(shown);
         for (int i = 0; i < int(std::size(kPages)); i++) {
             if (!PageShown(i)) continue;
             ImGui::SetNextItemWidth(w);
@@ -817,11 +837,13 @@ void DrawPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(em * 1.6f, em * 1.2f));
-    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                                        ImGuiWindowFlags_NoTitleBar;
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
         std::string title = Ui("SETTINGS");
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title.c_str()).x) * 0.5f, 0.0f));
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                             std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title.c_str()).x) * 0.5f,
+                                      0.0f));
         ImGui::TextUnformatted(title.c_str());
         DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
@@ -840,7 +862,9 @@ void DrawPanel() {
         ImGui::TextUnformatted(Ui(hint, false).c_str());
         ImGui::PopStyleColor();
         float bw = em * 8;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2, 0.0f));
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                             std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2,
+                                      0.0f));
         if (ImGui::Button(Ui("Back", false).c_str(), ImVec2(bw, 0))) ToggleMenu();
         ImGui::SameLine();
         if (ImGui::Button(Ui("Defaults", false).c_str(), ImVec2(bw, 0))) Defaults();
@@ -942,7 +966,8 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
-    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id))) return false;
+    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id)))
+        return false;
     bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
     return !sm3 || Get().shader_model >= 3;
 }
