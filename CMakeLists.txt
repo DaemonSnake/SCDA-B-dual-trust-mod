@@ -1,7 +1,7 @@
 # Splinter Cell Double Agent (original Xbox), statically recompiled
 
 cmake_minimum_required(VERSION 3.25)
-project(scda LANGUAGES C CXX)
+project(scda LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,6 +54,17 @@ set_source_files_properties(src/core/input.cpp src/audio/voice.cpp src/audio/voi
     INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include;${opus_SOURCE_DIR}/include")
 file(GLOB RECOMP_CONFIGS CONFIGURE_DEPENDS config/*.toml)
 
+# Generate build_info.h and track it as a dependency of version-related
+find_package(Git QUIET)
+set(BUILD_INFO ${CMAKE_CURRENT_BINARY_DIR}/build_info.h)
+add_custom_target(build_info
+    COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR} -DOUT=${BUILD_INFO} -DGIT=${GIT_EXECUTABLE}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_info.cmake
+    BYPRODUCTS ${BUILD_INFO}
+    VERBATIM)
+set_source_files_properties(src/app/system_info.cpp src/app/version.rc PROPERTIES
+    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR} OBJECT_DEPENDS ${BUILD_INFO})
+
 # One executable per recompiled image: the image's code from its config (partitions as that config sets them),
 # the shared host, and the game hooks only that image has.
 function(scda_image target xbe config partitions game_dir)
@@ -82,8 +93,9 @@ function(scda_image target xbe config partitions game_dir)
     file(SHA1 ${xbe_file} xbe_sha1)
     set(XBE_HASH ${CMAKE_CURRENT_BINARY_DIR}/${target}_xbe.cpp)
     file(CONFIGURE OUTPUT ${XBE_HASH} CONTENT "extern const char kImageSha1[] = \"${xbe_sha1}\";\n")
-    add_executable(${target} WIN32 ${HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES} ${XBE_HASH})
-    add_dependencies(${target} recompile_${target})
+    add_executable(${target} WIN32 ${HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES} ${XBE_HASH}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.rc)
+    add_dependencies(${target} recompile_${target} build_info)
     target_include_directories(${target} PRIVATE src ${GEN})
     target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
     target_compile_options(${target} PRIVATE -fno-strict-aliasing)

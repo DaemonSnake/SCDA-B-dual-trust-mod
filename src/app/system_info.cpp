@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "app/app.h"
+#include "build_info.h"
 #include "core/log.h"
 #include "image_symbols.h"
 
@@ -75,8 +76,10 @@ void LogSystem() {
     std::time_t now = std::time(nullptr);
     char date[32] = {};
     std::strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-    LOGR("Splinter Cell Double Agent XBE Recomp V%d, %ls (%s), %s", kVersion, std::filesystem::path(exe).filename().c_str(),
-         IMAGE_XBE, date);
+    // Debug builds name their commit
+    constexpr const char* kBuild = logx::kVerbose ? " (" SCDA_COMMIT ", debug)" : "";
+    LOGR("Splinter Cell Double Agent XBE Recomp V%d%s, %ls (%s), %s", kVersion, kBuild,
+         std::filesystem::path(exe).filename().c_str(), IMAGE_XBE, date);
     LOGR("Path: %ls", ExeDir().c_str());
     LOGR("OS: %s", OsVersion().c_str());
     SYSTEM_INFO si{};
