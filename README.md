@@ -1,7 +1,5 @@
 # Splinter Cell: Double Agent - XBE Recomp
-An unofficial native PC port of the original Xbox version of Splinter Cell: Double Agent, with extended graphics options, keyboard and mouse support, online co-op and Versus with voice chat, and other enhancements.
-
-This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool.
+An unofficial native PC port of the original Xbox version of Splinter Cell: Double Agent via static recompilation, built into a 64 bit Windows executable. The game's x86 code is translated to C++ ahead of time, the Xbox kernel, Direct3D and DirectSound calls are implemented on Windows, and everything is drawn with Direct3D 12 and played through XAudio2. Made with the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool, created for this game originally.
 
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
@@ -10,6 +8,8 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - Put your game files in the `assets` folder. This can be an ISO, or the extracted data files.
 - Run `SCDA.exe`.
 - Recomp settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with F10 by default.
+ <img width="1920" height="1080" alt="{9A8865E6-89EC-4E10-866A-C3E71944E6C9}" src="https://github.com/user-attachments/assets/d13e1fb6-ba97-4067-84e1-c2362d66d7c4" />
+
 
 ## Features
 ### Display
