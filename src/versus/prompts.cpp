@@ -21,17 +21,19 @@ namespace {
 
 // Page: +0xC begin, +0x10 end of instance pointers. Instance: +4 shown, +5 hidden, +0xC keyframe (-1 before the
 // first), +0x10 widget. Widget: +0 vtable, +4 frame (+0xC left, +0xE right, +0x10 top, +0x12 bottom, page units).
-// Image: +8 material (+4 crc32 of its lowercase name), frame +0x28 colour. Text: +8 font, +0xC text, +0x10 align
-// (1 centre), +0x14 flags, frame +0x14 colour, +0x18 shadow colour, +0x1C size (float), +0x20 shadow x and y,
-// +0x24 size.
+// Image: +8 material (+4 crc32 of its lowercase name), frame +0x28 colour.
+// Text: +8 font, +0xC text, +0x10 align (1 centre), +0x14 flags, frame +0x14 colour, +0x18 shadow colour, +0x1C size
+// (float), +0x20 shadow x and y, +0x24 size.
 // Sub page: +0x10 page, +0x24 texts and +0x30 materials it gives its page's instances, +0x38 and +0x34 the defaults.
-constexpr uint32_t kImage = 0x333E48;
-constexpr uint32_t kText = 0x362980;
-constexpr uint32_t kSubPage = 0x362C58;
-constexpr uint32_t kTextFrame = 0x362B24;
-constexpr uint32_t kBegin = 0x0C;
-constexpr uint32_t kEnd = 0x10;
-constexpr uint32_t kWidget = 0x10;
+// vtables, which tell the widget and frame kinds apart
+constexpr uint32_t kImageVtable = 0x333E48;
+constexpr uint32_t kTextVtable = 0x362980;
+constexpr uint32_t kSubPageVtable = 0x362C58;
+constexpr uint32_t kTextFrameVtable = 0x362B24;
+constexpr uint32_t kPageBegin = 0x0C;
+constexpr uint32_t kPageEnd = 0x10;
+constexpr uint32_t kMaxInstances = 256;
+constexpr uint32_t kInstanceWidget = 0x10;
 constexpr uint32_t kFrame = 0x04;
 constexpr uint32_t kRect = 0x0C;
 constexpr uint32_t kInstanceShown = 0x04;
@@ -47,6 +49,7 @@ constexpr uint32_t kImageFrameColour = 0x28;
 constexpr uint32_t kTextFont = 0x08;
 constexpr uint32_t kTextString = 0x0C;
 constexpr uint32_t kTextAlign = 0x10;
+constexpr uint32_t kAlignCentre = 1;
 constexpr uint32_t kTextFlags = 0x14;
 constexpr uint32_t kTextFrameField8 = 0x08;  // ~0 in our own text frame, meaning not known
 constexpr uint32_t kTextFrameColour = 0x14;
@@ -56,8 +59,8 @@ constexpr uint32_t kTextFrameSizeInt = 0x24;
 constexpr uint32_t kSubPagePage = 0x10;
 constexpr uint32_t kSubTexts = 0x24;
 constexpr uint32_t kSubMaterials = 0x30;
-constexpr uint32_t kSubDefault2 = 0x34;
-constexpr uint32_t kSubDefault1 = 0x38;
+constexpr uint32_t kSubDefaultMaterial = 0x34;
+constexpr uint32_t kSubDefaultText = 0x38;
 // font: vtable +0x10 a text's width, +0x14 whether it scales; +0x49 the size its widths are for
 constexpr uint32_t kFontWidth = 0x10;
 constexpr uint32_t kFontScales = 0x14;
@@ -183,11 +186,12 @@ struct Given {
     uint32_t material;
 };
 Given GivenTo(X86Context& ctx, uint32_t sub, uint32_t inst) {
-    uint32_t widget = R32(inst + kWidget);
+    uint32_t widget = R32(inst + kInstanceWidget);
     Given own{R32(widget + kTextString), R32(widget + kImageMaterial)};
-    if (!sub || (!R32(sub + kSubTexts) && !R32(sub + kSubMaterials) && !R32(sub + kSubDefault2) &&
-                 !R32(sub + kSubDefault1)))
-        return own;
+    if (!sub) return own;
+    bool gives = R32(sub + kSubTexts) || R32(sub + kSubMaterials) || R32(sub + kSubDefaultMaterial) ||
+                 R32(sub + kSubDefaultText);
+    if (!gives) return own;
     uint32_t drawer = R32(kDrawer);
     uint32_t text = R32(drawer + kGivenText);
     uint32_t material = R32(drawer + kGivenMaterial);
@@ -207,7 +211,7 @@ std::u16string Read(uint32_t text) {
 
 std::u16string Wide(std::string_view s) { return {s.begin(), s.end()}; }
 
-bool Block() {
+bool EnsureBlock() {
     if (!g_block) g_block = mem::AllocSystem(kBlockSize);
     return g_block != 0;
 }
@@ -239,30 +243,38 @@ struct Found {
     std::string key;
 };
 
+// moves a sub page's icons to their place on its parent
+struct Offset {
+    int dx;
+    int dy;
+};
+
 // the button icons a page shows; one alone in a sub page counts as its parent's, where its caption is
-void Icons(X86Context& ctx, uint32_t page, uint32_t sub, int dx, int dy, bool nested, std::vector<Found>& out) {
-    uint32_t begin = R32(page + kBegin);
-    uint32_t end = R32(page + kEnd);
-    if (!begin || end < begin || end - begin > 4 * 256) return;
+void Icons(X86Context& ctx, uint32_t page, uint32_t sub, Offset offset, bool nested, std::vector<Found>& out) {
+    uint32_t begin = R32(page + kPageBegin);
+    uint32_t end = R32(page + kPageEnd);
+    if (!begin || end < begin || end - begin > kMaxInstances * 4) return;
     for (uint32_t it = begin; it < end; it += 4) {
         uint32_t inst = R32(it);
-        uint32_t widget = inst ? R32(inst + kWidget) : 0;
+        uint32_t widget = inst ? R32(inst + kInstanceWidget) : 0;
         if (!widget || !Shown(inst)) continue;
         uint32_t type = R32(widget);
-        if (type == kImage && (!nested || end - begin == 4)) {
+        if (type == kImageVtable && (!nested || end - begin == 4)) {
             std::string key = Label(GivenTo(ctx, sub, inst).material);
-            if (!key.empty() && !Find(widget)) out.push_back({widget, RectOf(widget, dx, dy), key});
-        } else if (type == kSubPage && !nested && R32(widget + kSubPagePage)) {
+            if (!key.empty() && !Find(widget)) out.push_back({widget, RectOf(widget, offset.dx, offset.dy), key});
+        } else if (type == kSubPageVtable && !nested && R32(widget + kSubPagePage)) {
             Rect at = RectOf(widget);
-            Icons(ctx, R32(widget + kSubPagePage), widget, at.l, at.r, true, out);
+            Icons(ctx, R32(widget + kSubPagePage), widget, {at.l, at.r}, true, out);
         }
     }
 }
 
-// a text instance of the page beside one of the icons becomes its caption
-void Pair(X86Context& ctx, uint32_t sub, uint32_t inst, const std::vector<Found>& icons, std::vector<bool>& paired) {
-    uint32_t widget = inst ? R32(inst + kWidget) : 0;
-    if (!widget || R32(widget) != kText || !Shown(inst)) return;
+// a text instance of the page beside one of the icons becomes its caption; the font of the last text seen is kept
+// for the key names
+void LatchFontAndPair(X86Context& ctx, uint32_t sub, uint32_t inst, const std::vector<Found>& icons,
+                      std::vector<bool>& paired) {
+    uint32_t widget = inst ? R32(inst + kInstanceWidget) : 0;
+    if (!widget || R32(widget) != kTextVtable || !Shown(inst)) return;
     g_font = R32(widget + kTextFont);
     std::u16string text = Read(GivenTo(ctx, sub, inst).text);
     // a number is no caption: the duel's timer sits beside one of its buttons
@@ -298,14 +310,14 @@ namespace versus {
 // a page or a sub page's page is about to draw
 void EnterPage(X86Context& ctx, uint32_t page, uint32_t sub) {
     g_pages.push_back(g_acts.size());
-    if (!page || !input::KeyboardActive() || !Block()) return;
+    if (!page || !input::KeyboardActive() || !EnsureBlock()) return;
     uint32_t ecx = ctx.ecx;
     std::vector<Found> icons;
-    Icons(ctx, page, sub, 0, 0, false, icons);
+    Icons(ctx, page, sub, {0, 0}, false, icons);
     if (!icons.empty()) {
         std::vector<bool> paired(icons.size());
-        for (uint32_t it = R32(page + kBegin), end = R32(page + kEnd); it < end; it += 4)
-            Pair(ctx, sub, R32(it), icons, paired);
+        for (uint32_t it = R32(page + kPageBegin), end = R32(page + kPageEnd); it < end; it += 4)
+            LatchFontAndPair(ctx, sub, R32(it), icons, paired);
         for (size_t i = 0; i < icons.size(); i++)
             if (!paired[i]) g_acts.push_back({icons[i].widget, Act::Name, Wide(icons[i].key)});
     }
@@ -345,7 +357,8 @@ uint32_t KeyText(uint32_t text) {
     uint32_t& va = guest[out];
     if (!va) {
         va = mem::AllocSystem(uint32_t(out.size() + 1) * 2);
-        for (size_t i = 0; i <= out.size(); i++) W16(va + uint32_t(i) * 2, i < out.size() ? uint16_t(out[i]) : 0);
+        for (size_t i = 0; i < out.size(); i++) W16(va + uint32_t(i) * 2, uint16_t(out[i]));
+        W16(va + uint32_t(out.size()) * 2, 0);
     }
     return va;
 }
@@ -370,35 +383,38 @@ X86_FUNC(sub_002690E0) {
 
 // text widget draw (thiscall)
 X86_EXTERN_FUNC(__imp__sub_00263C30);
-X86_FUNC(sub_00263C30) {
-    const Act* act = g_acts.empty() ? nullptr : Find(ctx.ecx);
-    if (!act || act->kind == Act::Hide || act->kind == Act::Name) {
-        uint32_t drawer = R32(kDrawer);
-        uint32_t given = drawer ? R32(drawer + kGivenText) : 0;
-        uint32_t keyed = drawer ? versus::KeyText(given ? given : R32(ctx.ecx + kTextString)) : 0;
-        if (!keyed) return __imp__sub_00263C30(ctx, base);
-        W32(drawer + kGivenText, keyed);
+
+namespace {
+
+// a text that is no caption, with its inline pad buttons keyed
+void DrawKeyed(X86Context& ctx, uint8_t* base) {
+    uint32_t drawer = R32(kDrawer);
+    uint32_t given = drawer ? R32(drawer + kGivenText) : 0;
+    uint32_t keyed = drawer ? versus::KeyText(given ? given : R32(ctx.ecx + kTextString)) : 0;
+    if (!keyed) {
         __imp__sub_00263C30(ctx, base);
-        W32(drawer + kGivenText, given);
         return;
     }
-    if (act->kind == Act::Skip) {
-        ctx.esp += 4;  // not drawn
-        return;
-    }
+    W32(drawer + kGivenText, keyed);
+    __imp__sub_00263C30(ctx, base);
+    W32(drawer + kGivenText, given);
+}
+
+// a caption with its key, its sides moved by the act's
+void DrawCaption(X86Context& ctx, uint8_t* base, const Act& act) {
     uint32_t frame = R32(ctx.ecx + kFrame);
     uint32_t rect = frame + kRect;
     uint32_t drawer = R32(kDrawer);
     uint32_t sides = R32(rect);
     uint32_t given = R32(drawer + kGivenText);
     uint32_t size = R32(frame + kTextFrameSize);
-    int left = int16_t(sides) + act->left;
-    int right = int16_t(sides >> 16) + act->right;
+    int left = int16_t(sides) + act.left;
+    int right = int16_t(sides >> 16) + act.right;
     W16(rect, uint16_t(left));
     W16(rect + kRectRight, uint16_t(right));
     // the text it draws now: the interaction prompt's is filled in after the page starts, over a placeholder
     std::u16string text = Read(given ? given : R32(ctx.ecx + kTextString));
-    W32(drawer + kGivenText, Write(act->after ? act->text + u" " + text : text + u" " + act->text));
+    W32(drawer + kGivenText, Write(act.after ? act.text + u" " + text : text + u" " + act.text));
     // a caption too long for its place with the key in it shrinks to fit
     float width = Width(ctx, ctx.ecx, g_block + kBlockText);
     float room = float(right - left - kMargin);
@@ -409,20 +425,38 @@ X86_FUNC(sub_00263C30) {
     W32(rect, sides);
 }
 
+}  // namespace
+
+X86_FUNC(sub_00263C30) {
+    const Act* act = g_acts.empty() ? nullptr : Find(ctx.ecx);
+    if (!act || act->kind == Act::Hide || act->kind == Act::Name) {
+        DrawKeyed(ctx, base);
+        return;
+    }
+    if (act->kind == Act::Skip) {
+        ctx.esp += 4;  // not drawn
+        return;
+    }
+    DrawCaption(ctx, base, *act);
+}
+
 namespace {
+
+constexpr uint32_t kNameTextFlags = 0x200;
+constexpr int kNameHalfWidth = 100;  // page units either side of the icon's centre
 
 // our own text widget in the block: centred on x, from y down size, in the image's colour
 void NameText(uint32_t image, uint32_t widget, uint32_t frame, int size, int x, int y) {
     for (uint32_t i = 0; i < kBlockText; i += 4) W32(g_block + i, 0);
-    W32(widget, kText);
+    W32(widget, kTextVtable);
     W32(widget + kFrame, frame);
     W32(widget + kTextFont, g_font);
-    W32(widget + kTextAlign, 1);
-    W32(widget + kTextFlags, 0x200);
-    W32(frame, kTextFrame);
+    W32(widget + kTextAlign, kAlignCentre);
+    W32(widget + kTextFlags, kNameTextFlags);
+    W32(frame, kTextFrameVtable);
     W32(frame + kTextFrameField8, ~0u);
-    W16(frame + kRect, uint16_t(int16_t(x - 100)));
-    W16(frame + kRect + kRectRight, uint16_t(int16_t(x + 100)));
+    W16(frame + kRect, uint16_t(int16_t(x - kNameHalfWidth)));
+    W16(frame + kRect + kRectRight, uint16_t(int16_t(x + kNameHalfWidth)));
     W16(frame + kRect + kRectTop, uint16_t(int16_t(y)));
     W16(frame + kRect + kRectBottom, uint16_t(int16_t(y + size)));
     // the icon's own colour: the duel dims the buttons not to press

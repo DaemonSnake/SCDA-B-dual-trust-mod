@@ -39,6 +39,7 @@ constexpr float kSlack = 2.0f;
 constexpr float kMinWidth = 8.0f;
 // the canvas is drawn 1.1 wide about its centre (10:11 pixels): this share of a page is off each screen side
 constexpr float kOff = 1.0f / 22;
+constexpr float kPageWidth = 1.1f;  // pages are drawn this wide about the screen's centre
 constexpr uint32_t kPicture = 256;  // a material this big both ways is a picture, smaller ones are fills
 // material vtable: +0x68 width, +0x6C height
 constexpr uint32_t kMaterialWidth = 0x68;
@@ -107,40 +108,42 @@ bool Place(float* c, Mode mode, float w) {
     return pulled;
 }
 
+struct Size {
+    uint32_t width;
+    uint32_t height;
+};
+
 // the quad's material (sixth argument), sizes from its vtable +0x68 / +0x6C; 0 x 0 for none
-void MaterialSize(X86Context& ctx, uint32_t& width, uint32_t& height) {
-    uint32_t material = R32(ctx.esp + 0x18);
+Size MaterialSize(X86Context& ctx) {
+    constexpr uint32_t kMaterialArg = 0x18;
+    uint32_t material = R32(ctx.esp + kMaterialArg);
     uint32_t ecx = ctx.ecx;
-    width = height = 0;
-    if (!material) return;
+    if (!material) return {0, 0};
+    Size size;
     ctx.ecx = material;
-    width = CallGuest(ctx, R32(R32(material) + kMaterialWidth), {});
+    size.width = CallGuest(ctx, R32(R32(material) + kMaterialWidth), {});
     ctx.ecx = material;
-    height = CallGuest(ctx, R32(R32(material) + kMaterialHeight), {});
+    size.height = CallGuest(ctx, R32(R32(material) + kMaterialHeight), {});
     ctx.ecx = ecx;
+    return size;
 }
 
 bool Picture(X86Context& ctx) {
-    uint32_t width;
-    uint32_t height;
-    MaterialSize(ctx, width, height);
-    return width >= kPicture && height >= kPicture;
+    Size size = MaterialSize(ctx);
+    return size.width >= kPicture && size.height >= kPicture;
 }
 
 // A menu background: a picture, or a tile of one (Fond's are 512 and 128 wide, both 512 tall), from the canvas top to
 // its bottom. Zoomed about the screen centre until the page's full width (the canvas is 1.1 wide) is the screen's,
 // both ways by the same share of its 4:3 place: no stretch, the top and bottom cropped.
-bool Background(X86Context& ctx, float* c, float w, float h) {
+bool ZoomBackground(X86Context& ctx, float* c, float w, float h) {
     float top = std::min({c[1], c[4], c[7], c[10]});
     float bottom = std::max({c[1], c[4], c[7], c[10]});
     if (h <= 0.0f || top > kSlack || bottom < h - kSlack) return false;
-    uint32_t width;
-    uint32_t height;
-    MaterialSize(ctx, width, height);
-    if (height < kPicture) return false;
-    float zoom = 1.0f / (1.1f * app::Narrow());
+    if (MaterialSize(ctx).height < kPicture) return false;
+    float zoom = 1.0f / (kPageWidth * app::Narrow());
     for (int i = 0; i < 12; i += 3) {
-        c[i] = w / 2 + (c[i] - w / 2) / 1.1f;
+        c[i] = w / 2 + (c[i] - w / 2) / kPageWidth;
         c[i + 1] = h / 2 + (c[i + 1] - h / 2) * zoom;
     }
     return true;
@@ -162,10 +165,18 @@ Mode SideOf(float lo, float hi, float w) {
 X86_EXTERN_FUNC(__imp__sub_0011B720);
 X86_FUNC(sub_0011B720) {
     constexpr float kDefaultHalf = 75.0f * 3.14159265f / 360.0f;
-    float& x = G<float>(ctx.esp + 0xC);
-    if (std::fabs(G<float>(ctx.esp + 0x10) - 4.0f / 3.0f) < 0.01f) x *= app::Narrow();
-    if (float s = app::FovScale(); s != 1.0f && std::fabs(G<float>(ctx.esp + 4) - kDefaultHalf) < 0.001f)
-        for (uint32_t arg : {4u, 8u}) G<float>(ctx.esp + arg) = std::atan(std::tan(G<float>(ctx.esp + arg)) * s);
+    // the arguments' stack offsets
+    constexpr uint32_t kFovXArg = 0x04;
+    constexpr uint32_t kFovYArg = 0x08;
+    constexpr uint32_t kXScaleArg = 0x0C;
+    constexpr uint32_t kYScaleArg = 0x10;
+    float& x = G<float>(ctx.esp + kXScaleArg);
+    if (std::fabs(G<float>(ctx.esp + kYScaleArg) - 4.0f / 3.0f) < 0.01f) x *= app::Narrow();
+    float s = app::FovScale();
+    if (s != 1.0f && std::fabs(G<float>(ctx.esp + kFovXArg) - kDefaultHalf) < 0.001f) {
+        for (uint32_t arg : {kFovXArg, kFovYArg})
+            G<float>(ctx.esp + arg) = std::atan(std::tan(G<float>(ctx.esp + arg)) * s);
+    }
     __imp__sub_0011B720(ctx, base);
 }
 
@@ -176,7 +187,8 @@ X86_FUNC(sub_0025A3F0) {
     bool saved = g_hud;
     g_hud = std::find(std::begin(kHudPages), std::end(kHudPages), id) != std::end(kHudPages);
     static std::vector<uint32_t> seen;
-    if (std::find(seen.begin(), seen.end(), id) == seen.end() && seen.size() < 64) {
+    constexpr size_t kMaxLogged = 64;
+    if (std::find(seen.begin(), seen.end(), id) == seen.end() && seen.size() < kMaxLogged) {
         seen.push_back(id);
         LOGI("versus widescreen: page %08X %s", id, g_hud ? "hud" : "menu");
     }
@@ -271,11 +283,16 @@ X86_FUNC(sub_001231E0) {
     }
     float placed[12];
     std::memcpy(placed, c, sizeof c);
-    // a picture keeps its shape, only fills reach the screen sides; Background moves the corners only when it is one
-    if ((g_replay || !Background(ctx, placed, w, Height())) && Place(placed, g_replay ? g_mode : Mode::Fill, w) &&
-        !g_replay && Picture(ctx)) {
-        std::memcpy(placed, c, sizeof c);
-        Place(placed, Mode::Centre, w);
+    // a picture keeps its shape, only fills reach the screen sides;
+    // ZoomBackground moves the corners only when it is one
+    bool zoomed = false;
+    if (!g_replay) zoomed = ZoomBackground(ctx, placed, w, Height());
+    if (!zoomed) {
+        bool pulled = Place(placed, g_replay ? g_mode : Mode::Fill, w);
+        if (pulled && !g_replay && Picture(ctx)) {
+            std::memcpy(placed, c, sizeof c);
+            Place(placed, Mode::Centre, w);
+        }
     }
     std::memcpy(&G<float>(corners), placed, sizeof placed);
     __imp__sub_001231E0(ctx, base);

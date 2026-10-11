@@ -33,7 +33,8 @@ namespace input {
 
 namespace {
 
-std::atomic<bool> g_blocked{false}, g_menu{false};
+std::atomic<bool> g_blocked{false};
+std::atomic<bool> g_menu{false};
 // the cursor points at something in play (a keypad): free and counting clicks as in a menu, nothing else of one
 std::atomic<bool> g_pointer{false};
 bool Pointing() { return g_menu || g_pointer; }
@@ -43,15 +44,18 @@ std::atomic<bool> g_settle{false};
 // through the change, so a held button that opens a menu (quick inventory) keeps it open
 std::atomic<bool> g_settle_mouse{false};
 HWND g_hwnd = nullptr;
-std::atomic<int> g_dx{0}, g_dy{0};
+std::atomic<int> g_dx{0};
+std::atomic<int> g_dy{0};
 std::atomic<uint32_t> g_clicks{0};
 // a press made while the input was not taken (a key capture binding the left button) is no click on its release
 std::atomic<bool> g_press_counts{false};
 
 // While the keyboard or mouse was used after the pad's last new press, the pad sharing the keyboard's port does not
 // rumble. Only new pad presses count, so a drifting stick never takes over from the keyboard.
-std::atomic<uint64_t> g_keyboard_ms{0}, g_pad_ms{0};
-std::atomic<uint32_t> g_keys_held{0}, g_pad_held{0};
+std::atomic<uint64_t> g_keyboard_ms{0};
+std::atomic<uint64_t> g_pad_ms{0};
+std::atomic<uint32_t> g_keys_held{0};
+std::atomic<uint32_t> g_pad_held{0};
 std::atomic<bool> g_rumbling{false};  // the keyboard port's motors were last set running
 std::atomic<uint64_t> g_movie_ms{0};  // the last movie frame
 constexpr uint64_t kMovieMs = 250;
@@ -90,23 +94,36 @@ std::chrono::steady_clock::time_point g_zoom_time;
 // cameras. Fire and alt fire are moved onto gas and noise, pause onto leave, and strafing switches cameras; the
 // interact and scope keys press nothing there, so gas and noise have one key each.
 struct Remap {
-    int from, to;  // to -1: no button
+    int from;
+    int to;  // to -1: no button
 };
+// Target::button: 0-7 analog, 8-15 the buttons bits, 16-19 the move keys
+constexpr int kAnalogA = 0;
+constexpr int kAnalogB = 1;
+constexpr int kBlack = 4;  // Pad::analog
+constexpr int kButtonTarget = 8;
+constexpr int kPauseTarget = kButtonTarget + 4;  // Start
+constexpr int kMoveTarget = 16;
 // Interaction is the pad's A and Scope its X.
-constexpr Remap kCameraRemap[] = {{7, 0}, {6, 2}, {8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}, {0, -1}, {2, -1}};
+constexpr Remap kCameraRemap[] = {
+    {7, 0}, {6, 2}, {kPauseTarget, 1}, {kMoveTarget + 2, 6}, {kMoveTarget + 3, 7}, {0, -1}, {2, -1}};
 // the target each held action went down as plus one (-1 for none), 0 while up, so a key cannot stick when the camera
 // opens or closes under it
 std::array<std::atomic<int>, 32> g_down_as{};
 
 // In a menu pause (Escape) backs out as B, except in the pause menu, which only Start closes.
-constexpr Remap kMenuRemap[] = {{8 + 4, 1}};
+constexpr Remap kMenuRemap[] = {{kPauseTarget, 1}};
 // In the OPSAT pause (Escape) backs out as B, on its pages that are no menu too; so on a computer's file list, the
 // hacking device, the optic cable and keypads, which B leaves, as Escape does on SCCT PC.
-constexpr Remap kOpsatRemap[] = {{8 + 4, 1}};
+constexpr Remap kOpsatRemap[] = {{kPauseTarget, 1}};
 // The OPSAT map steps zones with the triggers, which the mouse buttons cannot press there: strafing does, as on the
 // sticky camera. Forward and back zoom as the stick.
-constexpr Remap kMapRemap[] = {{8 + 4, 1}, {16 + 2, 6}, {16 + 3, 7}};
-std::atomic<bool> g_title{false}, g_pause_menu{false}, g_opsat{false}, g_quick{false}, g_text{false};
+constexpr Remap kMapRemap[] = {{kPauseTarget, 1}, {kMoveTarget + 2, 6}, {kMoveTarget + 3, 7}};
+std::atomic<bool> g_title{false};
+std::atomic<bool> g_pause_menu{false};
+std::atomic<bool> g_opsat{false};
+std::atomic<bool> g_quick{false};
+std::atomic<bool> g_text{false};
 std::atomic<bool> g_map{false};  // SetMap
 std::mutex g_chars_lock;
 std::u16string g_chars;  // typed, not yet taken
@@ -115,8 +132,9 @@ constexpr uint16_t kStart = 1 << 4;  // Pad::buttons
 
 template <size_t N>
 int Remapped(const Remap (&table)[N], int b) {
-    for (const Remap& r : table)
+    for (const Remap& r : table) {
         if (r.from == b) return r.to;
+    }
     return b;
 }
 
@@ -141,7 +159,10 @@ constexpr float kDeadZone = 0.3f;
 // Versus walks or runs, as SCCT PC versus's bFastSpeed (the wheel). Once a pad has been plugged in its UpdateInput
 // zeroes each stick axis within 18000 of the centre, and its bindings take a 0.2 dead zone after that: the slowest it
 // moves is axis 0.437 (168 a second of 385). Walking at 0.44 is PC's walk, 0.4 of its 423.5.
-constexpr float kVersusWalk = 0.552f, kVersusDeadZone = 0.2f, kVersusFloor = 18001.0f / 32767.0f;
+constexpr float kStickMax = 32767.0f;
+constexpr float kVersusWalk = 0.552f;
+constexpr float kVersusDeadZone = 0.2f;
+constexpr float kVersusFloor = 18001.0f / kStickMax;
 std::atomic<int> g_speed{4};
 std::atomic<bool> g_targeting{false};
 
@@ -149,7 +170,6 @@ std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet ta
 
 std::atomic<bool> g_net{false};
 std::atomic<bool> g_interact_reloads{false};
-constexpr int kBlack = 4;  // Pad::analog
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -221,8 +241,9 @@ constexpr std::span<const Target> kActions =
     kVersus ? std::span<const Target>(kVersusActions) : std::span<const Target>(kStoryActions);
 constexpr size_t kCount = kActions.size();
 static_assert(kCount <= 32 && [] {
-    for (size_t i = 27; i < kCount; i++)
+    for (size_t i = 27; i < kCount; i++) {
         if (kActions[i].button != kHostKey) return false;
+    }
     return true;
 }(), "the keyboard activity mask holds the pad actions in bits 0-26");
 // The controller's buttons rebound: each pad action is one of the console pad's controls (button as in Target, also
@@ -279,7 +300,8 @@ constexpr std::span<const PadAction> kPadActions =
 constexpr size_t kPadCount = kPadActions.size();
 constexpr int kPadControls = 16;
 // a PlayStation controller's touchpad click on its left or right half, in the two wButtons bits XInput leaves unused
-constexpr WORD kTouchpadLeft = 0x0400, kTouchpadRight = 0x0800;
+constexpr WORD kTouchpadLeft = 0x0400;
+constexpr WORD kTouchpadRight = 0x0800;
 // the physical buttons: the console pad's controls in Pad order (0-7 analog, 8-15 the buttons bits), then the
 // touchpad's halves, which press nothing until bound
 constexpr int kPadButtons = kPadControls + 2;
@@ -307,8 +329,9 @@ std::array<std::atomic<uint32_t>, 4> g_pad_events_held{};
 std::array<std::atomic<bool>, 4> g_pad_settle{};
 
 constexpr size_t kConsoleAction = [] {
-    for (size_t i = 0; i < kCount; i++)
+    for (size_t i = 0; i < kCount; i++) {
         if (kActions[i].button == kHostKey && kActions[i].event == KeyEvent::None) return i;
+    }
     return kCount;
 }();
 
@@ -346,14 +369,16 @@ std::mutex g_bind_lock;
 std::array<std::vector<int>, kCount> g_binds;
 
 int Vk(const std::string& name) {
-    for (const Name& n : kNames)
+    for (const Name& n : kNames) {
         if (_stricmp(n.name, name.c_str()) == 0) return n.vk;
+    }
     return 0;
 }
 
 const char* NameOf(int vk) {
-    for (const Name& n : kNames)
+    for (const Name& n : kNames) {
         if (n.vk == vk) return n.name;
+    }
     return nullptr;
 }
 
@@ -384,16 +409,18 @@ bool HeldKeys(KeyEvent event) {
     std::vector<int> keys;
     {
         std::lock_guard lock(g_bind_lock);
-        for (size_t i = 0; i < kCount; i++)
+        for (size_t i = 0; i < kCount; i++) {
             if (kActions[i].event == event) keys = g_binds[i];
+        }
     }
     return std::any_of(keys.begin(), keys.end(), Down);
 }
 bool Bound(KeyEvent event, int vk) {
     std::lock_guard lock(g_bind_lock);
-    for (size_t i = 0; i < kCount; i++)
-        if (kActions[i].event == event && std::find(g_binds[i].begin(), g_binds[i].end(), vk) != g_binds[i].end())
-            return true;
+    for (size_t i = 0; i < kCount; i++) {
+        if (kActions[i].event != event) continue;
+        if (std::find(g_binds[i].begin(), g_binds[i].end(), vk) != g_binds[i].end()) return true;
+    }
     return false;
 }
 std::atomic<uint64_t> g_capture_ms{0};  // PressedKey
@@ -401,23 +428,25 @@ bool Mouse(int vk) {
     return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2;
 }
 
-bool KeysSettling(const std::array<std::vector<int>, kCount>& binds) {
-    for (auto& b : binds)
-        for (int vk : b)
+bool AnyKeyDown(const std::array<std::vector<int>, kCount>& binds) {
+    for (auto& b : binds) {
+        for (int vk : b) {
             if (Down(vk)) return true;
-    for (int vk : kArrows)
+        }
+    }
+    for (int vk : kArrows) {
         if (Down(vk)) return true;
+    }
     // Enter and Backspace act in menus bound or not: an Enter that just came off interact in a capture would
     // otherwise press A on the row and start another
-    if (Down(VK_BACK) || Down(VK_RETURN)) return true;
-    g_settle = false;
-    return false;
+    return Down(VK_BACK) || Down(VK_RETURN);
 }
 
 void SettleMouse() {
-    if (g_settle_mouse && !Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) &&
-        !Down(VK_XBUTTON2))
+    if (!g_settle_mouse) return;
+    if (!Down(VK_LBUTTON) && !Down(VK_RBUTTON) && !Down(VK_MBUTTON) && !Down(VK_XBUTTON1) && !Down(VK_XBUTTON2)) {
         g_settle_mouse = false;
+    }
 }
 
 bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu) {
@@ -426,22 +455,20 @@ bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu)
     for (int vk : vks) held |= Down(vk) && !(no_mouse && Mouse(vk));
     if (kActions[i].play_only && menu) held = false;
     // typing a name: only the pause key still presses
-    if (g_text && kActions[i].button != 8 + 4) held = false;
+    if (g_text && kActions[i].button != kPauseTarget) held = false;
     return held;
 }
 
-// false when action i is no event, so it presses a button
-bool PressEvent(size_t i, Pad& p) {
-    if (kActions[i].event == KeyEvent::None) return false;
+// action i's event, held: no pad button but the game side acts on it once per press
+void ApplyEventKey(size_t i, Pad& p) {
     if (g_net) {
         if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
-        if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[0] = 0xFF;
+        if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[kAnalogA] = 0xFF;
         g_down_as[i] = 1;
-        return true;
+        return;
     }
     if (!g_down_as[i]) g_events |= 1u << int(kActions[i].event);
     g_down_as[i] = 1;
-    return true;
 }
 
 int RemapTarget(int button, bool camera, bool back, bool menu) {
@@ -452,7 +479,8 @@ int RemapTarget(int button, bool camera, bool back, bool menu) {
     return button;
 }
 
-int HeldTarget(size_t i, bool camera, bool back, bool menu) {
+// the target action i presses, latched in g_down_as (and g_pick_last for a move key) until it is let go
+int LatchTarget(size_t i, bool camera, bool back, bool menu) {
     // latched for the press, so an interaction coming into reach does not start one under a held key
     if (!g_down_as[i] && kActions[i].button == 0 && g_interact_reloads && !menu) g_down_as[i] = -1;
     int b = g_down_as[i] - 1;  // -2: held as no button
@@ -460,31 +488,31 @@ int HeldTarget(size_t i, bool camera, bool back, bool menu) {
         int button = kActions[i].button;
         b = RemapTarget(button, camera, back, menu);
         g_down_as[i] = b < 0 ? -1 : b + 1;
-        if (b >= 16) g_pick_last = b - 16;
+        if (b >= kMoveTarget) g_pick_last = b - kMoveTarget;
     }
     return b;
 }
 
 void PressTarget(int b, Pad& p, int (&move)[4]) {
     if (b < 0) return;
-    if (b >= 16) move[b - 16] = 1;
-    else if (b < 8) p.analog[b] = 0xFF;
-    else p.buttons |= uint16_t(1u << (b - 8));
-    if (b == 0 && g_title) p.buttons |= kStart;
+    if (b >= kMoveTarget) move[b - kMoveTarget] = 1;
+    else if (b < kButtonTarget) p.analog[b] = 0xFF;
+    else p.buttons |= uint16_t(1u << (b - kButtonTarget));
+    if (b == kAnalogA && g_title) p.buttons |= kStart;
 }
 
 void PressMenuKeys(Pad& p, bool menu, bool keypad) {
-    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON))) p.analog[1] = 0xFF;
+    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON))) p.analog[kAnalogB] = 0xFF;
     // a synced session has no menu cursor, so a click confirms as A does
-    if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[0] = 0xFF;
+    if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[kAnalogA] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
     if (menu && Down(VK_RETURN)) {
-        p.analog[0] = 0xFF;
+        p.analog[kAnalogA] = 0xFF;
         if (g_title) p.buttons |= kStart;
     }
     if (g_title && g_press_counts) p.buttons |= kStart;
-    if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs)
-        p.buttons |= kStart;
+    bool scripted = !menu && View(g_view.load()) == View::ScriptedEvent;
+    if (scripted && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs) p.buttons |= kStart;
 }
 
 void NoteKeysHeld(uint32_t keys) {
@@ -499,12 +527,10 @@ void NoteKeysHeld(uint32_t keys) {
 }
 
 float StickSpeed(bool full) {
-    float v;
-    if (full) v = 1.0f;
-    else if (g_speed == 0 && g_targeting) v = kSlowestTargeting;
-    else v = kSpeeds[g_speed];
-    if (kVersus && !full) v = g_speed ? 1.0f : kVersusWalk;
-    return v;
+    if (full) return 1.0f;
+    if (kVersus) return g_speed ? 1.0f : kVersusWalk;
+    if (g_speed == 0 && g_targeting) return kSlowestTargeting;
+    return kSpeeds[g_speed];
 }
 
 float NotchSeconds(bool camera) {
@@ -514,7 +540,7 @@ float NotchSeconds(bool camera) {
     return 0.0f;
 }
 
-// returns y, held by the wheel's notches still to zoom
+// returns y, or while the wheel's notches still have zoom to hold and no key moves y, the zoom's direction
 int WheelZoom(bool camera, int y) {
     auto now = std::chrono::steady_clock::now();
     float seconds = std::min(0.1f, std::chrono::duration<float>(now - g_zoom_time).count());
@@ -534,30 +560,57 @@ int WheelZoom(bool camera, int y) {
     return y;
 }
 
-void ArrowStick(int& x, int& y, float& v) {
-    int ax = Down(VK_RIGHT) - Down(VK_LEFT);
-    int ay = Down(VK_UP) - Down(VK_DOWN);
-    if (!ax && !ay) return;
-    x = ax;
-    y = ay;
-    v = 1.0f;
-}
+constexpr float kInvSqrt2 = 0.70710678f;
 
 float DiagonalSpeed(float v) {
     float zone = kVersus ? kVersusDeadZone : kDeadZone;
-    v = zone + (v - zone) * 0.70710678f;
+    // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
+    // as fast as one.
+    v = zone + (v - zone) * kInvSqrt2;
     if (kVersus) v = std::max(v, kVersusFloor);  // a walking diagonal cannot keep the straight speed there
     return v;
 }
 
 void PickStick(Pad& p, const int (&move)[4]) {
     bool held = g_pick_last >= 0 && move[g_pick_last];
-    for (int i = 0; i < 4 && !held; i++)
-        if (move[i]) g_pick_last = i, held = true;
+    for (int i = 0; i < 4 && !held; i++) {
+        if (move[i]) {
+            g_pick_last = i;
+            held = true;
+        }
+    }
     if (g_pick_last < 0) return;
     float length = held ? 1.0f : kPickRest;
-    p.ly = int16_t(kPickStick[g_pick_last][0] * length * 32767.0f);
-    p.lx = int16_t(kPickStick[g_pick_last][1] * length * 32767.0f);
+    p.ly = int16_t(kPickStick[g_pick_last][0] * length * kStickMax);
+    p.lx = int16_t(kPickStick[g_pick_last][1] * length * kStickMax);
+}
+
+// the move keys, the wheel's zoom and the arrows as the left stick, also kept in g_stick_keys and g_pick_last
+void UpdateStick(Pad& p, const int (&move)[4], bool camera, bool menu) {
+    int x = move[3] - move[2];
+    int y = move[0] - move[1];
+    // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
+    bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
+    float v = StickSpeed(full);
+    y = WheelZoom(camera, y);
+    // the arrows, read after the wheel's zoom, take the stick over at full tilt
+    int ax = Down(VK_RIGHT) - Down(VK_LEFT);
+    int ay = Down(VK_UP) - Down(VK_DOWN);
+    if (ax || ay) {
+        x = ax;
+        y = ay;
+        v = 1.0f;
+    }
+    // Not where the full stick is forced: a ledge climb wants aForward past 0.9.
+    if (x && y && !full) v = DiagonalSpeed(v);
+    if (x) p.lx = int16_t(float(x) * v * kStickMax);
+    if (y) p.ly = int16_t(float(y) * v * kStickMax);
+    if (View(g_view.load()) != View::Lockpick || menu) {
+        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
+        g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
+        return;
+    }
+    PickStick(p, move);
 }
 
 void Keyboard(Pad& p) {
@@ -567,7 +620,10 @@ void Keyboard(Pad& p) {
         binds = g_binds;
     }
     bool menu = g_menu;
-    if (g_settle && KeysSettling(binds)) return;
+    if (g_settle) {
+        if (AnyKeyDown(binds)) return;
+        g_settle = false;
+    }
     SettleMouse();
     bool no_mouse = menu || g_pointer || g_settle_mouse;
     bool camera = View(g_view.load()) == View::StickyCamera && !menu;
@@ -583,29 +639,15 @@ void Keyboard(Pad& p) {
             continue;
         }
         keys |= 1u << i;
-        if (PressEvent(i, p)) continue;
-        PressTarget(HeldTarget(i, camera, back, menu), p, move);
+        if (kActions[i].event != KeyEvent::None) {
+            ApplyEventKey(i, p);
+            continue;
+        }
+        PressTarget(LatchTarget(i, camera, back, menu), p, move);
     }
     PressMenuKeys(p, menu, keypad);
     NoteKeysHeld(keys);
-    int x = move[3] - move[2];
-    int y = move[0] - move[1];
-    // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
-    bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
-    float v = StickSpeed(full);
-    y = WheelZoom(camera, y);
-    ArrowStick(x, y, v);
-    // The dead zone is per axis, so a diagonal puts each axis at 1/sqrt(2) of the speed past it and two keys move
-    // as fast as one. Not where the full stick is forced: a ledge climb wants aForward past 0.9.
-    if (x && y && !full) v = DiagonalSpeed(v);
-    if (x) p.lx = int16_t(float(x) * v * 32767.0f);
-    if (y) p.ly = int16_t(float(y) * v * 32767.0f);
-    if (View(g_view.load()) != View::Lockpick || menu) {
-        if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
-        g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
-        return;
-    }
-    PickStick(p, move);
+    UpdateStick(p, move, camera, menu);
 }
 
 // the cursor stays where the drag started, so it hovers nothing on the way
@@ -617,7 +659,8 @@ void Pin() {
 }
 
 void Clip() {
-    RECT r, cur;
+    RECT r;
+    RECT cur;
     GetClientRect(g_hwnd, &r);
     MapWindowPoints(g_hwnd, nullptr, reinterpret_cast<POINT*>(&r), 2);
     if (!GetClipCursor(&cur) || !EqualRect(&r, &cur)) ClipCursor(&r);
@@ -630,8 +673,9 @@ bool g_sdl = false;
 SDL_Gamepad* g_pads[4] = {};
 
 void AddPad(SDL_JoystickID id) {
-    for (SDL_Gamepad* pad : g_pads)
+    for (SDL_Gamepad* pad : g_pads) {
         if (pad && SDL_GetGamepadID(pad) == id) return;
+    }
     SDL_Gamepad** slot = std::find(std::begin(g_pads), std::end(g_pads), nullptr);
     if (slot == std::end(g_pads)) return;
     *slot = SDL_OpenGamepad(id);
@@ -711,8 +755,9 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
         {SDL_GAMEPAD_BUTTON_NORTH, XINPUT_GAMEPAD_Y},
     };
     g = {};
-    for (auto [button, mask] : kButtons)
+    for (auto [button, mask] : kButtons) {
         if (SDL_GetGamepadButton(pad, button)) g.wButtons |= mask;
+    }
     // The touchpad clicks as one button; the half is where the finger was when it went down, kept until let go.
     // No finger reported counts as the left half.
     static WORD touch_half[4] = {};
@@ -722,7 +767,8 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
         touch_half[slot] = kTouchpadLeft;
         for (int f = 0; f < SDL_GetNumGamepadTouchpadFingers(pad, 0); f++) {
             bool down = false;
-            float x = 0.0f, y = 0.0f;
+            float x = 0.0f;
+            float y = 0.0f;
             if (SDL_GetGamepadTouchpadFinger(pad, 0, f, &down, &x, &y, nullptr) && down) {
                 touch_half[slot] = x >= 0.5f ? kTouchpadRight : kTouchpadLeft;
                 break;
@@ -747,17 +793,27 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
 uint32_t PadHeld(const XINPUT_GAMEPAD& g) {
     uint32_t held = uint32_t(g.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) << 6 |
                     uint32_t(g.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) << 7;
-    for (int b = 0; b < kPadButtons; b++)
+    for (int b = 0; b < kPadButtons; b++) {
         if (kPadMasks[b] && (g.wButtons & kPadMasks[b])) held |= 1u << b;
+    }
     return held;
 }
 
 // The pad binds, in play: menus and the title screen keep the stock buttons. A button presses what it went down as
 // until it comes up, so one held while a menu opens or closes (the black button's picker) keeps its control.
+// what physical button b presses now: the control, -1 nothing
+int PadTarget(int b, bool play) {
+    int mapped = g_pad_map[size_t(b)];
+    int own = b < kPadControls ? b : -1;
+    if (!play || !mapped) return own;
+    if (mapped < 0) return -1;
+    return mapped - 1;
+}
+
 void Rebind(Pad& p, int port, int slot, WORD buttons) {
     uint8_t raw[kPadButtons];
-    for (int b = 0; b < 8; b++) raw[b] = p.analog[b];
-    for (int b = 8; b < kPadControls; b++) raw[b] = (p.buttons >> (b - 8) & 1) ? 0xFF : 0;
+    for (int b = 0; b < kButtonTarget; b++) raw[b] = p.analog[b];
+    for (int b = kButtonTarget; b < kPadControls; b++) raw[b] = (p.buttons >> (b - kButtonTarget) & 1) ? 0xFF : 0;
     for (int b = kPadControls; b < kPadButtons; b++) raw[b] = (buttons & kPadMasks[b]) ? 0xFF : 0;
     p.buttons = 0;
     std::fill(std::begin(p.analog), std::end(p.analog), uint8_t(0));
@@ -769,8 +825,7 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
     auto& down_as = g_pad_down_as[size_t(port)];
     for (int b = 0; b < kPadButtons; b++) {
         bool down = raw[b] > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-        int mapped = g_pad_map[size_t(b)], own = b < kPadControls ? b : -1;
-        int now = !play || !mapped ? own : mapped < 0 ? -1 : mapped - 1;
+        int now = PadTarget(b, play);
         bool fresh = down && !down_as[size_t(b)];
         if (!down) down_as[size_t(b)] = 0;
         else if (fresh) down_as[size_t(b)] = now + 2;
@@ -783,26 +838,28 @@ void Rebind(Pad& p, int port, int slot, WORD buttons) {
             else if (fresh && !g_net && event != KeyEvent::PushToTalk) g_events |= 1u << int(event);
             continue;
         }
-        if (c < 8) p.analog[c] = std::max(p.analog[c], raw[b]);
-        else if (down) p.buttons |= uint16_t(1u << (c - 8));
+        if (c < kButtonTarget) p.analog[c] = std::max(p.analog[c], raw[b]);
+        else if (down) p.buttons |= uint16_t(1u << (c - kButtonTarget));
     }
 }
 
 void ApplyPadBinds() {
-    for (int b = 0; b < kPadButtons; b++)
-        g_pad_map[size_t(b)] =
-            std::ranges::any_of(kPadActions, [b](const PadAction& a) { return a.button == b; }) ? -1 : 0;
+    for (int b = 0; b < kPadButtons; b++) {
+        bool stock = std::ranges::any_of(kPadActions, [b](const PadAction& a) { return a.button == b; });
+        g_pad_map[size_t(b)] = stock ? -1 : 0;
+    }
     for (size_t i = 0; i < kPadCount; i++) {
         const PadAction& a = kPadActions[i];
-        if (g_pad_binds[i] >= 0)
-            g_pad_map[size_t(g_pad_binds[i])] =
-                (a.event != KeyEvent::None ? kEventTarget + int(a.event) : a.button) + 1;
+        if (g_pad_binds[i] < 0) continue;
+        int target = a.event != KeyEvent::None ? kEventTarget + int(a.event) : a.button;
+        g_pad_map[size_t(g_pad_binds[i])] = target + 1;
     }
 }
 
 int PadButton(const std::string& name) {
-    for (int b = 0; b < kPadButtons; b++)
+    for (int b = 0; b < kPadButtons; b++) {
         if (_stricmp(kPadNames[b], name.c_str()) == 0) return b;
+    }
     // before the halves the whole touchpad was one button
     return _stricmp(name.c_str(), "TOUCHPAD") == 0 ? kPadControls : -1;
 }
@@ -819,8 +876,9 @@ bool MapDrag() { return g_map && Active() && Down(VK_RBUTTON); }
 
 void SetBlocked(bool b) {
     // a controller button that answered a capture or closed the panel reaches the game only once let go
-    if (g_blocked.exchange(b) && !b)
+    if (g_blocked.exchange(b) && !b) {
         for (auto& settle : g_pad_settle) settle = true;
+    }
     if (b) ReleaseCursor();
 }
 
@@ -834,9 +892,8 @@ void Init(void* hwnd) {
 void OnRawInput(void* handle) {
     RAWINPUT ri;
     UINT size = sizeof(ri);
-    if (GetRawInputData(static_cast<HRAWINPUT>(handle), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) == UINT(-1) ||
-        ri.header.dwType != RIM_TYPEMOUSE || !Active())
-        return;
+    UINT read = GetRawInputData(static_cast<HRAWINPUT>(handle), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER));
+    if (read == UINT(-1) || ri.header.dwType != RIM_TYPEMOUSE || !Active()) return;
     // only the clip: settling would drop a held key that keeps a menu open (quick inventory)
     if (MapDrag()) Pin();
     else if (Pointing()) ClipCursor(nullptr);
@@ -852,7 +909,8 @@ void OnRawInput(void* handle) {
     if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu && !g_list) {
         int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
         int s = g_speed + notch;
-        if (View view = View(g_view.load()); view == View::Eev || view == View::StickyCamera) g_wheel += notch;
+        View view = View(g_view.load());
+        if (view == View::Eev || view == View::StickyCamera) g_wheel += notch;
         else if (kVersus) g_speed = notch > 0 ? int(std::size(kSpeeds)) - 1 : 0;
         else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
     }
@@ -872,7 +930,8 @@ void ReleaseCursor() {
 }
 
 bool TakeMouse(float& dx, float& dy) {
-    int x = g_dx.exchange(0), y = g_dy.exchange(0);
+    int x = g_dx.exchange(0);
+    int y = g_dy.exchange(0);
     if ((!x && !y) || !Active() || (Pointing() && !MapDrag())) return false;
     const app::Settings& s = app::Get();
     dx = float(x) * s.mouse_sensitivity;
@@ -931,8 +990,9 @@ bool Pointer() { return g_pointer; }
 
 void MovieFrame() {
     uint64_t now = NowMs();
-    if (now - g_movie_ms.exchange(now) > kMovieMs)
+    if (now - g_movie_ms.exchange(now) > kMovieMs) {
         PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+    }
 }
 
 bool Movie() { return NowMs() - g_movie_ms < kMovieMs; }
@@ -960,8 +1020,9 @@ int TakeKeypadButton() {
     };
     static uint32_t held = 0;
     uint32_t now = 0;
-    for (size_t i = 0; i < std::size(kKeys); i++)
+    for (size_t i = 0; i < std::size(kKeys); i++) {
         now |= uint32_t(Active() && Down(kKeys[i].first)) << i;
+    }
     uint32_t fresh = now & ~std::exchange(held, now);
     return fresh ? kKeys[std::countr_zero(fresh)].second : -1;
 }
@@ -976,8 +1037,9 @@ uint32_t StickKeys() { return g_stick_keys; }
 
 int KeyboardPort() {
     const app::Settings& s = app::Get();
-    for (int port = 0; port < 2; port++)
+    for (int port = 0; port < 2; port++) {
         if (s.players[port].keyboard) return port;
+    }
     return -1;
 }
 
@@ -1029,7 +1091,9 @@ uint64_t Pads() {
         XINPUT_GAMEPAD g;
         if (!ReadPad(port, g)) continue;
         // the triggers take the two bits XInput leaves unused
-        uint32_t bits = g.wButtons | uint32_t(g.bLeftTrigger > 30) << 10 | uint32_t(g.bRightTrigger > 30) << 11;
+        uint32_t left = uint32_t(g.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
+        uint32_t right = uint32_t(g.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
+        uint32_t bits = g.wButtons | left << 10 | right << 11;
         down |= uint64_t(bits) << (port * 16);
     }
     return down;
@@ -1046,10 +1110,10 @@ bool AnswerKey(int vk) {
         case 0x07: case 0x0A: case 0x0B: case 0x0E: case 0x0F: case 0x5E: case 0xE0: case 0xE8: case 0xFF:
             return false;
     }
-    if ((vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) || (vk >= 0x88 && vk <= 0x9F) ||
-        (vk >= 0xC1 && vk <= 0xDA) || ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) ||
-        Bound(KeyEvent::SettingsPanel, vk))
-        return false;
+    bool media_or_reserved = (vk >= VK_BROWSER_BACK && vk <= VK_LAUNCH_APP2) || (vk >= 0x3A && vk <= 0x40) ||
+                             (vk >= 0x88 && vk <= 0x9F) || (vk >= 0xC1 && vk <= 0xDA);
+    if (media_or_reserved) return false;
+    if (ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) || Bound(KeyEvent::SettingsPanel, vk)) return false;
     return Down(vk);
 }
 
@@ -1059,7 +1123,8 @@ bool AnswerKey(int vk) {
 int NewPress(PressWatch& w) {
     bool live = w.started && Active();
     int pressed = 0;
-    uint64_t pad = Pads(), fresh = pad & ~w.pad_held;
+    uint64_t pad = Pads();
+    uint64_t fresh = pad & ~w.pad_held;
     if (live && fresh) pressed = 0x100 + std::countr_zero(fresh);
     w.pad_held = pad;
     for (int vk = 1; vk < 256; vk++) {
@@ -1099,10 +1164,15 @@ bool PressReleased() {
 bool SkipKeyReleased() {
     constexpr int kKeys[] = {VK_SHIFT, VK_RETURN, VK_SPACE, VK_ESCAPE};
     constexpr uint64_t kGapMs = 500;  // polls further apart than this are another movie
-    static uint32_t up = 0, down = 0;  // seen up since the watch started, then down
+    // seen up since the watch started, then down
+    static uint32_t up = 0;
+    static uint32_t down = 0;
     static uint64_t last = 0;
     uint64_t now = NowMs();
-    if (now - last > kGapMs || !Active()) up = down = 0;
+    if (now - last > kGapMs || !Active()) {
+        up = 0;
+        down = 0;
+    }
     last = now;
     if (!Active()) return false;
     bool released = false;
@@ -1159,8 +1229,9 @@ void Bind(size_t action, int vk, int slot) {
         if (vk && slots[1 - slot] == vk) slots[1 - slot] = 0;
         slots[slot] = vk;
         keys.clear();
-        for (int k : slots)
+        for (int k : slots) {
             if (k) keys.push_back(k);
+        }
         app::Get().keys[kActions[action].action.id] = Join(keys);
     }
     app::Save();
@@ -1179,12 +1250,20 @@ bool HostKey(KeyEvent event, int vk) { return NowMs() - g_capture_ms > 250 && Bo
 bool ConsoleChar(unsigned c) {
     std::lock_guard lock(g_bind_lock);
     if (kConsoleAction >= kCount) return false;
-    for (int vk : g_binds[kConsoleAction])
+    for (int vk : g_binds[kConsoleAction]) {
         // MapVirtualKey's top bit flags a dead key
-        if (unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF;
-            k && towupper(wint_t(c)) == towupper(wint_t(k)))
-            return true;
+        unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF;
+        if (k && towupper(wint_t(c)) == towupper(wint_t(k))) return true;
+    }
     return false;
+}
+
+// pad action i's button as saved, the stock one when none is
+static int SavedPadButton(const std::map<std::string, std::string>& pads, size_t i) {
+    auto it = pads.find(kPadActions[i].id);
+    if (it == pads.end()) return kPadActions[i].button;
+    if (it->second.empty()) return -1;
+    return PadButton(it->second);
 }
 
 void ResetBindings() {
@@ -1206,8 +1285,7 @@ void LoadBindings() {
     std::array<bool, kPadButtons> taken{};
     std::vector<size_t> later;
     for (size_t i = 0; i < kPadCount; i++) {
-        auto it = pads.find(kPadActions[i].id);
-        int b = it == pads.end() ? kPadActions[i].button : it->second.empty() ? -1 : PadButton(it->second);
+        int b = SavedPadButton(pads, i);
         if (b >= 0 && taken[size_t(b)]) {
             later.push_back(i);
             continue;
@@ -1249,8 +1327,9 @@ void BindPad(size_t action, int button) {
         // have none, comes off the button it has.
         int old = g_pad_binds[action];
         bool off = old == button && kPadActions[action].event != KeyEvent::None;
-        for (int& b : g_pad_binds)
+        for (int& b : g_pad_binds) {
             if (b == button) b = old;
+        }
         g_pad_binds[action] = off ? -1 : button;
         auto& saved = app::Get().pad_buttons;
         for (size_t i = 0; i < kPadCount; i++) {
@@ -1279,9 +1358,61 @@ int PressedPadButton() {
 
 int PressedKey() {
     g_capture_ms = NowMs();
-    for (const Name& n : kNames)
+    for (const Name& n : kNames) {
         if (Down(n.vk)) return n.vk;
+    }
     return 0;
+}
+
+// the events whose physical buttons are among down
+static uint32_t PadEventsHeld(uint32_t down) {
+    uint32_t events = 0;
+    for (int b = 0; b < kPadButtons; b++) {
+        int m = g_pad_map[size_t(b)];
+        if (down >> b & 1 && m > kEventTarget) events |= 1u << (m - 1 - kEventTarget);
+    }
+    return events;
+}
+
+// XInput's report into the pad
+static void FillFromXInput(const XINPUT_GAMEPAD& g, Pad& p) {
+    auto b = [&](WORD m) { return (g.wButtons & m) != 0; };
+    p.buttons = uint16_t((b(XINPUT_GAMEPAD_DPAD_UP) << 0) | (b(XINPUT_GAMEPAD_DPAD_DOWN) << 1) |
+                         (b(XINPUT_GAMEPAD_DPAD_LEFT) << 2) | (b(XINPUT_GAMEPAD_DPAD_RIGHT) << 3) |
+                         (b(XINPUT_GAMEPAD_START) << 4) | (b(XINPUT_GAMEPAD_BACK) << 5) |
+                         (b(XINPUT_GAMEPAD_LEFT_THUMB) << 6) | (b(XINPUT_GAMEPAD_RIGHT_THUMB) << 7));
+    auto a = [&](WORD m) { return uint8_t(b(m) ? 0xFF : 0); };
+    p.analog[0] = a(XINPUT_GAMEPAD_A);
+    p.analog[1] = a(XINPUT_GAMEPAD_B);
+    p.analog[2] = a(XINPUT_GAMEPAD_X);
+    p.analog[3] = a(XINPUT_GAMEPAD_Y);
+    p.analog[4] = a(XINPUT_GAMEPAD_RIGHT_SHOULDER);  // black
+    p.analog[5] = a(XINPUT_GAMEPAD_LEFT_SHOULDER);   // white
+    p.analog[6] = g.bLeftTrigger;
+    p.analog[7] = g.bRightTrigger;
+    p.lx = g.sThumbLX;
+    p.ly = g.sThumbLY;
+    p.rx = g.sThumbRX;
+    p.ry = g.sThumbRY;
+}
+
+constexpr int kStickActive = 8000;  // a stick this far off centre counts as held
+
+// the pad on the keyboard's port: a new press takes over from the keyboard
+static void NotePadHeld(const Pad& p) {
+    // the mask: buttons bits 0 to 7, analog 8 to 15, the stick axes 16 to 19
+    uint32_t held = p.buttons;
+    for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > XINPUT_GAMEPAD_TRIGGER_THRESHOLD) << (8 + i);
+    int bit = 16;
+    for (int16_t axis : {p.lx, p.ly, p.rx, p.ry}) held |= uint32_t(std::abs(int(axis)) > kStickActive) << bit++;
+    if (held & ~g_pad_held.exchange(held)) {
+        bool was_keyboard = KeyboardActive();
+        g_pad_ms = NowMs();
+        // the menu cursor goes now rather than at the next mouse move
+        if (was_keyboard) {
+            PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+        }
+    }
 }
 
 Pad Poll(int port) {
@@ -1290,45 +1421,15 @@ Pad Poll(int port) {
     bool keyboard = port == KeyboardPort();
     XINPUT_GAMEPAD g;
     bool pad = ReadPad(slot, g);
-    uint32_t down = pad ? PadHeld(g) : 0, events = 0;
-    for (int b = 0; b < kPadButtons; b++)
-        if (int m = g_pad_map[size_t(b)]; down >> b & 1 && m > kEventTarget) events |= 1u << (m - 1 - kEventTarget);
+    uint32_t down = pad ? PadHeld(g) : 0;
+    uint32_t events = PadEventsHeld(down);
     g_pad_events_held[size_t(port)] = g_blocked ? 0 : events;
     p.connected = pad || keyboard;
     if (!p.connected || g_blocked) return p;
     if (pad) {
-        auto b = [&](WORD m) { return (g.wButtons & m) != 0; };
-        p.buttons = uint16_t((b(XINPUT_GAMEPAD_DPAD_UP) << 0) | (b(XINPUT_GAMEPAD_DPAD_DOWN) << 1) |
-                             (b(XINPUT_GAMEPAD_DPAD_LEFT) << 2) | (b(XINPUT_GAMEPAD_DPAD_RIGHT) << 3) |
-                             (b(XINPUT_GAMEPAD_START) << 4) | (b(XINPUT_GAMEPAD_BACK) << 5) |
-                             (b(XINPUT_GAMEPAD_LEFT_THUMB) << 6) | (b(XINPUT_GAMEPAD_RIGHT_THUMB) << 7));
-        auto a = [&](WORD m) { return uint8_t(b(m) ? 0xFF : 0); };
-        p.analog[0] = a(XINPUT_GAMEPAD_A);
-        p.analog[1] = a(XINPUT_GAMEPAD_B);
-        p.analog[2] = a(XINPUT_GAMEPAD_X);
-        p.analog[3] = a(XINPUT_GAMEPAD_Y);
-        p.analog[4] = a(XINPUT_GAMEPAD_RIGHT_SHOULDER);  // black
-        p.analog[5] = a(XINPUT_GAMEPAD_LEFT_SHOULDER);   // white
-        p.analog[6] = g.bLeftTrigger;
-        p.analog[7] = g.bRightTrigger;
-        p.lx = g.sThumbLX;
-        p.ly = g.sThumbLY;
-        p.rx = g.sThumbRX;
-        p.ry = g.sThumbRY;
+        FillFromXInput(g, p);
         Rebind(p, port, slot, g.wButtons);
-        if (keyboard) {
-            uint32_t held = p.buttons;
-            for (int i = 0; i < 8; i++) held |= uint32_t(p.analog[i] > 30) << (8 + i);
-            int bit = 16;
-            for (int16_t axis : {p.lx, p.ly, p.rx, p.ry}) held |= uint32_t(std::abs(int(axis)) > 8000) << bit++;
-            if (held & ~g_pad_held.exchange(held)) {
-                bool was_keyboard = KeyboardActive();
-                g_pad_ms = NowMs();
-                // the menu cursor goes now rather than at the next mouse move
-                if (was_keyboard)
-                    PostMessageW(g_hwnd, WM_SETCURSOR, WPARAM(g_hwnd), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
-            }
-        }
+        if (keyboard) NotePadHeld(p);
     }
     // a motor the game left running when the keyboard took over, the game may not set it again
     if (keyboard && g_rumbling && KeyboardLast()) {
@@ -1345,7 +1446,10 @@ Pad Poll(int port) {
 void Rumble(int port, uint16_t left, uint16_t right) {
     int slot = port >= 0 && port < 2 ? app::Get().players[port].pad : -1;
     bool keyboard = port == KeyboardPort();
-    if (keyboard && KeyboardLast()) left = right = 0;
+    if (keyboard && KeyboardLast()) {
+        left = 0;
+        right = 0;
+    }
     if (keyboard) g_rumbling = left || right;
     SetMotors(slot, left, right);
 }

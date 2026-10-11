@@ -54,7 +54,9 @@ constexpr Port kPlayer2Choices[] = {{false, -1}, {true, 0},  {true, 1},  {true, 
                                     {true, -1},  {false, 0}, {false, 1}, {false, 2}, {false, 3}};
 
 // rows::Choices reads a row's values by picking each index in turn; -1 steps as usual
-int g_pick = -1, g_picks = 0, g_picked = 0;
+int g_pick = -1;
+int g_picks = 0;
+int g_picked = 0;
 
 int StepIndex(int index, int step, int count) {
     if (count <= 0) return 0;
@@ -97,9 +99,8 @@ std::vector<Mode> Modes() {
     for (DWORD i = 0; EnumDisplaySettingsW(nullptr, i, &dm); i++) {
         if (dm.dmBitsPerPel < 32 || dm.dmPelsWidth < 640) continue;
         Mode m{dm.dmPelsWidth, dm.dmPelsHeight};
-        if (std::none_of(modes.begin(), modes.end(),
-                         [&](const Mode& o) { return o.width == m.width && o.height == m.height; }))
-            modes.push_back(m);
+        auto same = [&](const Mode& o) { return o.width == m.width && o.height == m.height; };
+        if (std::none_of(modes.begin(), modes.end(), same)) modes.push_back(m);
     }
     std::sort(modes.begin(), modes.end(), [](const Mode& a, const Mode& b) {
         return a.width != b.width ? a.width > b.width : a.height > b.height;
@@ -140,59 +141,86 @@ void Section(const char* title) {
     ImGui::Dummy(ImVec2(0, em * 0.2f));
 }
 
+constexpr float kValueEms = 12.0f;  // the value column's width
+
+// a row's place and size: the label left, the value block (an arrow each side of the value) right
+struct RowBox {
+    float em;
+    float row_w;
+    float row_h;
+    float value_w;
+    float block_w;
+    float row_x;
+    float row_y;
+};
+
+RowBox MeasureRow() {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    RowBox box;
+    box.em = ImGui::GetFontSize();
+    box.row_w = ImGui::GetContentRegionAvail().x;
+    box.row_h = ImGui::GetFrameHeight();
+    box.value_w = box.em * kValueEms;
+    box.block_w = box.row_h * 2 + box.value_w + style.ItemSpacing.x * 2;
+    box.row_x = ImGui::GetCursorPosX();
+    box.row_y = ImGui::GetCursorPosY();
+    return box;
+}
+
+void RowLabel(const RowBox& box, const char* label) {
+    ImGui::SetCursorPos(ImVec2(box.row_x + ImGui::GetStyle().ItemInnerSpacing.x, box.row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(Ui(label).c_str());
+}
+
+// the cursor back to the row's start, then past the whole row
+void EndRow(const RowBox& box) {
+    ImGui::SetCursorPos(ImVec2(box.row_x, box.row_y));
+    ImGui::Dummy(ImVec2(box.row_w, box.row_h));
+}
+
 // label left, arrows and value right, the row is the only nav stop
 int OptionRow(const char* label, const char* value) {
     const ImGuiStyle& style = ImGui::GetStyle();
-    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
-    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
-    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    RowBox box = MeasureRow();
     ImGui::PushID(label);
     int step = 0;
-    ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(row_w, row_h));
+    ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(box.row_w, box.row_h));
     if (ImGui::IsItemFocused()) {
         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                                   ImGui::GetColorU32(ImGuiCol_Header));
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft)) step = -1;
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight)) step = 1;
     }
-    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(Ui(label).c_str());
+    RowLabel(box, label);
     ImGui::PushItemFlag(ImGuiItemFlags_NoNav | ImGuiItemFlags_ButtonRepeat, true);  // held arrows keep stepping
-    float block_x = row_x + row_w - block_w;
-    ImGui::SetCursorPos(ImVec2(block_x, row_y));
+    float block_x = box.row_x + box.row_w - box.block_w;
+    ImGui::SetCursorPos(ImVec2(block_x, box.row_y));
     if (ImGui::ArrowButton("##dec", ImGuiDir_Left)) step = -1;
-    float value_x = block_x + row_h + style.ItemSpacing.x;
-    float pad = (value_w - ImGui::CalcTextSize(value).x) * 0.5f;
-    ImGui::SetCursorPos(ImVec2(value_x + std::max(pad, 0.0f), row_y));
+    float value_x = block_x + box.row_h + style.ItemSpacing.x;
+    float pad = (box.value_w - ImGui::CalcTextSize(value).x) * 0.5f;
+    ImGui::SetCursorPos(ImVec2(value_x + std::max(pad, 0.0f), box.row_y));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(value);
-    ImGui::SetCursorPos(ImVec2(value_x + value_w + style.ItemSpacing.x, row_y));
+    ImGui::SetCursorPos(ImVec2(value_x + box.value_w + style.ItemSpacing.x, box.row_y));
     if (ImGui::ArrowButton("##inc", ImGuiDir_Right)) step = 1;
     ImGui::PopItemFlag();
     ImGui::PopID();
-    ImGui::SetCursorPos(ImVec2(row_x, row_y));
-    ImGui::Dummy(ImVec2(row_w, row_h));
+    EndRow(box);
     return step;
 }
 
 // label left, a text field where the value sits; true when an edit is done
 bool TextRow(const char* label, char* buf, size_t size) {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
-    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
-    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    RowBox box = MeasureRow();
     ImGui::PushID(label);
-    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(Ui(label).c_str());
-    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
-    ImGui::SetNextItemWidth(block_w);
+    RowLabel(box, label);
+    ImGui::SetCursorPos(ImVec2(box.row_x + box.row_w - box.block_w, box.row_y));
+    ImGui::SetNextItemWidth(box.block_w);
     ImGui::InputText("##text", buf, size);
     bool done = ImGui::IsItemDeactivatedAfterEdit();
     ImGui::PopID();
-    ImGui::SetCursorPos(ImVec2(row_x, row_y));
-    ImGui::Dummy(ImVec2(row_w, row_h));
+    EndRow(box);
     return done;
 }
 
@@ -238,11 +266,15 @@ std::span<const Port> PlayerChoices(int player) {
 
 void StepPlayer(Settings& s, int player, int step) {
     std::span<const Port> choices = PlayerChoices(player);
-    int count = int(choices.size()), i = 0;
-    for (int k = 0; k < count; k++)
+    int count = int(choices.size());
+    int i = 0;
+    for (int k = 0; k < count; k++) {
         if (SamePort(choices[k], s.players[player])) i = k;
-    for (int tries = 1; tries < count; tries++)
-        if (SetPlayer(s, player, choices[i = StepIndex(i, step, count)])) return;
+    }
+    for (int tries = 1; tries < count; tries++) {
+        i = StepIndex(i, step, count);
+        if (SetPlayer(s, player, choices[i])) return;
+    }
 }
 
 std::atomic<uint32_t> g_revision{0};
@@ -331,120 +363,133 @@ const std::vector<Row>& PadRows() {
     return list;
 }
 
-bool& ShaderModel3Flag(Settings& s, int id) {
-    if (id == kHdr) return s.hdr_rendering;
-    if (id == kToneMapping) return s.tone_mapping;
-    return s.hq_soft_shadows;
+// shader model 3.0 features
+bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping || id == kHqShadows; }
+
+// the setting an ON / OFF row flips, nullptr for any other row
+bool* ToggleFlag(Settings& s, int id) {
+    switch (id) {
+        case kVsync: return &s.vsync;
+        case kFpsCounter: return &s.fps_counter;
+        case kHdr: return &s.hdr_rendering;
+        case kToneMapping: return &s.tone_mapping;
+        case kHqShadows: return &s.hq_soft_shadows;
+        case kAmbientOcclusion: return &s.ambient_occlusion;
+        case kSmaa: return &s.smaa;
+        case kSkipIntros: return &s.skip_intros;
+        case kPushToTalk: return &s.push_to_talk;
+        case kInvertMouse: return &s.invert_mouse;
+        default: return nullptr;
+    }
 }
 
-// steps the value first when step is not zero; a copy of the settings only reads what a step gives
-std::string RowText(int id, int step, Settings& s = Get()) {
-    char text[64] = "";
-    bool display = false;
+bool DisplayRow(int id) { return id == kDisplayMode || id == kResolution; }
+
+// value clamped to lo to hi, stepped by inc through the values StepIndex wraps over
+int StepRange(int value, int lo, int hi, int inc, int step) {
+    int count = (hi - lo) / inc + 1;
+    return lo + inc * StepIndex((std::clamp(value, lo, hi) - lo) / inc, step, count);
+}
+
+// the mode shown, stepped first when step is not zero
+Mode StepResolution(Settings& s, int step) {
+    static const std::vector<Mode> modes = Modes();
+    Mode desktop = Desktop();
+    Mode m = s.width && s.height ? Mode{s.width, s.height} : desktop;
+    int i = 0;
+    for (size_t k = 0; k < modes.size(); k++) {
+        if (modes[k].width == m.width && modes[k].height == m.height) i = int(k);
+    }
+    if (step && !modes.empty()) {
+        m = modes[size_t(StepIndex(i, step, int(modes.size())))];
+        // the desktop's own mode is kept as 0, which follows the desktop
+        bool native = m.width == desktop.width && m.height == desktop.height;
+        s.width = native ? 0 : m.width;
+        s.height = native ? 0 : m.height;
+    }
+    return m;
+}
+
+// the display rows that are no ON / OFF, stepped first; false for another row
+bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
     switch (id) {
         case kDisplayMode: {
             static const char* const kModes[] = {"FULLSCREEN", "WINDOWED", "BORDERLESS"};
-            if (step) s.display_mode = DisplayMode(StepIndex(int(s.display_mode), step, 3));
-            display = true;
-            std::snprintf(text, sizeof(text), "%s", kModes[std::min(int(s.display_mode), 2)]);
-            break;
+            int count = int(std::size(kModes));
+            if (step) s.display_mode = DisplayMode(StepIndex(int(s.display_mode), step, count));
+            std::snprintf(text, sizeof(text), "%s", kModes[std::min(int(s.display_mode), count - 1)]);
+            return true;
         }
         case kResolution: {
-            static const std::vector<Mode> modes = Modes();
-            Mode desktop = Desktop();
-            Mode m = s.width && s.height ? Mode{s.width, s.height} : desktop;
-            int i = 0;
-            for (size_t k = 0; k < modes.size(); k++)
-                if (modes[k].width == m.width && modes[k].height == m.height) i = int(k);
-            if (step && !modes.empty()) {
-                m = modes[size_t(StepIndex(i, step, int(modes.size())))];
-                // the desktop's own mode is kept as 0, which follows the desktop
-                bool native = m.width == desktop.width && m.height == desktop.height;
-                s.width = native ? 0 : m.width;
-                s.height = native ? 0 : m.height;
-            }
-            display = true;
+            Mode m = StepResolution(s, step);
             std::snprintf(text, sizeof(text), "%ux%u", m.width, m.height);
-            break;
+            return true;
         }
         case kRenderResolution: {
             // 20% to 200% in steps of 5
-            if (step)
-                s.render_percent =
-                    20 + 5 * uint32_t(StepIndex((std::clamp(int(s.render_percent), 20, 200) - 20) / 5, step, 37));
+            if (step) s.render_percent = uint32_t(StepRange(int(s.render_percent), 20, 200, 5, step));
             Mode out = Output();
             std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
                           out.height * s.render_percent / 100);
-            break;
+            return true;
         }
         case kFov:
             // 45 to 140 in steps of 1
-            if (step) s.fov = 45 + uint32_t(StepIndex(std::clamp(int(s.fov), 45, 140) - 45, step, 96));
+            if (step) s.fov = uint32_t(StepRange(int(s.fov), 45, 140, 1, step));
             std::snprintf(text, sizeof(text), s.fov == 75 ? "%u (DEFAULT)" : "%u", s.fov);
-            break;
+            return true;
         case kMaxFps: {
             uint32_t cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
             if (cap == kFpsCapRefresh) std::snprintf(text, sizeof(text), "REFRESH RATE");
             else if (cap) std::snprintf(text, sizeof(text), "%u", cap);
             else std::snprintf(text, sizeof(text), "UNLIMITED");
-            break;
+            return true;
         }
-        case kVsync:
-            Flip(s.vsync, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.vsync));
-            break;
-        case kFpsCounter:
-            Flip(s.fps_counter, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.fps_counter));
-            break;
-        case kAniso:
-            std::snprintf(text, sizeof(text), "%s", kAnisoNames[StepTable(kAnisoValues, s.aniso, step)]);
-            break;
+        default:
+            return false;
+    }
+}
+
+// the graphics rows that are no ON / OFF, stepped first; false for another row
+bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
+    switch (id) {
+        case kShaderModel:
+            if (step) s.shader_model = StepIndex(s.shader_model >= 3, step, 2) ? 3 : 1;
+            std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1 (DEFAULT)");
+            return true;
         case kMsaa:
             std::snprintf(text, sizeof(text), "%s", kMsaaNames[StepTable(kMsaaValues, s.msaa, step)]);
-            break;
-        case kSmaa:
-            Flip(s.smaa, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.smaa));
-            break;
+            return true;
+        case kAniso:
+            std::snprintf(text, sizeof(text), "%s", kAnisoNames[StepTable(kAnisoValues, s.aniso, step)]);
+            return true;
         case kShadowResolution: {
             uint32_t size = kShadowSizes[StepTable(kShadowSizes, s.shadow_resolution, step)];
             if (size) std::snprintf(text, sizeof(text), size == 512 ? "%u (DEFAULT)" : "%u", size);
             else std::snprintf(text, sizeof(text), "AUTOMATIC");
-            break;
+            return true;
         }
         case kShadowDistance: {
             uint32_t scale = kShadowDistances[StepTable(kShadowDistances, s.shadow_distance, step)];
             std::snprintf(text, sizeof(text), scale == 1 ? "%ux (DEFAULT)" : "%ux", scale);
-            break;
+            return true;
         }
-        case kShaderModel:
-            if (step) s.shader_model = StepIndex(s.shader_model >= 3, step, 2) ? 3 : 1;
-            std::snprintf(text, sizeof(text), "%s", s.shader_model >= 3 ? "3.0" : "1.1 (DEFAULT)");
-            break;
-        case kHdr:
-        case kToneMapping:
-        case kHqShadows: {
-            // shader model 3.0 features, off at 1.1
-            bool& on = ShaderModel3Flag(s, id);
-            if (s.shader_model < 3) return "OFF";
-            Flip(on, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(on));
-            break;
-        }
-        case kAmbientOcclusion:
-            Flip(s.ambient_occlusion, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.ambient_occlusion));
-            break;
-        case kSkipIntros:
-            Flip(s.skip_intros, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.skip_intros));
-            break;
+        default:
+            return false;
+    }
+}
+
+// the general, input device and mouse rows that are no ON / OFF, stepped first
+void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
+    switch (id) {
         case kLanguage: {
             int count = int(std::size(kLanguages));
             int i = 0;
             while (i < count - 1 && s.language != kLanguages[i]) i++;
-            if (step) s.language = kLanguages[i = StepIndex(i, step, count)];
+            if (step) {
+                i = StepIndex(i, step, count);
+                s.language = kLanguages[i];
+            }
             std::snprintf(text, sizeof(text), s.language == BootLanguage() ? "%s" : "%s (RESTART)", kLanguageNames[i]);
             break;
         }
@@ -459,14 +504,6 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             std::snprintf(text, sizeof(text), floor == 50 ? "%u MS (DEFAULT)" : "%u MS", floor);
             break;
         }
-        case kJoinIp:
-            return s.join_ip;
-        case kMicrophone:
-            return s.microphone.empty() ? "SYSTEM DEFAULT" : s.microphone;
-        case kPushToTalk:
-            Flip(s.push_to_talk, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.push_to_talk));
-            break;
         case kPlayer1:
         case kPlayer2: {
             int player = id == kPlayer1 ? 0 : 1;
@@ -477,17 +514,28 @@ std::string RowText(int id, int step, Settings& s = Get()) {
         case kSensitivity:
             // 0.1 to 5.0 in steps of 0.1
             if (step) {
-                int i = std::clamp(int(std::lround(s.mouse_sensitivity * 10.0f)), 1, 50) - 1;
-                s.mouse_sensitivity = float(StepIndex(i, step, 50) + 1) / 10.0f;
+                int tenths = StepRange(int(std::lround(s.mouse_sensitivity * 10.0f)), 1, 50, 1, step);
+                s.mouse_sensitivity = float(tenths) / 10.0f;
             }
             std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
             break;
-        case kInvertMouse:
-            Flip(s.invert_mouse, step);
-            std::snprintf(text, sizeof(text), "%s", OnOff(s.invert_mouse));
-            break;
     }
-    if (step && &s == &Get()) Changed(display);
+}
+
+// steps the value first when step is not zero; on a copy of the settings a step is only shown, not saved
+std::string RowText(int id, int step, Settings& s = Get()) {
+    if (id == kJoinIp) return s.join_ip;
+    if (id == kMicrophone) return s.microphone.empty() ? "SYSTEM DEFAULT" : s.microphone;
+    // shader model 3.0 features, off at 1.1
+    if (ShaderModel3Row(id) && s.shader_model < 3) return "OFF";
+    char text[64] = "";
+    if (bool* on = ToggleFlag(s, id)) {
+        Flip(*on, step);
+        std::snprintf(text, sizeof(text), "%s", OnOff(*on));
+    } else if (!StepDisplayRow(id, step, s, text) && !StepGraphicsRow(id, step, s, text)) {
+        StepGeneralRow(id, step, s, text);
+    }
+    if (step && &s == &Get()) Changed(DisplayRow(id));
     return text;
 }
 
@@ -497,12 +545,18 @@ std::string KeyText(std::string keys) {
     return keys;
 }
 
+const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER", "LEVEL SELECT"};
+constexpr int kSettingsPage = 0;
+constexpr int kKeyboardPage = 1;
+constexpr int kControllerPage = 2;
+constexpr int kLevelsPage = 3;
+
 void RestoreDefaults(int page) {
-    if (page == 2) {
+    if (page == kControllerPage) {
         input::ResetPadBindings();
         return;
     }
-    if (page == 1) {
+    if (page == kKeyboardPage) {
         Settings& s = Get();
         s.mouse_sensitivity = Settings{}.mouse_sensitivity;
         s.invert_mouse = false;
@@ -524,12 +578,10 @@ int g_capture_slot = 0;  // its box: 0 the key, 1 the alternate
 int g_hovered_box = -1;  // the box under the mouse with a key in it, this frame
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
-int g_page = 0;
+int g_page = kSettingsPage;
 // on F10 the display mode and resolution wait for Apply, as Windows' display settings do; closing drops them
 std::atomic<bool> g_display_held{false};
 Settings g_display;  // the held display mode and resolution
-
-bool DisplayRow(int id) { return id == kDisplayMode || id == kResolution; }
 
 void HoldDisplay(int id, int step) {
     const Settings& s = Get();
@@ -551,8 +603,7 @@ void Apply() {
     g_display_held = false;
     Changed(true);
 }
-const char* const kPages[] = {"RECOMP SETTINGS", "MOUSE AND KEYBOARD", "CONTROLLER", "LEVEL SELECT"};
-constexpr int kKeyboardPage = 1, kControllerPage = 2, kLevelsPage = 3;
+
 #ifdef NDEBUG
 constexpr bool kLevelSelect = false;
 #else
@@ -563,12 +614,15 @@ constexpr bool kLevelSelect = true;
 bool PageShown(int page) {
     size_t pads = 0;
     input::PadActions(&pads);
-    return page == kControllerPage ? pads > 0 : page != kLevelsPage || (kLevelSelect && !game::Levels().empty());
+    if (page == kControllerPage) return pads > 0;
+    if (page != kLevelsPage) return true;
+    return kLevelSelect && !game::Levels().empty();
 }
 
 int StepPage(int page, int step) {
-    do page = StepIndex(page, step, int(std::size(kPages)));
-    while (!PageShown(page));
+    do {
+        page = StepIndex(page, step, int(std::size(kPages)));
+    } while (!PageShown(page));
     return page;
 }
 
@@ -581,33 +635,39 @@ std::vector<std::string> KeyBoxes(size_t action) {
     return {KeyText(keys.substr(0, comma)), second.empty() ? second : KeyText(second)};
 }
 
+// key names as they are: the controller's BACK is no Back button
+std::string BoxText(const std::string& key, bool capturing, const char* prompt) {
+    if (capturing) return Ui(prompt);
+    if (key == "UNBOUND") return Ui(key);
+    return key;
+}
+
+constexpr float kKeyBoxEms = 10.0f;  // a key box's width when the row has two
+
 // label left, a box per key right (the keyboard's key and its alternate side by side), ending where the other rows'
 // values do; Enter or a click on a box starts its capture, a right click sets `cleared`. The box pressed, -1 for none.
 int BindRow(const char* label, const std::vector<std::string>& keys, int capturing, const char* prompt, int& cleared) {
     const ImGuiStyle& style = ImGui::GetStyle();
-    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
-    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
-    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
-    float value_end = row_x + row_w - block_w + row_h + style.ItemSpacing.x + value_w;
-    int n = int(keys.size()), pressed = -1;
-    float box_w = n > 1 ? em * 10 : value_w;
+    RowBox row = MeasureRow();
+    float value_end = row.row_x + row.row_w - row.block_w + row.row_h + style.ItemSpacing.x + row.value_w;
+    int n = int(keys.size());
+    int pressed = -1;
+    float box_w = n > 1 ? row.em * kKeyBoxEms : row.value_w;
     ImGui::PushID(label);
-    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(Ui(label).c_str());
+    RowLabel(row, label);
     for (int i = 0; i < n; i++) {
         float x = value_end - float(n - i) * box_w - float(n - 1 - i) * style.ItemSpacing.x;
-        ImGui::SetCursorPos(ImVec2(x, row_y));
+        ImGui::SetCursorPos(ImVec2(x, row.row_y));
         ImGui::PushID(i);
-        if (ImGui::InvisibleButton("##key", ImVec2(box_w, row_h))) pressed = i;
+        if (ImGui::InvisibleButton("##key", ImVec2(box_w, row.row_h))) pressed = i;
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) cleared = i;
         if (ImGui::IsItemHovered() && !keys[i].empty()) g_hovered_box = i;
         bool lit = capturing == i || ImGui::IsItemFocused() || ImGui::IsItemHovered();
         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                                   ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
-        // key names as they are: the controller's BACK is no Back button
-        std::string value = capturing == i ? Ui(prompt) : keys[i] == "UNBOUND" ? Ui(keys[i]) : keys[i];
-        ImGui::SetCursorPos(ImVec2(x + std::max((box_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f, 0.0f), row_y));
+        std::string value = BoxText(keys[i], capturing == i, prompt);
+        float pad = (box_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f;
+        ImGui::SetCursorPos(ImVec2(x + std::max(pad, 0.0f), row.row_y));
         ImGui::AlignTextToFramePadding();
         if (capturing == i) ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
         ImGui::TextUnformatted(value.c_str());
@@ -615,8 +675,7 @@ int BindRow(const char* label, const std::vector<std::string>& keys, int capturi
         ImGui::PopID();
     }
     ImGui::PopID();
-    ImGui::SetCursorPos(ImVec2(row_x, row_y));
-    ImGui::Dummy(ImVec2(row_w, row_h));
+    EndRow(row);
     return pressed;
 }
 
@@ -624,7 +683,8 @@ int BindRow(const char* label, const std::vector<std::string>& keys, int capturi
 void PollCapture() {
     if (g_capture < 0) return;
     bool pad = g_page == kControllerPage;
-    int vk = input::PressedKey(), button = pad ? input::PressedPadButton() : -1;
+    int vk = input::PressedKey();
+    int button = pad ? input::PressedPadButton() : -1;
     if (!g_capture_armed) {
         g_capture_armed = !vk && button < 0;
         return;
@@ -652,8 +712,8 @@ std::string ChoiceText(const Settings& s, int player, const Port& c) {
     const Port& other = s.players[1 - player];
     bool current = SamePort(c, s.players[player]);
     std::string text = PortText(c);
-    if (!current && ((c.keyboard && other.keyboard) || (c.pad >= 0 && c.pad == other.pad)))
-        text += player == 0 ? "  (FROM PLAYER 2)" : "  (FROM PLAYER 1)";
+    bool shared = (c.keyboard && other.keyboard) || (c.pad >= 0 && c.pad == other.pad);
+    if (!current && shared) text += player == 0 ? "  (FROM PLAYER 2)" : "  (FROM PLAYER 1)";
     if (current && c.pad >= 0 && !input::PadConnected(c.pad)) text += "  (UNPLUGGED)";
     return text;
 }
@@ -662,61 +722,49 @@ std::string ChoiceText(const Settings& s, int player, const Port& c) {
 // devices back and forth between the players on the way
 void PlayerRow(const char* label, int player) {
     Settings& s = Get();
-    const ImGuiStyle& style = ImGui::GetStyle();
-    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
-    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
-    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    RowBox box = MeasureRow();
     ImGui::PushID(label);
-    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(Ui(label).c_str());
-    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
-    ImGui::SetNextItemWidth(block_w);
+    RowLabel(box, label);
+    ImGui::SetCursorPos(ImVec2(box.row_x + box.row_w - box.block_w, box.row_y));
+    ImGui::SetNextItemWidth(box.block_w);
     // opaque: the rows under the list showed through
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
     if (ImGui::BeginCombo("##device", Ui(PortText(s.players[player])).c_str())) {
         for (const Port& c : PlayerList(s, player)) {
             bool current = SamePort(c, s.players[player]);
-            if (ImGui::Selectable(Ui(ChoiceText(s, player, c)).c_str(), current) && !current &&
-                SetPlayer(s, player, c))
-                Changed(false);
+            bool picked = ImGui::Selectable(Ui(ChoiceText(s, player, c)).c_str(), current) && !current;
+            if (picked && SetPlayer(s, player, c)) Changed(false);
             if (current) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
     ImGui::PopStyleColor();
     ImGui::PopID();
-    ImGui::SetCursorPos(ImVec2(row_x, row_y));
-    ImGui::Dummy(ImVec2(row_w, row_h));
+    EndRow(box);
 }
 
 // label left, a drop-down list of the recording devices where the value sits, read as it opens
 void MicrophoneRow(const char* label) {
     Settings& s = Get();
-    const ImGuiStyle& style = ImGui::GetStyle();
-    float em = ImGui::GetFontSize(), row_w = ImGui::GetContentRegionAvail().x, row_h = ImGui::GetFrameHeight();
-    float value_w = em * 12, block_w = row_h * 2 + value_w + style.ItemSpacing.x * 2;
-    float row_x = ImGui::GetCursorPosX(), row_y = ImGui::GetCursorPosY();
+    RowBox box = MeasureRow();
     static std::vector<std::string> devices;
     ImGui::PushID(label);
-    ImGui::SetCursorPos(ImVec2(row_x + style.ItemInnerSpacing.x, row_y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(Ui(label).c_str());
-    ImGui::SetCursorPos(ImVec2(row_x + row_w - block_w, row_y));
-    ImGui::SetNextItemWidth(block_w);
+    RowLabel(box, label);
+    ImGui::SetCursorPos(ImVec2(box.row_x + box.row_w - box.block_w, box.row_y));
+    ImGui::SetNextItemWidth(box.block_w);
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(kPanelBg.x, kPanelBg.y, kPanelBg.z, 1.0f));
     // device names as they are
     if (ImGui::BeginCombo("##device", s.microphone.empty() ? Ui("SYSTEM DEFAULT").c_str() : s.microphone.c_str())) {
         if (ImGui::IsWindowAppearing()) devices = audio::Microphones();
         std::vector<std::string> list = devices;
         list.insert(list.begin(), std::string());
-        if (!s.microphone.empty() && std::find(devices.begin(), devices.end(), s.microphone) == devices.end())
-            list.push_back(s.microphone);
+        bool kept = !s.microphone.empty() && std::find(devices.begin(), devices.end(), s.microphone) == devices.end();
+        if (kept) list.push_back(s.microphone);
         for (const std::string& name : list) {
             bool current = name == s.microphone;
             std::string text = name.empty() ? Ui("SYSTEM DEFAULT") : name;
-            if (current && !name.empty() && std::find(devices.begin(), devices.end(), name) == devices.end())
-                text += "  " + Ui("(UNPLUGGED)");
+            bool gone = current && !name.empty() && std::find(devices.begin(), devices.end(), name) == devices.end();
+            if (gone) text += "  " + Ui("(UNPLUGGED)");
             if (ImGui::Selectable(text.c_str(), current) && !current) {
                 s.microphone = name;
                 Changed(false);
@@ -727,8 +775,7 @@ void MicrophoneRow(const char* label) {
     }
     ImGui::PopStyleColor();
     ImGui::PopID();
-    ImGui::SetCursorPos(ImVec2(row_x, row_y));
-    ImGui::Dummy(ImVec2(row_w, row_h));
+    EndRow(box);
 }
 
 void DrawRows(int page) {
@@ -778,17 +825,18 @@ void DrawRows(int page) {
 void DrawLevels() {
     for (const game::LevelList& list : game::Levels()) {
         Section(list.title);
-        for (const char* map : list.maps)
+        for (const char* map : list.maps) {
             if (ImGui::Selectable(map, false, 0, ImVec2(0.0f, ImGui::GetFrameHeight()))) {
                 game::QueueCommand(std::string("open ") + map);
                 ToggleMenu();
             }
+        }
     }
 }
 
 void Defaults() {
     g_capture = -1;
-    if (g_page == 0) g_display_held = false;
+    if (g_page == kSettingsPage) g_display_held = false;
     if (g_page != kLevelsPage) RestoreDefaults(g_page);
 }
 
@@ -807,8 +855,8 @@ void DrawTabs() {
     ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, kHeading);
     ImGui::PushStyleVar(ImGuiStyleVar_TabRounding, 0.0f);
     if (ImGui::BeginTabBar("##pages")) {
-        float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x * float(shown - 1)) /
-                  float(shown);
+        float gaps = ImGui::GetStyle().ItemInnerSpacing.x * float(shown - 1);
+        float w = (ImGui::GetContentRegionAvail().x - gaps) / float(shown);
         for (int i = 0; i < int(std::size(kPages)); i++) {
             if (!PageShown(i)) continue;
             ImGui::SetNextItemWidth(w);
@@ -841,9 +889,8 @@ void DrawPanel() {
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
         std::string title = Ui("SETTINGS");
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                             std::max((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title.c_str()).x) * 0.5f,
-                                      0.0f));
+        float title_pad = (ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(title.c_str()).x) * 0.5f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(title_pad, 0.0f));
         ImGui::TextUnformatted(title.c_str());
         DrawTabs();
         float footer = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() + em;
@@ -855,16 +902,15 @@ void DrawPanel() {
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Text, kDim);
         const char* hint = "";
-        if (g_capture >= 0) hint = g_page == kControllerPage ? "Press a controller button to bind, Escape cancels"
-                                                             : "Press a key or mouse button to bind, Escape cancels";
+        if (g_capture >= 0 && g_page == kControllerPage) hint = "Press a controller button to bind, Escape cancels";
+        else if (g_capture >= 0) hint = "Press a key or mouse button to bind, Escape cancels";
         else if (g_page == kKeyboardPage && g_hovered_box == 1) hint = "Right click clears the second key";
         else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
         ImGui::TextUnformatted(Ui(hint, false).c_str());
         ImGui::PopStyleColor();
         float bw = em * 8;
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                             std::max(ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2,
-                                      0.0f));
+        float buttons_pad = ImGui::GetContentRegionAvail().x - bw * 3 - ImGui::GetStyle().ItemSpacing.x * 2;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(buttons_pad, 0.0f));
         if (ImGui::Button(Ui("Back", false).c_str(), ImVec2(bw, 0))) ToggleMenu();
         ImGui::SameLine();
         if (ImGui::Button(Ui("Defaults", false).c_str(), ImVec2(bw, 0))) Defaults();
@@ -910,10 +956,9 @@ void DrawUi() {
 
 namespace rows {
 
-// the game thread asks too, the F10 panel draws under the same lock
 const Row* Page(int page, size_t* count) {
-    if (page == 1 || page == 2) {
-        const std::vector<Row>& list = page == 1 ? InputRows() : PadRows();
+    if (page == kKeyboardPage || page == kControllerPage) {
+        const std::vector<Row>& list = page == kKeyboardPage ? InputRows() : PadRows();
         *count = list.size();
         return list.data();
     }
@@ -922,6 +967,7 @@ const Row* Page(int page, size_t* count) {
 }
 
 std::string Value(const Row& row) {
+    // the game thread asks too, the F10 panel draws under the same lock
     std::lock_guard lock(UiLock());
     if (row.kind == Kind::Bind) return KeyText(input::Binding(size_t(row.id)));
     if (row.kind == Kind::PadBind) return KeyText(input::PadBinding(size_t(row.id)));
@@ -966,9 +1012,9 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
-    if (row.kind == Kind::Value && (row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id)))
-        return false;
-    bool sm3 = row.kind == Kind::Value && (row.id == kHdr || row.id == kToneMapping || row.id == kHqShadows);
+    bool hidden = row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id);
+    if (row.kind == Kind::Value && hidden) return false;
+    bool sm3 = row.kind == Kind::Value && ShaderModel3Row(row.id);
     return !sm3 || Get().shader_model >= 3;
 }
 
@@ -978,9 +1024,8 @@ void Choose(const Row& row, int index) {
     if (row.id == kPlayer1 || row.id == kPlayer2) {
         int player = row.id == kPlayer1 ? 0 : 1;
         std::vector<Port> list = PlayerList(s, player);
-        if (index >= 0 && index < int(list.size()) && !SamePort(list[size_t(index)], s.players[player]) &&
-            SetPlayer(s, player, list[size_t(index)]))
-            Changed(false);
+        bool other = index >= 0 && index < int(list.size()) && !SamePort(list[size_t(index)], s.players[player]);
+        if (other && SetPlayer(s, player, list[size_t(index)])) Changed(false);
         return;
     }
     g_pick = index;
