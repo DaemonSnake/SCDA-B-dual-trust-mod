@@ -18,7 +18,7 @@ struct TexInfo {
 };
 enum : uint8_t {
     kTexHdr = 1,       // a render target holding HDR colour divided by the headroom
-    kTexNormCube = 2,  // a normalization cube: computed per pixel instead
+    kTexNormCube = 2,  // a normalization cube: computed per pixel instead, with HDR
     kTexWide = 4,      // an upscaled target shrunk by the pass: each tap averaged over console texels
 };
 
@@ -68,7 +68,7 @@ struct DrawConstants {
     float bump[4][4];   // 00 01 10 11
     float bumpl[4][4];  // scale offset
     float wvp[16];      // fixed function
-    float hdr[4];       // colour out scale, HDR target read scale, soft shadow radius in shadow map texels, 0
+    float hdr[4];       // colour out scale, HDR target read scale, 0, 0
     float spread[4][4]; // kTexWide: tap step in uv, taps per axis
     // fixed function, lit in view space
     float wv[16];

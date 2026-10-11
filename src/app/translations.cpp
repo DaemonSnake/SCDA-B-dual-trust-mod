@@ -40,7 +40,6 @@ constexpr Entry kEntries[] = {
     {"SHADER MODEL", {u"Modèle de shader", u"Shader Model", u"Modello di shader", u"Modelo de shader"}},
     {"HDR RENDERING", {u"Rendu HDR", u"HDR-Rendering", u"Rendering HDR", u"Renderizado HDR"}},
     {"TONE MAPPING", {u"Assignation des teintes", u"Tone Mapping", u"Tone mapping", u"Mapeado por tonos"}},
-    {"HIGH QUALITY SOFT SHADOWS", {u"Ombres douces de haute qualité", u"High Quality Soft Shadows", u"Ombre sfumate di alta qualità", u"Sombras suavizadas de alta calidad"}},
     {"AMBIENT OCCLUSION", {u"Occlusion ambiante", u"Ambient Occlusion", u"Occlusione ambientale", u"Oclusión ambiental"}},
     {"ANISOTROPIC FILTERING", {u"Filtrage anisotropique", u"Anisotropische Filterung", u"Filtro anisotropico", u"Filtro anisotrópico"}},
     {"SHADOW RESOLUTION", {u"Résolution des ombres", u"Schattenauflösung", u"Risoluzione delle ombre", u"Resolución de sombras"}},

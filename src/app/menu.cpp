@@ -287,7 +287,7 @@ void Changed(bool display) {
 
 enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
-    kShaderModel, kHdr, kToneMapping, kHqShadows, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
+    kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage
 };
@@ -300,7 +300,7 @@ constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 // versus has none of the renderer features of story
 bool VersusHides(int id) {
     if (!kVersus) return false;
-    return id == kShaderModel || id == kHdr || id == kToneMapping || id == kHqShadows || id == kAmbientOcclusion ||
+    return id == kShaderModel || id == kHdr || id == kToneMapping || id == kAmbientOcclusion ||
            id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate ||
            id == kInputDelay;
 }
@@ -318,7 +318,6 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kShaderModel, "SHADER MODEL"},
     {Kind::Value, kHdr, "HDR RENDERING"},
     {Kind::Value, kToneMapping, "TONE MAPPING"},
-    {Kind::Value, kHqShadows, "HIGH QUALITY SOFT SHADOWS"},
     {Kind::Value, kAmbientOcclusion, "AMBIENT OCCLUSION"},
     {Kind::Value, kMsaa, "MSAA"},
     {Kind::Value, kSmaa, "SMAA"},
@@ -364,7 +363,7 @@ const std::vector<Row>& PadRows() {
 }
 
 // shader model 3.0 features
-bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping || id == kHqShadows; }
+bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping; }
 
 // the setting an ON / OFF row flips, nullptr for any other row
 bool* ToggleFlag(Settings& s, int id) {
@@ -373,7 +372,6 @@ bool* ToggleFlag(Settings& s, int id) {
         case kFpsCounter: return &s.fps_counter;
         case kHdr: return &s.hdr_rendering;
         case kToneMapping: return &s.tone_mapping;
-        case kHqShadows: return &s.hq_soft_shadows;
         case kAmbientOcclusion: return &s.ambient_occlusion;
         case kSmaa: return &s.smaa;
         case kSkipIntros: return &s.skip_intros;
