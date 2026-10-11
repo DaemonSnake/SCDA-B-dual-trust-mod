@@ -68,9 +68,6 @@ void Convert(uint32_t type, const uint8_t* p, float* o) {
     }
 }
 
-// TEMPORARY A/B: false converts every vertex on the CPU, as before
-constexpr bool kRawVertices = true;
-
 // D3DVSDT type as the input assembler reads it: DXGI format, what the vertex shader does after, bytes the format reads
 struct HostElement {
     uint8_t format = 0, decode = kDecodeNone, bytes = 0;
@@ -254,7 +251,7 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, con
     };
 
     // the guest's own vertices when the input assembler can read every element of them
-    bool raw = kRawVertices;
+    bool raw = true;
     for (int k = 0; k < nregs && raw; k++) {
         const auto& in = layout->inputs[size_t(regs[k])];
         HostElement he = HostFormat(in.type);

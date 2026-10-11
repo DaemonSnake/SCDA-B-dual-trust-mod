@@ -12,6 +12,7 @@
 
 #include "app/app.h"
 #include "core/log.h"
+#include "game/magma.h"
 #include "gpu/backend.h"
 #include "xdk/hle.h"
 
@@ -24,19 +25,9 @@ void LeavePage();
 
 namespace {
 
-// Magma names pages by crc32 of the lowercase name
-constexpr uint32_t Crc32(std::string_view text) {
-    uint32_t crc = ~0u;
-    for (char c : text) {
-        crc ^= uint8_t(c);
-        for (int i = 0; i < 8; i++) crc = crc >> 1 ^ (0xEDB88320u & (0u - (crc & 1)));
-    }
-    return ~crc;
-}
-
 // the interaction prompt (p_interatt) is one centred widget with fades at its sides: it stays 4:3 like a menu
-constexpr uint32_t kHudPages[] = {Crc32("p_hudatt"), Crc32("p_spectatormode")};
-constexpr uint32_t kLoadingPage = Crc32("p_loading");
+constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("p_spectatormode")};
+constexpr uint32_t kLoadingPage = game::magma::Id("p_loading");
 static_assert(kLoadingPage == 0x50A0D1DB);
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width, +0xA0 height in pixels)
 constexpr uint32_t kAddQuad = 0x1231E0;

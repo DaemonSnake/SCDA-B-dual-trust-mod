@@ -17,9 +17,6 @@ namespace d3d {
 
 namespace {
 
-// TEMPORARY A/B: false draws on the title's thread, as before
-constexpr bool kRenderThread = true;
-
 // D3D globals of this build
 constexpr uint32_t kDevice = SYM(D3D_Device);        // the static CDevice, g_pDevice points at it
 constexpr uint32_t kDevicePtr = SYM(D3D_pDevice);
@@ -165,7 +162,7 @@ HLE_STDCALL(Direct3D_CreateDevice, 6) {
     if (!g_backend) {
         g_backend = gpu::CreateBackend();
         if (!g_backend->Init(w, h)) LOGE("d3d: renderer init failed");
-        if (kRenderThread) g_backend = gpu::CreateThreadedBackend(std::move(g_backend));
+        g_backend = gpu::CreateThreadedBackend(std::move(g_backend));
     }
     g_state = gpu::State{};
     g_state.viewport = {0, 0, w, h, 0.0f, 1.0f};

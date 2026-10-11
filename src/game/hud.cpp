@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "app/app.h"
+#include "game/magma.h"
 #include "game/loading.h"
 #include "gpu/backend.h"
 #include "xdk/d3d8.h"
@@ -27,16 +28,6 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance);  // opti
 }
 
 namespace {
-
-constexpr uint32_t Crc32(std::string_view text) {
-    uint32_t crc = ~0u;
-    for (char c : text) {
-        crc ^= uint8_t(c);
-        for (int i = 0; i < 8; i++) crc = crc >> 1 ^ (0xEDB88320u & (0u - (crc & 1)));
-    }
-    return ~crc;
-}
-static_assert(Crc32("P_hud") == 0x330C9548);
 
 // the Magma manager, the Magma screen, FCanvasUtil::Flush
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC;
@@ -55,7 +46,7 @@ enum class Mode { Centre, Fill, Extend, Bars, Shade, Left, Right, Stretch, Sprea
 struct Rule {
     uint32_t id;
     Mode mode;
-    constexpr Rule(std::string_view name, Mode m) : id(Crc32(name)), mode(m) {}
+    constexpr Rule(std::string_view name, Mode m) : id(game::magma::Id(name)), mode(m) {}
     constexpr Rule(uint32_t i, Mode m) : id(i), mode(m) {}
 };
 
@@ -102,7 +93,7 @@ struct Page {
     Mode others;
     bool half;
     constexpr Page(std::string_view name, std::span<const Rule> r, Mode m = Mode::Fill, bool h = false)
-        : id(Crc32(name)), rules(r), others(m), half(h) {}
+        : id(game::magma::Id(name)), rules(r), others(m), half(h) {}
     constexpr Page(uint32_t i, std::span<const Rule> r, Mode m = Mode::Fill, bool h = false)
         : id(i), rules(r), others(m), half(h) {}
 };
@@ -434,7 +425,7 @@ X86_FUNC(sub_002E3011) {
 X86_EXTERN_FUNC(__imp__sub_002BE990);
 X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
-    g_hud_seen |= id == Crc32("P_hud");
+    g_hud_seen |= id == game::magma::Id("P_hud");
     g_loading = false;
     if (app::g_hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
         ctx.esp += 4;
@@ -448,7 +439,7 @@ X86_FUNC(sub_002BE990) {
     Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
     g_drawing = drawing;
-    if (id == Crc32("P_OnlineOffline")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
+    if (id == game::magma::Id("P_OnlineOffline")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
 }
 
 namespace game {
