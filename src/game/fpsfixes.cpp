@@ -102,7 +102,7 @@ X86_FUNC(sub_001F8F9C) {
     static float time;
     time += std::clamp(GF(R32(ctx.esp + 4) + kDeltaSeconds), 0.0f, kMaxDelta);
     if (time < kFixedStep) {
-        ctx.esp += 8;
+        ctx.esp += 8;  // ret 4, skipped this frame
         return;
     }
     time -= kFixedStep;
@@ -142,7 +142,7 @@ X86_FUNC(sub_0025E82D) {
         c.front[i] += moved;
     }
     Write(body, c.front);
-    ctx.esp += 4;
+    ctx.esp += 4;  // the return address comes off: each step calls the original with it pushed again
     if (delta > 0) c.time += std::min(delta, kMaxDelta);
     for (; c.time >= kFixedStep; c.time -= kFixedStep) {
         float frame = delta;

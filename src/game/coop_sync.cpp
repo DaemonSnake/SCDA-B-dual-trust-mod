@@ -129,6 +129,7 @@ void Apply() {
 
 }  // namespace
 
+// the step frequency setter (SyncSim +0x84)
 X86_EXTERN_FUNC(__imp__sub_0040A7A0);
 X86_FUNC(sub_0040A7A0) {
     uint32_t rate, floor;
@@ -139,6 +140,7 @@ X86_FUNC(sub_0040A7A0) {
     __imp__sub_0040A7A0(ctx, base);
 }
 
+// the input delay floor setter (SyncSim +0x8C)
 X86_EXTERN_FUNC(__imp__sub_0040A740);
 X86_FUNC(sub_0040A740) {
     uint32_t rate, floor;

@@ -113,6 +113,7 @@ X86_FUNC(sub_002898CB) {
         bool scale = Gameplay(state) && !bars && !cinematic;
         if (from == kFrameView) {
             uint32_t pawn = unreal::Offset(pc, unreal::Name("Pawn")), target = unreal::Offset(pc, unreal::Name("ViewTarget"));
+            // object +0x24 its class
             uint32_t view_class = unreal::NameOf(view ? R32(view + 0x24) : 0);
             uint32_t target_class = unreal::NameOf(target && R32(pc + target) ? R32(R32(pc + target) + 0x24) : 0);
             bool own = pawn && view == R32(pc + pawn);

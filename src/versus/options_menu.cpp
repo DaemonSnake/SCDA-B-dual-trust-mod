@@ -128,7 +128,7 @@ struct Popup {
 };
 Popup g_popup;
 
-// ---- the package text
+// the package text
 
 // the text between <tag> and </tag>, the first from `from`; false when there is none
 bool SetTag(std::string& xml, std::string_view tag, std::string_view value, size_t from = 0) {
@@ -341,7 +341,7 @@ bool Balanced(std::string_view xml) {
     return open.empty();
 }
 
-// ---- text
+// text
 
 std::u16string Caps(std::u16string text) {
     for (char16_t& c : text)
@@ -367,7 +367,7 @@ uint32_t Guest(const std::u16string& text) {
     return va;
 }
 
-// ---- the pages
+// the pages
 
 std::u16string Titled(std::string_view text) {
     const char16_t* t = app::Translation(text);
@@ -718,7 +718,7 @@ uint32_t Handler(int kind) {
         for (uint32_t i = 0; i < kHandlers; i++) {
             uint32_t h = handlers + i * kSize;
             W32(h, vtable);
-            W32(h + 4, 0x10000);
+            W32(h + 4, 0x10000);  // refcount: never reaches 0
             W32(h + 8, 1);
             W32(h + 0xC, kHandlerTail);
             W32(h + 0x10, i);

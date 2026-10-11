@@ -32,6 +32,7 @@ namespace {
 // SetNavigation (thiscall owner, page, const FString& "A,Common_A,B,Common_B", type 0 panel, 1 panel_right, 2 panel_bar)
 constexpr uint32_t kSetNavigation = 0x2915C1;
 constexpr uint32_t kFind = 0x17D0E8, kSetText = 0x183598;
+// the panels' names, by SetNavigation's type
 constexpr uint32_t kPanels[] = {0x54362C, 0x543620, 0x565928};
 constexpr uint32_t kBarButtons[] = {0x56591C, 0x565910, 0x565904, 0x5658F8};  // A_Button_1..4
 constexpr uint32_t kBarText = 0x5658DC, kBarImage = 0x5658D4;
@@ -501,7 +502,7 @@ bool HintElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
             std::string key = material ? Label(R32(material + 4), input::InMenu(), 0) : std::string();
             if (key.empty()) return false;
             s = {g_tick, key, int16_t(R16(widget + kRect)), int16_t(R16(widget + kRect + 2))};
-            ctx.esp += 4;
+            ctx.esp += 4;  // the icon is not drawn
             return true;
         }
         bool after = h.after && id == h.after;
@@ -553,6 +554,7 @@ void PromptsTick(X86Context& ctx) {
 
 }  // namespace game
 
+// SetNavigation: remembered for a device change, and relabelled for the keyboard
 X86_EXTERN_FUNC(__imp__sub_002915C1);
 X86_FUNC(sub_002915C1) {
     uint32_t owner = ctx.ecx, page = R32(ctx.esp + 4), actions = R32(ctx.esp + 8), type = R32(ctx.esp + 12);

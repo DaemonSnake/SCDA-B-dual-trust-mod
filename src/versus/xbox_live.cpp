@@ -112,6 +112,7 @@ int Remove(X86Context& ctx, uint32_t page, uint32_t gone, std::initializer_list<
 
 }  // namespace
 
+// the localization database find
 X86_EXTERN_FUNC(__imp__sub_00157A90);
 X86_FUNC(sub_00157A90) {
     uint32_t section = R32(ctx.esp + 4), section2 = R32(ctx.esp + 8), key = R32(ctx.esp + 0xC);
@@ -136,6 +137,7 @@ X86_FUNC(sub_00157A90) {
     if (uint32_t text = versus::KeyText(ctx.eax)) ctx.eax = text;
 }
 
+// Magma localize by [Magma] key
 X86_EXTERN_FUNC(__imp__sub_00192390);
 X86_FUNC(sub_00192390) {
     if (R32(ctx.esp) == kSignInLegend) W32(ctx.esp + 4, kNullText);

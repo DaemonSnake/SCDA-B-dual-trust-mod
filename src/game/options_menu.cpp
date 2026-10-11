@@ -56,7 +56,7 @@ constexpr uint32_t kColumns = 0x18EBFD;
 constexpr uint32_t kItems = 0x60, kRowsShown = 0x9A, kSelection = 0x9C, kItemSize = 0x38;
 // instance: +0x18 bit 0 visible, +0x4C flags
 constexpr uint32_t kVisible = 0x18, kFlags = 0x4C;
-constexpr uint32_t kLeft = 0x25, kRight = 0x27, kEscape = 0x1B;
+constexpr uint32_t kLeft = 0x25, kRight = 0x27, kEscape = 0x1B;  // virtual key codes
 const char* const kCaptions[] = {"Recomp Settings", "Mouse and Keyboard", "Controller"};
 constexpr int kCaptionCount = int(std::size(kCaptions));
 const std::string_view kSections[] = {"DISPLAY", "GRAPHICS", "GENERAL"};
@@ -194,12 +194,12 @@ void Picked(X86Context& __restrict ctx, uint8_t*) {
         g_take.refill = true;
     }
     g_popup_row = -1;
-    ctx.esp += 16;
+    ctx.esp += 16;  // ret 0xC
 }
 
 void Cancelled(X86Context& __restrict ctx, uint8_t*) {
     g_popup_row = -1;
-    ctx.esp += 16;
+    ctx.esp += 16;  // ret 0xC
 }
 
 void Popup(X86Context& ctx, int row, const std::vector<std::string>& choices, int current) {
@@ -513,6 +513,7 @@ bool OptionsElement(X86Context& ctx, uint8_t* base, uint32_t instance) {
 
 // the id of the context whose draw or input stack holds the page (a player's menus: its player number), 0 for none
 uint32_t StackOwner(uint32_t page) {
+    // the Magma manager: +0x3C contexts, +0x40 count; context +0x14 draw stack, +0x18 input stack, +0x1C id
     uint32_t m = R32(0x6A6638);
     uint32_t list = m ? R32(m + 0x3C) : 0, count = m ? R32(m + 0x40) : 0;
     if (!page || !list || count > 16) return 0;

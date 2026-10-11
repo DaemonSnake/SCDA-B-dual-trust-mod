@@ -111,6 +111,7 @@ std::string Ui(std::string_view text, bool caps = true) {
     if (auto it = cache.find(key); it != cache.end()) return it->second;
     std::string out;
     for (char16_t c : Translate(text, [](std::string_view rest) { return std::string(rest); })) {
+        // latin 1 lower case to upper; 0xF7 is the division sign
         if (caps && ((c >= u'a' && c <= u'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7))) c -= 0x20;
         if (c < 0x80) {
             out += char(c);
@@ -207,7 +208,6 @@ std::string PortText(const Port& p) {
 
 bool SamePort(const Port& a, const Port& b) { return a.keyboard == b.keyboard && a.pad == b.pad; }
 
-// a device the other player has moves over to this one, which may leave them with nothing
 // a port's devices without those a choice takes
 Port Without(Port p, const Port& choice) {
     if (choice.keyboard) p.keyboard = false;
@@ -363,6 +363,7 @@ std::string RowText(int id, int step, Settings& s = Get()) {
             break;
         }
         case kFov:
+            // 45 to 140 in steps of 1
             if (step) s.fov = 45 + uint32_t(StepIndex(std::clamp(int(s.fov), 45, 140) - 45, step, 96));
             std::snprintf(text, sizeof(text), s.fov == 75 ? "%u (DEFAULT)" : "%u", s.fov);
             break;
@@ -555,7 +556,6 @@ int StepPage(int page, int step) {
     return page;
 }
 
-// the DataXb\LMaps folders; Menu is the main menu
 // the action's key and its alternate as their boxes show them, the alternate blank when there is none
 std::vector<std::string> KeyBoxes(size_t action) {
     std::string keys = input::Binding(action);

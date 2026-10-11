@@ -316,7 +316,7 @@ X86_FUNC(sub_00263C30) {
         return;
     }
     if (act->kind == Act::Skip) {
-        ctx.esp += 4;
+        ctx.esp += 4;  // not drawn
         return;
     }
     uint32_t frame = R32(ctx.ecx + kFrame), rect = frame + kRect, drawer = R32(kDrawer);
@@ -342,7 +342,7 @@ X86_FUNC(sub_0014C190) {
     const Act* act = g_acts.empty() ? nullptr : Find(ctx.ecx);
     if (!act || (act->kind == Act::Name && !g_font)) return __imp__sub_0014C190(ctx, base);
     if (act->kind != Act::Name) {
-        ctx.esp += 4;
+        ctx.esp += 4;  // not drawn
         return;
     }
     // the key's name over the icon's place, in a text widget of our own

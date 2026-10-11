@@ -38,6 +38,7 @@ constexpr uint32_t Crc32(std::string_view text) {
 }
 static_assert(Crc32("P_hud") == 0x330C9548);
 
+// the Magma manager, the Magma screen, FCanvasUtil::Flush
 constexpr uint32_t kMagma = 0x6A6638, kMagmaScreen = 0x6A6668, kFlush = 0x28EDCC;
 
 // Centre: 4:3 in the middle; Fill: the same, images touching a page side are stretched out to the screen
@@ -166,7 +167,7 @@ Mode ByHalf(X86Context& ctx, uint32_t instance) {
     if (!widget || !screen) return g_page->others;
     int sw = int16_t(R16(screen + 0x84));
     uint32_t esp = ctx.esp, rect = (esp - 0x40) & ~0xFu, text = R32(screen + 0x7C), font = R32(screen + 0x80);
-    W32(rect, 0x80007FFF);
+    W32(rect, 0x80007FFF);  // left 0x7FFF, right -0x8000: empty unless GetBounds fills it
     ctx.esp = rect - 0x10;
     ctx.ecx = widget;
     CallGuest(ctx, R32(R32(widget) + 0x10), {rect});
@@ -516,7 +517,7 @@ X86_FUNC(sub_002E5F1F) {
         CallGuest(ctx, 0x2E4D05, {0x2E, R32(ctx.esp + 4), R32(ctx.esp + 0xC), R32(ctx.esp + 0x10), R32(ctx.esp + 0x14)});
     }
     std::memcpy(f, saved, sizeof saved);
-    ctx.esp += 4 + 0x18;
+    ctx.esp += 4 + 0x18;  // ret 0x18
 }
 
 // render device ShowScreen(path, persist, fade, clear) (thiscall on the render device): reads the picture's index

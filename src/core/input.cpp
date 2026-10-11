@@ -431,6 +431,7 @@ void Keyboard(Pad& p) {
         // in a menu the mouse buttons belong to the cursor
         for (int vk : binds[i]) held |= Down(vk) && !(no_mouse && Mouse(vk));
         if (kActions[i].play_only && menu) held = false;
+        // typing a name: only the pause key still presses
         if (g_text && kActions[i].button != 8 + 4) held = false;
         if (!held) {
             g_down_as[i] = 0;
@@ -478,6 +479,7 @@ void Keyboard(Pad& p) {
     if (g_title && g_press_counts) p.buttons |= kStart;
     if (!menu && View(g_view.load()) == View::ScriptedEvent && Down(VK_RETURN) && NowMs() - g_skip_ms < kSkipMs)
         p.buttons |= kStart;
+    // the mask's top bits: 27 to 30 the arrows, 31 Backspace
     for (int i = 0; i < 4; i++) keys |= uint32_t(Down(kArrows[i])) << (27 + i);
     keys |= uint32_t(Down(VK_BACK)) << 31;
     if (keys & ~g_keys_held.exchange(keys)) {
@@ -655,10 +657,12 @@ bool ReadPad(int slot, XINPUT_GAMEPAD& g) {
         }
     }
     g.wButtons |= touch_half[slot];
+    // 0 to 32767 into 0 to 255
     auto trigger = [&](SDL_GamepadAxis axis) { return BYTE(std::max<int>(SDL_GetGamepadAxis(pad, axis), 0) >> 7); };
     g.bLeftTrigger = trigger(SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
     g.bRightTrigger = trigger(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
     // SDL's sticks have y down
+    // not plain negation: -32768 has no positive
     g.sThumbLX = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
     g.sThumbLY = SHORT(-1 - SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY));
     g.sThumbRX = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX);
@@ -746,7 +750,7 @@ void SetBlocked(bool b) {
 
 void Init(void* hwnd) {
     g_hwnd = static_cast<HWND>(hwnd);
-    RAWINPUTDEVICE mouse{1, 2, 0, g_hwnd};
+    RAWINPUTDEVICE mouse{1, 2, 0, g_hwnd};  // generic desktop page, mouse usage
     RegisterRawInputDevices(&mouse, 1, sizeof(mouse));
     StartPads();
 }
@@ -1099,6 +1103,7 @@ bool ConsoleChar(unsigned c) {
     std::lock_guard lock(g_bind_lock);
     if (kConsoleAction >= kCount) return false;
     for (int vk : g_binds[kConsoleAction])
+        // MapVirtualKey's top bit flags a dead key
         if (unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF; k && towupper(wint_t(c)) == towupper(wint_t(k)))
             return true;
     return false;

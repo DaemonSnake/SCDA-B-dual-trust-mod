@@ -502,9 +502,10 @@ X86_FUNC(sub_00038F96) {
 namespace {
 // the frame just shown, copied into the back buffer
 void KeepFrame(X86Context& ctx) {
-    uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});
+    uint32_t front = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0xFFFFFFFFu});  // -1: the front buffer
     uint32_t back = CallGuest(ctx, SYM(D3DDevice_GetBackBuffer2), {0});
     CallGuest(ctx, SYM(D3DDevice_CopyRects), {front, 0, 0, back, 0});
+    // GetBackBuffer2 added a reference to each
     W32(front, R32(front) - 1);
     W32(back, R32(back) - 1);
 }
@@ -543,6 +544,7 @@ X86_FUNC(sub_004AE0A7) {
     static uint32_t copy = 0;
     uint32_t back = R32(ctx.esp + 0x10);
     if (!copy) {
+        // D3D Size: bits 24..31 pitch / 64, bits 12..23 height, each less 1
         uint32_t size = R32(back + 0x10), bytes = ((size >> 24 & 0xFF) + 1) * 64 * ((size >> 12 & 0xFFF) + 1);
         copy = mem::AllocSystem(24);
         std::memcpy(HostPtr(copy), HostPtr(back), 24);

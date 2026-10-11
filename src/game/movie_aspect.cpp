@@ -29,7 +29,7 @@ X86_EXTERN_FUNC(GUEST_ORIG(BinkWait));
 X86_FUNC(GUEST(BinkWait)) {
     if (R32(ctx.esp) == 0x1CDDB9) {
         ctx.eax = 0;
-        ctx.esp += 8;
+        ctx.esp += 8;  // ret 4
         return;
     }
     GUEST_ORIG(BinkWait)(ctx, base);

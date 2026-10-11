@@ -58,7 +58,7 @@ X86_FUNC(sub_00291D64) {
 X86_EXTERN_FUNC(__imp__sub_002C5160);
 X86_FUNC(sub_002C5160) {
     if (R32(ctx.esp) != kSoloItem) return __imp__sub_002C5160(ctx, base);
-    ctx.esp += 0xC;
+    ctx.esp += 0xC;  // ret 8: the item is never added
 }
 
 // pause menu AddItem (stdcall(list, id, FString), ret 0x14): the FString is the callee's to free
@@ -67,7 +67,7 @@ X86_FUNC(sub_0018B00D) {
     if (R32(ctx.esp) != kPauseItem) return __imp__sub_0018B00D(ctx, base);
     ctx.ecx = ctx.esp + 0xC;
     CallGuest(ctx, kFStringFree, {});
-    ctx.esp += 0x18;
+    ctx.esp += 0x18;  // ret 0x14
 }
 
 // co-op menu page lookup (thiscall, returns al): the co-op buttons are placed in main.mgm, not listed, so B_Online

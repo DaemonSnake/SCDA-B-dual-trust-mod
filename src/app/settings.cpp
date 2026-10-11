@@ -36,7 +36,7 @@ Port ParsePort(const std::string& name, Port fallback) {
     Port p;
     p.keyboard = name.find("keyboard") != std::string::npos;
     if (size_t at = name.find("controller"); at != std::string::npos && at + 10 < name.size()) {
-        int n = name[at + 10] - '0';
+        int n = name[at + 10] - '0';  // the digit after "controller"
         if (n >= 1 && n <= 4) p.pad = n - 1;
     }
     return p.keyboard || p.pad >= 0 || name == "none" ? p : fallback;
