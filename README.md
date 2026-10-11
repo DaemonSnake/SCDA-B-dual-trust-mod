@@ -113,15 +113,22 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
 - **High Quality Soft Shadows** - Enables Shader Model 3 soft shadows.
 - **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
 
-### Mouse and Keyboard
-Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
+### Input
+- **Mouse and Keyboard** - Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
+- **Controller** - Controller with SDL3 support, buttons can be rebound from the Controller page. Defaults match the Xbox layout.
 
-<img width="1280" height="720" alt="Mouse and Keyboard" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3"/>
-
-### Controller
-Controller buttons can be rebound from the Controller page. Defaults match the Xbox layout.
-
-<img width="1280" height="720" alt="Controller" src="https://github.com/user-attachments/assets/3b344418-9592-4e8d-b165-f64bdee8c311" />
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3"></td>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/3b344418-9592-4e8d-b165-f64bdee8c311"></td>
+    </tr>
+    <tr>
+      <td align="center">Mouse and Keyboard</td>
+      <td align="center">Controller</td>
+    </tr>
+  </table>
+</div>
 
 ### General
 - **Skip Intro** - Skips the intro logos.
