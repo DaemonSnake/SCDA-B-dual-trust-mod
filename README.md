@@ -93,6 +93,7 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
   </table>
 </div>
 
+- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
 ### Shader Model 3
 - **Shader Model** - Choose between Shader Model 1.1, the Xbox look, and Shader Model 3.0, which enables the Chaos Theory PC style features.
 <div align="center">
@@ -111,7 +112,6 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
 - **HDR Rendering** - Enables Shader Model 3 HDR rendering.
 - **Tone Mapping** - Enables Shader Model 3 tone mapping.
 - **High Quality Soft Shadows** - Enables Shader Model 3 soft shadows.
-- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
 
 ### Input
 - **Mouse and Keyboard** - Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
