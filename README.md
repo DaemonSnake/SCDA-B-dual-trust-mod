@@ -1,15 +1,17 @@
 # Splinter Cell: Double Agent - XBE Recomp
-An unofficial native PC port of the original Xbox version of Splinter Cell: Double Agent, with extended graphics options, keyboard and mouse support, online co-op and Versus with voice chat, and other enhancements.
-
-This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool.
+An unofficial native PC port of the original Xbox version of Splinter Cell: Double Agent via static recompilation, built into a 64 bit Windows executable. The game's x86 code is translated to C++ ahead of time, the Xbox kernel, Direct3D and DirectSound calls are implemented on Windows, and everything is drawn with Direct3D 12 and played through XAudio2. Made with the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool, created for this game originally.
 
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
 
 ## Installation
-- Put your game files in the `assets` folder. This can be an ISO, or the extracted data files.
+The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/releases) can be found in the Releases page.
+
+- Place your game files in the `assets` folder. This can be an ISO, or the extracted data files.
 - Run `SCDA.exe`.
-- Recomp settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with F10 by default.
+- Recomp Settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with <kbd>F10</kbd> by default.
+
+<img width="1920" height="1080" alt="Recomp Settings" src="https://github.com/user-attachments/assets/d13e1fb6-ba97-4067-84e1-c2362d66d7c4"/>
 
 ## Features
 ### Display
@@ -93,6 +95,7 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
   </table>
 </div>
 
+- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
 ### Shader Model 3
 - **Shader Model** - Choose between Shader Model 1.1, the Xbox look, and Shader Model 3.0, which enables the Chaos Theory PC style features.
 <div align="center">
@@ -111,17 +114,23 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - **HDR Rendering** - Enables Shader Model 3 HDR rendering.
 - **Tone Mapping** - Enables Shader Model 3 tone mapping.
 - **High Quality Soft Shadows** - Enables Shader Model 3 soft shadows.
-- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
 
-### Mouse and Keyboard
-Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
+### Input
+- **Mouse and Keyboard** - Full keyboard and mouse support with raw input, adjustable sensitivity, inverted look and rebindable controls.
+- **Controller** - Controller with SDL3 support, buttons can be rebound from the Controller page. Defaults match the Xbox layout.
 
-<img width="1280" height="720" alt="Mouse and Keyboard" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3"/>
-
-### Controller
-Controller buttons can be rebound from the Controller page. Defaults match the Xbox layout.
-
-<img width="1280" height="720" alt="Controller" src="https://github.com/user-attachments/assets/3b344418-9592-4e8d-b165-f64bdee8c311" />
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/baec07ee-feb3-4748-a121-d1a5bf44e8d3"></td>
+      <td width="50%"><img width="512" src="https://github.com/user-attachments/assets/3b344418-9592-4e8d-b165-f64bdee8c311"></td>
+    </tr>
+    <tr>
+      <td align="center">Mouse and Keyboard</td>
+      <td align="center">Controller</td>
+    </tr>
+  </table>
+</div>
 
 ### General
 - **Skip Intro** - Skips the intro logos.
@@ -132,6 +141,24 @@ Controller buttons can be rebound from the Controller page. Defaults match the X
 ### Miscellaneous
 - **Boot Splash** - Place a `SplinterCell4Logo.png` (or `.bmp`) beside the exe to display a splash screen at launch.
 - **Custom Menu Cursor** - Place a `cursor.png` (or `cursor.dds`) beside the exe to replace the Windows arrow in the game's menus.
+
+## Playing Online
+Co-op and Versus can be played online by connecting directly to the host's IP address. No third-party programs are needed.
+- Press F10 by default to open the Settings overlay.
+- Enter the host's IP address in **Coop Join IP** for Co-op or **Versus Join IP** for Versus.
+- From the Co-op or Versus menu, select LAN and join the host's session from the list.
+
+### Hosting a Game Session
+As the host, you must port forward the following ports on your router so other players can connect to you:
+
+| Protocol | Port |
+|----------|------|
+| UDP      | 9100 |
+| UDP      | 1000 |
+| UDP      | 1010 |
+
+> [!TIP]
+> If you're unable to port forward, such as when your connection is behind CGNAT, or would like to keep your IP address private, you can use a virtual LAN service to play together instead.
 
 ## System Requirements
 ### Minimum
