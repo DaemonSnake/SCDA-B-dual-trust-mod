@@ -41,6 +41,7 @@ struct Voice {
     uint32_t data = 0, bytes = 0, loop_start = 0, loop_len = 0;
     uint32_t owned = 0;  // the buffer's own memory, made with it: freed by SetBufferData and Release
     bool playing = false, looping = false, paused = false;
+    bool active = false, ending = false;  // stream: took a packet since it went quiet, quiet again once they run out
     double pos = 0;  // frames
     uint32_t freq = 0;
     // stream
@@ -184,6 +185,11 @@ void Levels(Voice& v, float g[2][2]) {
     }
 }
 
+// a stream goes quiet: a started one loses its pause
+void Deactivate(Voice& v) {
+    if (v.active) v.active = v.paused = v.ending = false;
+}
+
 void Render(float* out, uint32_t frames) {
     std::memset(out, 0, frames * 2 * sizeof(float));
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -206,6 +212,7 @@ void Render(float* out, uint32_t frames) {
                 }
                 if (v.packets.empty()) {
                     v.pos = 0;
+                    if (v.ending) Deactivate(v);
                     break;
                 }
                 Packet& pk = v.packets.front();
@@ -335,7 +342,7 @@ uint32_t NewBuffer(uint32_t desc, uint32_t out) {
     v.headroom = DefaultHeadroom(flags);
     if (bytes) {
         v.data = v.owned = mem::AllocContiguous(bytes, 0, 0xFFFFFFFF, 4);
-        v.bytes = bytes;
+        v.bytes = v.loop_len = bytes;
     }
     W32(out, obj);
     return 0;
@@ -471,13 +478,16 @@ BUFFER(Release, 1) {
 }
 BUFFER(Unlock, 5) { return 0; }
 BUFFER(SetBufferData, 3) {
+    if (a[1] == v.data && a[2] == v.bytes) return 0;
     // versus makes each sound's buffer at the sound's size, then hands it the sound's own data
     if (v.owned != a[1]) {
         if (v.owned) mem::FreeContiguous(v.owned);
         v.owned = 0;
     }
     v.data = a[1];
-    v.bytes = a[2];
+    if (!a[1] && a[2]) v.data = v.owned = mem::AllocContiguous(a[2], 0, 0xFFFFFFFF, 4);  // a size with no data
+    v.bytes = v.loop_len = a[2];
+    v.loop_start = 0;
     v.pos = 0;
     v.block = -1;
     return 0;
@@ -493,8 +503,9 @@ BUFFER(Stop, 1) {
     return 0;
 }
 BUFFER(SetLoopRegion, 3) {
+    if (a[1] > v.bytes || a[2] > v.bytes - a[1]) return 0x88780032u;
     v.loop_start = a[1];
-    v.loop_len = a[2];
+    v.loop_len = a[2] ? a[2] : v.bytes - a[1];
     return 0;
 }
 BUFFER(GetStatus, 2) {
@@ -625,10 +636,12 @@ static void FlushStream(Voice& v) {
         t_flushed.push_back(*it);
         it = g_done.erase(it);
     }
+    Deactivate(v);
 }
 
 STREAM(AddRef, 1) { return uint32_t(++v.refs); }
 STREAM(SetFormat, 2) {
+    FlushStream(v);
     ReadFormat(v, a[1]);
     v.freq = 0;  // the XDK sets the pitch back to the new format's own rate
     v.block = -1;
@@ -661,14 +674,21 @@ STREAM(Process, 3) {
     if (pk.completed_ptr) W32(pk.completed_ptr, 0);
     if (pk.status_ptr) W32(pk.status_ptr, kPacketPending);
     v.packets.push_back(pk);
+    v.active = true;
+    v.ending = false;
     return 0;
 }
-STREAM(Discontinuity, 1) { return 0; }
+STREAM(Discontinuity, 1) {
+    if (!v.packets.empty()) v.ending = true;
+    else if (v.active) FlushStream(v);
+    return 0;
+}
 STREAM(Flush, 1) {
     FlushStream(v);
     return 0;
 }
 STREAM(FlushEx, 4) {
+    if (a[3] && !v.active) return 0;
     FlushStream(v);
     return 0;
 }
