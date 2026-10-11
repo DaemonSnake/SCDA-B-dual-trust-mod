@@ -85,6 +85,8 @@ constexpr Rule kSniper[] = {
 constexpr Rule kMenu[] = {
     {0xCF490E0F, Mode::Left},
 };
+// its last two buttons go against the right side, as the first two sit against the left
+constexpr uint32_t kRightButtons[] = {game::magma::Id("A_Button_3"), game::magma::Id("A_Button_4")};
 
 // half: an unlisted element sitting in one half of the page goes to that side
 struct Page {
@@ -460,6 +462,9 @@ X86_FUNC(sub_002C64E0) {
         ctx.ecx = instance;
     }
     if (g_decided && game::ComboElement(ctx, base, instance)) return;
+    bool right_button = std::find(std::begin(kRightButtons), std::end(kRightButtons), R32(instance + 4)) !=
+                        std::end(kRightButtons);
+    if (g_decided && g_mode == Mode::Left && right_button) return Draw(ctx, base, Mode::Right, __imp__sub_002C64E0);
     if (g_decided || !(G<uint8_t>(instance + 0x18) & 1)) return __imp__sub_002C64E0(ctx, base);
     uint32_t id = R32(instance + 4);
     std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);
