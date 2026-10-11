@@ -184,6 +184,11 @@ void Levels(Voice& v, float g[2][2]) {
         g[c][0] *= att * std::min(1.0f, 1.0f - pan);
         g[c][1] *= att * std::min(1.0f, 1.0f + pan);
     }
+    // the game can place a sound at NaN, every frame, that voice alone goes silent, where its
+    // NaN gain would turn the whole mix to NaN, which plays as silence
+    for (int c = 0; c < 2; c++)
+        for (int side = 0; side < 2; side++)
+            if (!std::isfinite(g[c][side])) g[c][side] = 0;
 }
 
 // a stream goes quiet: a started one loses its pause
