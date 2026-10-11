@@ -15,7 +15,7 @@ set "OUT=%CD%\out\build\release"
 if not exist assets\default.xbe goto :nogame
 if not exist assets\sc4_adv.xbe goto :nogame
 
-rem ---------------------------------------------------------------- toolchain
+rem toolchain
 echo [1/2] Toolchain
 for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
 if not defined VSDIR (
@@ -39,7 +39,7 @@ if not defined TOOLS_OK (
 )
 for /f "tokens=*" %%v in ('clang++ --version ^| findstr /i version') do echo       %%v
 
-rem ---------------------------------------------------------------- game
+rem game
 echo [2/2] Game code
 echo       the first build recompiles default.xbe and sc4_adv.xbe: 30 to 90 minutes on weaker systems ...
 cmake --preset release >nul || goto :fail
@@ -64,7 +64,7 @@ choice /c YN /n /m "  Play now? [Y/N] "
 if not errorlevel 2 (start "" /d "%OUT%" "%OUT%\SCDA.exe") else (pause)
 exit /b 0
 
-rem ---------------------------------------------------------------- helpers
+rem helpers
 :setuptools
 set TOOLS_OK=
 set MISSING=

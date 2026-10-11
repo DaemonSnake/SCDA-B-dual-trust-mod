@@ -96,7 +96,7 @@ inline void Return(X86Context& ctx, uint32_t value, int stack_args) {
 // runs guest code from the host on the current guest thread
 uint32_t CallGuest(X86Context& ctx, uint32_t fn, std::initializer_list<uint32_t> args);
 
-// ---------------------------------------------------------------- objects
+// objects
 enum class ObjType : uint8_t { Event, Semaphore, Mutant, Timer, Thread, File, SymLink, Device, Queue, Other };
 
 struct Object {
@@ -139,7 +139,7 @@ void QueueDpc(uint32_t dpc, uint32_t arg1, uint32_t arg2);
 void SetTimer(ObjectRef timer, int64_t due, int32_t period_ms, uint32_t dpc);
 bool CancelTimer(Object& timer);
 
-// ---------------------------------------------------------------- threads
+// threads
 struct Thread : Object {
     uint32_t id = 0;
     uint32_t kpcr = 0, ethread = 0, stack_top = 0, stack_size = 0, tls = 0;
@@ -170,7 +170,7 @@ bool RunApcs(Thread& t);
 void QueueApc(Thread& t, uint32_t routine, uint32_t a1, uint32_t a2, uint32_t a3);
 std::vector<ThreadRef> Threads();
 
-// ---------------------------------------------------------------- files
+// files
 void MountDefaults(const std::string& game_dir, const std::string& data_dir);
 bool CreateSymbolicLink(const std::string& link, const std::string& target);
 bool DeleteSymbolicLink(const std::string& link);
@@ -178,9 +178,8 @@ std::string QuerySymbolicLink(const std::string& link);
 std::string ResolvePath(const std::string& xbox_path, uint32_t root_handle);  // host path or empty
 bool ReadGameFile(const std::string& xbox_path, std::vector<uint8_t>& out);  // from a host folder or the disc image
 
-// ---------------------------------------------------------------- boot
+// boot
 bool Boot(std::vector<uint8_t> xbe, const std::string& xbe_name, const std::string& game_dir, const std::string& data_dir);
-void RunForever();
 [[noreturn]] void Shutdown(int code);
 // the executable recompiled from an Xbox image path (D:\\default.xbe), null when there is none
 const char* ImageExe(std::string xbe_path);

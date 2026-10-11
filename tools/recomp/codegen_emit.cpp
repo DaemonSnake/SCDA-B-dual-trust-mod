@@ -105,6 +105,7 @@ std::string CodeGen::EmitFunction(uint32_t entry) {
     out += body_;
     if (seh) out += "\t} catch (const X86Resume& r) {\n\t\tif (r.esp >= x86_frame) throw;\n\t\tx86_resume(ctx, base, r);\n\t}\n";
     out += "}\n";
+    // weak, so a host function of the same name replaces it
     out += F("X86_WEAK_FUNC(%s, __imp__%s)\n\n", FuncName(entry).c_str(), FuncName(entry).c_str());
     return out;
 }
