@@ -251,6 +251,8 @@ bool Menu(Ui& u) {
     uint32_t point = g_point, clicks = input::Clicks();
     // a new page starts from where the cursor rests
     bool fresh = top != g_page;
+    if (fresh)  // TEMPORARY: stuck on Controls
+        LOGR("versus menu: top page %08X id %08X, %u on the input stack, focus %08X", top, id, first ? (last - first) / 8 : 0, focus);
     bool moved = Point(point) && point != g_point && !fresh, clicked = clicks != g_clicks && !fresh;
     bool pressing = input::Pressing() && !fresh, pressed = pressing && !g_pressing;
     g_pressing = pressing;

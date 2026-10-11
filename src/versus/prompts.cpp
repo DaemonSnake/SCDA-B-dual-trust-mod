@@ -1,7 +1,7 @@
 // Button prompts on keyboard and mouse. A pad icon with its caption beside it goes and the caption takes the key,
 // "(SHIFT) Select"; an icon on its own gets the key's name drawn in its place. Nothing is kept between frames, so the
 // icons are back as soon as the pad is. Texts with the pad's buttons inline ("Press \\2 to continue.") take the key
-// when they are looked up.
+// when they are looked up, or when drawn for texts given at run time (the tips page's localized array).
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -90,13 +90,13 @@ std::string Label(uint32_t material) {
     return out;
 }
 
-// a text's inline pad buttons: a backslash (the table writes two) and the button's code; A and B as the menu legends
-// have them (button_a / button_b above)
+// a text's inline pad buttons: a backslash (the table writes two) and the button's code; A, B and X as the menu
+// legends have them (button_a / button_b / button_x above). \\9 (spy bullet listen) is not known
 struct Inline {
     char16_t code;
     const char* key;
 };
-constexpr Inline kInline[] = {{u'2', "versus_interact"}, {u'6', "crouch"}};
+constexpr Inline kInline[] = {{u'2', "versus_interact"}, {u'4', "versus_scope"}, {u'6', "crouch"}};
 
 struct Act {
     enum Kind { Hide, Name, Caption, Skip };
@@ -306,7 +306,15 @@ X86_FUNC(sub_002690E0) {
 X86_EXTERN_FUNC(__imp__sub_00263C30);
 X86_FUNC(sub_00263C30) {
     const Act* act = g_acts.empty() ? nullptr : Find(ctx.ecx);
-    if (!act || act->kind == Act::Hide || act->kind == Act::Name) return __imp__sub_00263C30(ctx, base);
+    if (!act || act->kind == Act::Hide || act->kind == Act::Name) {
+        uint32_t drawer = R32(kDrawer), given = drawer ? R32(drawer + kGivenText) : 0;
+        uint32_t keyed = drawer ? versus::KeyText(given ? given : R32(ctx.ecx + 0xC)) : 0;
+        if (!keyed) return __imp__sub_00263C30(ctx, base);
+        W32(drawer + kGivenText, keyed);
+        __imp__sub_00263C30(ctx, base);
+        W32(drawer + kGivenText, given);
+        return;
+    }
     if (act->kind == Act::Skip) {
         ctx.esp += 4;
         return;
