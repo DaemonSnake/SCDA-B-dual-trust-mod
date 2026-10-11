@@ -162,7 +162,8 @@ void Levels(Voice& v, float g[2][2]) {
     uint32_t n = v.nbins ? v.nbins : 2, voices = (std::max<uint32_t>(v.channels, 1) - 1) / 2 + 1;
     uint32_t per = std::max<uint32_t>(n / voices, 2), step = v.channels == 1 ? 1 : 2;
     bool speakers = false;
-    for (uint32_t s = 0; s < n; s++) speakers |= bin[s] < 10 && bin[s] != 3;
+    // muted speaker bins do not count: such a voice is heard through its effect send
+    for (uint32_t s = 0; s < n; s++) speakers |= bin[s] < 10 && bin[s] != 3 && v.bin_mb[bin[s]] > -10000;
     for (uint32_t c = 0; c < 2; c++)
         for (uint32_t s = c; c < v.channels && s < per && s < n; s += step) {
             uint32_t b = bin[s];
