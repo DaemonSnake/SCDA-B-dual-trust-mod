@@ -10,7 +10,10 @@ echo.
 set "PF86=%ProgramFiles(x86)%"
 set "VSINST=%PF86%\Microsoft Visual Studio\Installer"
 set "VSWHERE=%VSINST%\vswhere.exe"
-set "OUT=%CD%\out\build\release"
+rem Use "build.bat debug" for the release build plus F3 dump, level select, full logs
+set "PRESET=release"
+if /i "%~1"=="debug" set "PRESET=debug"
+set "OUT=%CD%\out\build\%PRESET%"
 
 if not exist assets\default.xbe goto :nogame
 if not exist assets\sc4_adv.xbe goto :nogame
@@ -42,8 +45,8 @@ for /f "tokens=*" %%v in ('clang++ --version ^| findstr /i version') do echo    
 rem game
 echo [2/2] Game code
 echo       the first build recompiles default.xbe and sc4_adv.xbe: 30 to 90 minutes on weaker systems ...
-cmake --preset release >nul || goto :fail
-cmake --build out\build\release || goto :fail
+cmake --preset %PRESET% >nul || goto :fail
+cmake --build "%OUT%" || goto :fail
 rem the game's shadercache\ is a link to the one at the top (not in git): deleting out loses no shaders
 if not exist shadercache mkdir shadercache
 dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
@@ -56,8 +59,8 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.
-echo   out\build\release\SCDA.exe         story and co-op
-echo   out\build\release\SCDA_Versus.exe  versus, started from the main menu
+echo   out\build\%PRESET%\SCDA.exe         story and co-op
+echo   out\build\%PRESET%\SCDA_Versus.exe  versus, started from the main menu
 echo.
 if defined CI exit /b 0
 choice /c YN /n /m "  Play now? [Y/N] "

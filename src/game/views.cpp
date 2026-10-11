@@ -98,6 +98,15 @@ bool Targeting(uint32_t state) {
     return std::find(std::begin(kTargeting), std::end(kTargeting), state) != std::end(kTargeting);
 }
 
+// the other states whose PlayerMove moves the pawn only past m_gentleForce, as aiming does
+bool GentleMove(uint32_t state) {
+    static constexpr uint32_t kGentle[] = {
+        unreal::Name("s_EEV"),   unreal::Name("s_FirstPersonView"),
+        unreal::Name("s_Throw"), unreal::Name("s_Shoutout"),
+    };
+    return Sniping(state) || std::find(std::begin(kGentle), std::end(kGentle), state) != std::end(kGentle);
+}
+
 // controller IManager (EInteractionManager), its Interactions a TArray (+0 data, +4 count)
 bool InteractReloads(uint32_t pc, uint32_t state) {
     if (!Targeting(state)) return false;
@@ -146,7 +155,7 @@ void UpdateView(uint32_t viewport) {
     }
     input::SetView(view, zoom_speed);
     input::SetInteractReloads(InteractReloads(pc, state));
-    input::SetTargeting(Targeting(state));
+    input::SetTargeting(Targeting(state) || GentleMove(state));
     if (view == input::View::Eev && sniping) Sniper(pc);
     else if (view == input::View::Eev) Eev(pc);
     else g_zoomer = 0;

@@ -87,7 +87,7 @@ bool NetSession();
 // aiming with nothing to interact with, where the pad's A reloads: the keyboard's interact key leaves A alone, the
 // reload key reloads (in a synced session it holds A, as the pad would)
 void SetInteractReloads(bool on);
-// in a targeting state: the slowest walking speed stays past m_gentleForce, the least aiming moves at
+// aiming, the EEV, a scope: the slowest walking speed stays past m_gentleForce, the least these move at
 void SetTargeting(bool on);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
 bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is down now, with the window in front
