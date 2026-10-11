@@ -11,6 +11,7 @@ void MuteForVoiceLink(uint32_t stream);
 namespace {
 
 constexpr communicator::Types kTypes{0x312890, 0x31289C};
+constexpr uint32_t kTalkerStream = 0x18;  // talker: its DirectSound stream
 
 }  // namespace
 
@@ -45,7 +46,7 @@ X86_EXTERN_FUNC(__imp__sub_0021C9F4);
 X86_FUNC(sub_0021C9F4) {
     uint32_t self = ctx.ecx;
     __imp__sub_0021C9F4(ctx, base);
-    if (uint32_t stream = R32(self + 0x18)) {
+    if (uint32_t stream = R32(self + kTalkerStream)) {
         dsound::MuteForVoiceLink(stream);
         LOG_FIRST(4, "communicator: talker speaker stream %08X", stream);
     }

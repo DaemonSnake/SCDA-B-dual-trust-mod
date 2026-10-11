@@ -30,11 +30,22 @@ constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("
 constexpr uint32_t kLoadingPage = game::magma::Id("p_loading");
 static_assert(kLoadingPage == 0x50A0D1DB);
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width, +0xA0 height in pixels)
+constexpr uint32_t kMagmaViewport = 0x38;
+constexpr uint32_t kViewportWidth = 0x9C;
+constexpr uint32_t kViewportHeight = 0xA0;
 constexpr uint32_t kAddQuad = 0x1231E0;
-constexpr float kSlack = 2.0f, kMinWidth = 8.0f;  // pixels
+// pixels
+constexpr float kSlack = 2.0f;
+constexpr float kMinWidth = 8.0f;
 // the canvas is drawn 1.1 wide about its centre (10:11 pixels): this share of a page is off each screen side
 constexpr float kOff = 1.0f / 22;
 constexpr uint32_t kPicture = 256;  // a material this big both ways is a picture, smaller ones are fills
+// material vtable: +0x68 width, +0x6C height
+constexpr uint32_t kMaterialWidth = 0x68;
+constexpr uint32_t kMaterialHeight = 0x6C;
+constexpr uint32_t kPageId = 0x04;
+constexpr uint32_t kInstanceId = 0x08;
+constexpr uint32_t kBootDevice = 0x384EE4;
 
 enum class Mode { Stretch, Left, Centre, Right, Fill };
 
@@ -57,44 +68,61 @@ std::vector<Quad> g_quads;
 std::unordered_map<uint32_t, Mode> g_sides;
 
 float Width() {
-    uint32_t m = R32(kMagma), vp = m ? R32(m + 0x38) : 0;
-    return vp ? float(int(R32(vp + 0x9C))) : 0.0f;
+    uint32_t m = R32(kMagma);
+    uint32_t vp = m ? R32(m + kMagmaViewport) : 0;
+    return vp ? float(int(R32(vp + kViewportWidth))) : 0.0f;
 }
 
 float Height() {
-    uint32_t m = R32(kMagma), vp = m ? R32(m + 0x38) : 0;
-    return vp ? float(int(R32(vp + 0xA0))) : 0.0f;
+    uint32_t m = R32(kMagma);
+    uint32_t vp = m ? R32(m + kMagmaViewport) : 0;
+    return vp ? float(int(R32(vp + kViewportHeight))) : 0.0f;
+}
+
+// the share of the screen's spare width left of a placed quad
+float SideShare(Mode mode) {
+    if (mode == Mode::Left) return kOff;
+    if (mode == Mode::Right) return 1 - kOff;
+    return 0.5f;
 }
 
 // corners: 4 x {x, y, z}; true when a side was pulled out. Left and Right keep the distance to the screen side
 bool Place(float* c, Mode mode, float w) {
-    float lo = std::min({c[0], c[3], c[6], c[9]}), hi = std::max({c[0], c[3], c[6], c[9]});
-    bool fill = mode == Mode::Fill && hi - lo >= kMinWidth, pulled = false;
+    float lo = std::min({c[0], c[3], c[6], c[9]});
+    float hi = std::max({c[0], c[3], c[6], c[9]});
+    bool fill = mode == Mode::Fill && hi - lo >= kMinWidth;
+    bool pulled = false;
     float k = app::Narrow();
-    float offset = w * (1 - k) * (mode == Mode::Left ? kOff : mode == Mode::Right ? 1 - kOff : 0.5f);
+    float offset = w * (1 - k) * SideShare(mode);
     for (int i = 0; i < 12; i += 3) {
         float& x = c[i];
         if (mode == Mode::Stretch) continue;
-        if (fill && (x <= kSlack || x >= w - kSlack)) x = x <= kSlack ? -1.0f : w + 1.0f, pulled = true;
-        else x = x * k + offset;
+        if (fill && (x <= kSlack || x >= w - kSlack)) {
+            x = x <= kSlack ? -1.0f : w + 1.0f;
+            pulled = true;
+        } else {
+            x = x * k + offset;
+        }
     }
     return pulled;
 }
 
 // the quad's material (sixth argument), sizes from its vtable +0x68 / +0x6C; 0 x 0 for none
 void MaterialSize(X86Context& ctx, uint32_t& width, uint32_t& height) {
-    uint32_t material = R32(ctx.esp + 0x18), ecx = ctx.ecx;
+    uint32_t material = R32(ctx.esp + 0x18);
+    uint32_t ecx = ctx.ecx;
     width = height = 0;
     if (!material) return;
     ctx.ecx = material;
-    width = CallGuest(ctx, R32(R32(material) + 0x68), {});
+    width = CallGuest(ctx, R32(R32(material) + kMaterialWidth), {});
     ctx.ecx = material;
-    height = CallGuest(ctx, R32(R32(material) + 0x6C), {});
+    height = CallGuest(ctx, R32(R32(material) + kMaterialHeight), {});
     ctx.ecx = ecx;
 }
 
 bool Picture(X86Context& ctx) {
-    uint32_t width, height;
+    uint32_t width;
+    uint32_t height;
     MaterialSize(ctx, width, height);
     return width >= kPicture && height >= kPicture;
 }
@@ -103,9 +131,11 @@ bool Picture(X86Context& ctx) {
 // its bottom. Zoomed about the screen centre until the page's full width (the canvas is 1.1 wide) is the screen's,
 // both ways by the same share of its 4:3 place: no stretch, the top and bottom cropped.
 bool Background(X86Context& ctx, float* c, float w, float h) {
-    float top = std::min({c[1], c[4], c[7], c[10]}), bottom = std::max({c[1], c[4], c[7], c[10]});
+    float top = std::min({c[1], c[4], c[7], c[10]});
+    float bottom = std::max({c[1], c[4], c[7], c[10]});
     if (h <= 0.0f || top > kSlack || bottom < h - kSlack) return false;
-    uint32_t width, height;
+    uint32_t width;
+    uint32_t height;
     MaterialSize(ctx, width, height);
     if (height < kPicture) return false;
     float zoom = 1.0f / (1.1f * app::Narrow());
@@ -114,6 +144,14 @@ bool Background(X86Context& ctx, float* c, float w, float h) {
         c[i + 1] = h / 2 + (c[i + 1] - h / 2) * zoom;
     }
     return true;
+}
+
+// where a HUD instance sits: across the screen, left half, right half or centre
+Mode SideOf(float lo, float hi, float w) {
+    if (lo <= kSlack && hi >= w - kSlack) return Mode::Stretch;
+    if (hi <= w / 2 + kSlack) return Mode::Left;
+    if (lo >= w / 2 - kSlack) return Mode::Right;
+    return Mode::Centre;
 }
 
 }  // namespace
@@ -134,7 +172,7 @@ X86_FUNC(sub_0011B720) {
 // Magma page draw (thiscall, +4 id), also the vtable entry the frame calls for every page
 X86_EXTERN_FUNC(__imp__sub_0025A3F0);
 X86_FUNC(sub_0025A3F0) {
-    uint32_t id = R32(ctx.ecx + 4);
+    uint32_t id = R32(ctx.ecx + kPageId);
     bool saved = g_hud;
     g_hud = std::find(std::begin(kHudPages), std::end(kHudPages), id) != std::end(kHudPages);
     static std::vector<uint32_t> seen;
@@ -158,7 +196,7 @@ X86_FUNC(sub_0025A3F0) {
 X86_EXTERN_FUNC(__imp__sub_002620A0);
 X86_FUNC(sub_002620A0) {
     if (!g_hud || g_capture || !app::Widescreen()) return __imp__sub_002620A0(ctx, base);
-    uint32_t id = R32(ctx.ecx + 8);
+    uint32_t id = R32(ctx.ecx + kInstanceId);
     g_capture = true;
     __imp__sub_002620A0(ctx, base);
     g_capture = false;
@@ -166,17 +204,20 @@ X86_FUNC(sub_002620A0) {
     quads.swap(g_quads);
     float w = Width();
     if (quads.empty() || w <= 0.0f) return;
-    float lo = w, hi = 0.0f;
-    for (auto& q : quads)
-        for (int i = 0; i < 12; i += 3) lo = std::min(lo, q.corners[i]), hi = std::max(hi, q.corners[i]);
-    Mode mode = lo <= kSlack && hi >= w - kSlack ? Mode::Stretch
-                : hi <= w / 2 + kSlack           ? Mode::Left
-                : lo >= w / 2 - kSlack           ? Mode::Right
-                                                 : Mode::Centre;
+    float lo = w;
+    float hi = 0.0f;
+    for (auto& q : quads) {
+        for (int i = 0; i < 12; i += 3) {
+            lo = std::min(lo, q.corners[i]);
+            hi = std::max(hi, q.corners[i]);
+        }
+    }
+    Mode mode = SideOf(lo, hi, w);
     if (mode == Mode::Left || mode == Mode::Right) g_sides[id] = mode;
     else if (auto side = g_sides.find(id); mode == Mode::Centre && side != g_sides.end()) mode = side->second;
     LOG_FIRST(100, "versus widescreen: instance %08X x %.0f..%.0f mode %d", id, lo, hi, int(mode));
-    uint32_t esp = ctx.esp, corners = (esp - 0x40) & ~0xFu;
+    uint32_t esp = ctx.esp;
+    uint32_t corners = (esp - 0x40) & ~0xFu;
     ctx.esp = corners;
     g_replay = true;
     g_mode = mode;
@@ -253,7 +294,7 @@ X86_FUNC(sub_00011BE0) {
 // whatever was drawn since the last one
 X86_EXTERN_FUNC(__imp__sub_00012F90);
 X86_FUNC(sub_00012F90) {
-    if (R32(0x384EE4)) gpu::g_splash = true;
+    if (R32(kBootDevice)) gpu::g_splash = true;
     gpu::g_in_splash++;
     __imp__sub_00012F90(ctx, base);
     gpu::g_in_splash--;

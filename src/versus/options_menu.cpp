@@ -36,38 +36,72 @@ constexpr int kRowStep = 24;  // the stock rows' spacing, y 250 to 322
 
 // menus: the base constructor (thiscall menu, FString* package, FString* page, ret 8) keeps the names the push
 // (cdecl (menu, 1, 1)) finds the page by, then calls the open (vtable slot 6, thiscall, no arguments)
-constexpr uint32_t kMenuSize = 0x10C, kMenuCtor = 0x1AA210, kMenuVtable = 0x338BD8, kMenuSlots = 13, kOpenSlot = 6;
-constexpr uint32_t kBaseOpen = 0x1AA0D0, kPush = 0x193950;
+constexpr uint32_t kMenuSize = 0x10C;
+constexpr uint32_t kMenuCtor = 0x1AA210;
+constexpr uint32_t kMenuVtable = 0x338BD8;
+constexpr uint32_t kMenuSlots = 13;
+constexpr uint32_t kOpenSlot = 6;
+constexpr uint32_t kBaseOpen = 0x1AA0D0;
+constexpr uint32_t kPush = 0x193950;
 // slot 1 runs as a menu comes on top again (after the one over it went): the base's does nothing, P_Options' and
 // P_Options_Game's set the legend, (B) Back (A) Ok, which the page over it changed
-constexpr uint32_t kLegendSlot = 1, kOptionsLegend = 0x1C44B0;
+constexpr uint32_t kLegendSlot = 1;
+constexpr uint32_t kOptionsLegend = 0x1C44B0;
 constexpr uint32_t kFString = 0x16540;      // thiscall (FString, const char*): {wide text, count, capacity}
+constexpr uint32_t kFStringSize = 0x0C;
 constexpr uint32_t kPage = 0x28;             // menu: its Magma page
+constexpr uint32_t kPageId = 0x04;
 // an instance's handler (bound by thiscall menu (handler, instance id), ret 8): a refcounted object {vtable,
 // refcount, ..} whose vtable +0x10 is the press (thiscall (one argument), ret 4) and +0x18 the other events
 // (thiscall (?, event*), ret 8), both true when handled; the Game button's vtable
-constexpr uint32_t kBind = 0x193A20, kHandlerVtable = 0x338E48, kHandlerSlots = 8, kPressSlot = 4, kEventSlot = 6;
+constexpr uint32_t kBind = 0x193A20;
+constexpr uint32_t kHandlerVtable = 0x338E48;
+constexpr uint32_t kHandlerSlots = 8;
+constexpr uint32_t kPressSlot = 4;
+constexpr uint32_t kEventSlot = 6;
 constexpr uint32_t kHandlerTail = 0x3380E0;
+constexpr uint32_t kHandlerRefcount = 0x04;
+constexpr uint32_t kHandlerField8 = 0x08;  // 1, as the Game button's
+constexpr uint32_t kHandlerTailField = 0x0C;
+constexpr uint32_t kHandlerKind = 0x10;  // ours: what it opens
 // B as P_Options takes it, in its menu's key slot 10 (thiscall (key, action, ?), ret 0xC, true when handled): on
 // B's release (IK_Joy2 0xC9, IST_Release 3) the menu is popped (cdecl, no arguments). Taken on the press (handler
 // event 0x81) instead, the release would pop the menu under it as well.
-constexpr uint32_t kKeySlot = 10, kJoyB = 0xC9, kRelease = 3, kPopMenu = 0x193E40;
-constexpr uint32_t kSoundPlayer = 0x3D8D78, kBackSound = 2;  // the sound player's vtable +8
-constexpr uint32_t kLeft = 0x25, kUp = 0x26, kRight = 0x27, kDown = 0x28;  // events: the directions' virtual keys
+constexpr uint32_t kKeySlot = 10;
+constexpr uint32_t kJoyB = 0xC9;
+constexpr uint32_t kRelease = 3;
+constexpr uint32_t kPopMenu = 0x193E40;
+// the sound player's vtable +8
+constexpr uint32_t kSoundPlayer = 0x3D8D78;
+constexpr uint32_t kBackSound = 2;
+constexpr uint32_t kPlaySound = 0x08;
+// events: the directions' virtual keys
+constexpr uint32_t kLeft = 0x25;
+constexpr uint32_t kUp = 0x26;
+constexpr uint32_t kRight = 0x27;
+constexpr uint32_t kDown = 0x28;
 constexpr uint32_t kSelectSound = 1;             // as a stock page's X press plays
 // a popup pushes over the page under it (cdecl (menu, 0, 1)), a page in its place (menu, 1, 1)
 constexpr uint32_t kSelect = 0x25EE00;  // list widget: thiscall (row, notify), ret 8
 constexpr uint32_t kFind = 0x25A320;  // thiscall page (instance id)
 // list widget (the instance's +0x10): Clear, AddItem (text, data) -> row, Part (element id) -> column,
 // SetText (row, column, text), which keeps the pointer
-constexpr uint32_t kWidget = 0x10, kClear = 0x260B40, kAddItem = 0x261AB0, kPart = 0x260540, kSetText = 0x2605F0;
+constexpr uint32_t kWidget = 0x10;
+constexpr uint32_t kClear = 0x260B40;
+constexpr uint32_t kAddItem = 0x261AB0;
+constexpr uint32_t kPart = 0x260540;
+constexpr uint32_t kSetText = 0x2605F0;
 constexpr uint32_t kEmpty = 0x31BA80;  // L""
 constexpr uint32_t kTextString = 0x0C;  // text widget: its string
 constexpr uint32_t kSelection = 0x54;   // list widget: the row selected
 
 // our pages, each a stock page's frame with a list in place of its own rows
 struct List {
-    std::string_view package, page, list, item, position;
+    std::string_view package;
+    std::string_view page;
+    std::string_view list;
+    std::string_view item;
+    std::string_view position;
     int rows;
 };
 // in P_Options' frame on its own rows (B_MainItem)
@@ -75,12 +109,18 @@ constexpr List kSectionList{"Options", "P_Options_RecompSections", "SectionList"
 // in P_Options_Game's on ours, where its option rows were: 21 high from y 176, down to the frame's bottom
 constexpr std::string_view kItem = "B_RecompItem";
 constexpr List kRowList{"Options", "P_Options_Recomp", "RecompList", kItem, "50 176", 10};
-constexpr int kRowListY = 176, kRowHeight = 21;
+constexpr int kRowListY = 176;
+constexpr int kRowHeight = 21;
 // a RECOMP SETTINGS section's few rows sit in the middle of the frame under the title (y 84 to 405)
 constexpr int kFrameMiddle = 245;
 // an instance's place: its keyframes' (+0x18 begin, end; keyframe +0x18) and its widget's (+4) position frames
 // (vtable 0x361FC8, +0xE y, page units)
-constexpr uint32_t kKeyframes = 0x18, kKeyFrame = 0x18, kWidgetFrame = 0x04, kPositionFrame = 0x361FC8, kFrameY = 0x0E;
+constexpr uint32_t kKeyframes = 0x18;
+constexpr uint32_t kKeyframesEnd = 0x1C;
+constexpr uint32_t kKeyFrame = 0x18;
+constexpr uint32_t kWidgetFrame = 0x04;
+constexpr uint32_t kPositionFrame = 0x361FC8;
+constexpr uint32_t kFrameY = 0x0E;
 // the popup over the rows: P_TeamsActionPopup's list at the map list popup's place (P_createMatchParamsPopup in
 // entry, whose B_OptionItem xboxlive has too), on a background as that one's
 constexpr List kChoiceList{"xboxlive", "P_Options_RecompPopup", "ChoiceList", "B_OptionItem", "50 267", 4};
@@ -89,10 +129,14 @@ constexpr std::string_view kPopupBackground[] = {"246", "404"};  // top, bottom
 constexpr std::string_view kSections[] = {"DISPLAY", "GRAPHICS", "GENERAL"};
 // our menus keep their page (0 sections, 1 rows, 2 popup), the button's mode and the section heading's row past the
 // base menu's fields (P_Options_Game's own start at +0xC8)
-constexpr uint32_t kMenuKind = 0x100, kMenuMode = 0x104, kMenuSection = 0x108;
+constexpr uint32_t kMenuKind = 0x100;
+constexpr uint32_t kMenuMode = 0x104;
+constexpr uint32_t kMenuSection = 0x108;
 
 struct Button {
-    std::string_view name, label, title;
+    std::string_view name;
+    std::string_view label;
+    std::string_view title;
 };
 // labels in capitals as the stock rows, the page title as Options' own
 constexpr Button kButtons[] = {{"RecompSettings", "RECOMP SETTINGS", "Recomp Settings"},
@@ -113,7 +157,10 @@ static_assert(Id("Online") == 0x9E32BEEA && Id("B_MainItem") == 3405425947u);
 // game thread
 uint32_t g_sections = 0;  // the sections menu open, for its list's press
 struct Rows {
-    uint32_t menu = 0, list = 0, value = 0;  // the rows menu open, its list widget and value column
+    // the rows menu open, its list widget and value column
+    uint32_t menu = 0;
+    uint32_t list = 0;
+    uint32_t value = 0;
     int mode = 0;
     std::vector<const app::rows::Row*> rows;  // per list row, kGap a blank row, null restores defaults
 };
@@ -132,7 +179,8 @@ Popup g_popup;
 
 // the text between <tag> and </tag>, the first from `from`; false when there is none
 bool SetTag(std::string& xml, std::string_view tag, std::string_view value, size_t from = 0) {
-    std::string open = "<" + std::string(tag) + ">", close = "</" + std::string(tag) + ">";
+    std::string open = "<" + std::string(tag) + ">";
+    std::string close = "</" + std::string(tag) + ">";
     size_t a = xml.find(open, from);
     size_t b = a == std::string::npos ? a : xml.find(close, a);
     if (b == std::string::npos) return false;
@@ -141,13 +189,16 @@ bool SetTag(std::string& xml, std::string_view tag, std::string_view value, size
 }
 
 void SetEvery(std::string& xml, std::string_view tag, std::string_view value) {
-    for (size_t at = 0; (at = xml.find("<" + std::string(tag) + ">", at)) != std::string::npos; at++) SetTag(xml, tag, value, at);
+    for (size_t at = 0; (at = xml.find("<" + std::string(tag) + ">", at)) != std::string::npos; at++)
+        SetTag(xml, tag, value, at);
 }
 
 // every keyframe's POSITION "x y" moved down
 void MoveDown(std::string& xml, int dy) {
     for (size_t at = xml.find("<POSITION>"); at != std::string::npos; at = xml.find("<POSITION>", at + 1)) {
-        size_t start = at + 10, end = xml.find("</POSITION>", start), space = xml.find(' ', start);
+        size_t start = at + 10;
+        size_t end = xml.find("</POSITION>", start);
+        size_t space = xml.find(' ', start);
         if (end == std::string::npos || space > end) return;
         int y = std::atoi(xml.c_str() + space + 1);
         xml.replace(space + 1, end - space - 1, std::to_string(y + dy));
@@ -155,8 +206,10 @@ void MoveDown(std::string& xml, int dy) {
 }
 
 // the <tag> block holding <NAME>name</NAME>, from `from`: [begin, end)
-bool Block(const std::string& xml, std::string_view tag, std::string_view name, size_t from, size_t& begin, size_t& end) {
-    std::string open = "<" + std::string(tag) + ">", close = "</" + std::string(tag) + ">";
+bool Block(const std::string& xml, std::string_view tag, std::string_view name, size_t from, size_t& begin,
+           size_t& end) {
+    std::string open = "<" + std::string(tag) + ">";
+    std::string close = "</" + std::string(tag) + ">";
     size_t at = xml.find("<NAME>" + std::string(name) + "</NAME>", from);
     if (at == std::string::npos) return false;
     begin = xml.rfind(open, at);
@@ -171,7 +224,8 @@ std::string_view NewLine(const std::string& xml) { return xml.find("\r\n") != st
 // the keyframes of an element block whose IDX is one of `keep`
 std::string KeepFrames(std::string block, std::initializer_list<int> keep) {
     for (size_t at = block.find("<KEYFRAME>"); at != std::string::npos;) {
-        size_t end = block.find("</KEYFRAME>", at), idx = block.find("<IDX>", at);
+        size_t end = block.find("</KEYFRAME>", at);
+        size_t idx = block.find("<IDX>", at);
         if (end == std::string::npos || idx == std::string::npos) break;
         end += std::strlen("</KEYFRAME>");
         int frame = std::atoi(block.c_str() + idx + 5);
@@ -189,17 +243,26 @@ std::string KeepFrames(std::string block, std::initializer_list<int> keep) {
 // common: B_RecompItem, a button made of the option rows' CHK_Default (frames 0 enabled, 20 disabled, 30 selected,
 // which are a button's too): its bar `back`, its label LBL_Text as ItemText and a copy of it on the right, ItemValue
 bool SpliceItem(std::string& xml) {
-    size_t begin = 0, end = 0, b0 = 0, b1 = 0, t0 = 0, t1 = 0;
-    if (xml.find("<NAME>" + std::string(kItem) + "</NAME>") != std::string::npos || !Block(xml, "CheckBox", "CHK_Default", 0, begin, end))
+    size_t begin = 0;
+    size_t end = 0;
+    size_t b0 = 0;
+    size_t b1 = 0;
+    size_t t0 = 0;
+    size_t t1 = 0;
+    if (xml.find("<NAME>" + std::string(kItem) + "</NAME>") != std::string::npos ||
+        !Block(xml, "CheckBox", "CHK_Default", 0, begin, end))
         return false;
     std::string check = xml.substr(begin, end - begin);
     size_t children = check.find("<CHILDREN>");
-    if (children == std::string::npos || !Block(check, "IMAGE", "back", 0, b0, b1) || !Block(check, "TEXT", "LBL_Text", 0, t0, t1))
+    if (children == std::string::npos || !Block(check, "IMAGE", "back", 0, b0, b1) ||
+        !Block(check, "TEXT", "LBL_Text", 0, t0, t1))
         return false;
     std::string_view nl = NewLine(xml);
-    std::string head = "<Button>" + check.substr(std::strlen("<CheckBox>"), children + std::strlen("<CHILDREN>") - std::strlen("<CheckBox>"));
+    std::string head = "<Button>" + check.substr(std::strlen("<CheckBox>"),
+                                                 children + std::strlen("<CHILDREN>") - std::strlen("<CheckBox>"));
     std::string back = KeepFrames(check.substr(b0, b1 - b0), {0, 20, 30});
-    std::string label = KeepFrames(check.substr(t0, t1 - t0), {0, 20, 30}), value = label;
+    std::string label = KeepFrames(check.substr(t0, t1 - t0), {0, 20, 30});
+    std::string value = label;
     if (!SetTag(head, "ID", std::to_string(Id(kItem))) || !SetTag(head, "NAME", kItem)) return false;
     SetTag(label, "ID", std::to_string(Id("ItemText")));
     SetTag(label, "NAME", "ItemText");
@@ -209,9 +272,10 @@ bool SpliceItem(std::string& xml) {
     SetEvery(value, "LEFT", "260");
     SetEvery(value, "RIGHT", "525");
     SetEvery(value, "ALIGNMENT", "RIGHT");
-    std::string n(nl), item = head + n + back + n + label + n + value + n + "</CHILDREN>" + n + "<TIMINGS>" + n +
-                            "<ENABLED>0</ENABLED>" + n + "<PRESSED>10</PRESSED>" + n + "<DISABLED>20</DISABLED>" + n +
-                            "<SELECTED>30</SELECTED>" + n + "<OVER>40</OVER>" + n + "</TIMINGS>" + n + "</Button>";
+    std::string n(nl);
+    std::string item = head + n + back + n + label + n + value + n + "</CHILDREN>" + n + "<TIMINGS>" + n +
+                       "<ENABLED>0</ENABLED>" + n + "<PRESSED>10</PRESSED>" + n + "<DISABLED>20</DISABLED>" + n +
+                       "<SELECTED>30</SELECTED>" + n + "<OVER>40</OVER>" + n + "</TIMINGS>" + n + "</Button>";
     xml.insert(end, n + item);
     return true;
 }
@@ -220,14 +284,19 @@ std::string ListXml(const List& l, std::string_view nl) {
     std::string keyframes;
     for (auto [idx, alpha] : {std::pair{0, 0}, std::pair{3, 255}})
         keyframes += "<KEYFRAME>\n<IDX>" + std::to_string(idx) + "</IDX>\n<INTERPOLATION>" + (idx ? "Linear" : "None") +
-                     "</INTERPOLATION>\n<POSITION>" + std::string(l.position) + "</POSITION>\n<ROTATION>0</ROTATION>\n<STATECOLOR>255 255 255 " +
+                     "</INTERPOLATION>\n<POSITION>" + std::string(l.position) +
+                     "</POSITION>\n<ROTATION>0</ROTATION>\n<STATECOLOR>255 255 255 " +
                      std::to_string(alpha) + "</STATECOLOR>\n<ACTIONS/>\n</KEYFRAME>\n";
     std::string list = "<LIST>\n<ID>" + std::to_string(Id(l.list)) + "</ID>\n<NAME>" + std::string(l.list) +
-                       "</NAME>\n<HIDDEN>0</HIDDEN>\n<LOCKED>0</LOCKED>\n<MASKMODE>NOMASK</MASKMODE>\n<KEYFRAMES>\n" + keyframes +
+                       "</NAME>\n<HIDDEN>0</HIDDEN>\n<LOCKED>0</LOCKED>\n<MASKMODE>NOMASK</MASKMODE>\n<KEYFRAMES>\n" +
+                       keyframes +
                        "</KEYFRAMES>\n<KEYFRAMESOPT>1</KEYFRAMESOPT>\n<BUTTONCOUNT>" + std::to_string(l.rows) +
-                       "</BUTTONCOUNT>\n<HEADERFOOTERPOS>Top and Bottom</HEADERFOOTERPOS>\n<ITEMLINK>\n<PACKAGE>common</PACKAGE>\n<AREA>" +
-                       std::to_string(Id(l.item)) + "</AREA>\n</ITEMLINK>\n<HEADERLINK/>\n<FOOTERLINK/>\n<NEIGHBORS>\n<UP>NULL</UP>\n"
-                       "<DOWN>NULL</DOWN>\n<LEFT>NULL</LEFT>\n<RIGHT>NULL</RIGHT>\n</NEIGHBORS>\n<DEFAULT>1</DEFAULT>\n</LIST>\n";
+                       "</BUTTONCOUNT>\n<HEADERFOOTERPOS>Top and Bottom</HEADERFOOTERPOS>\n<ITEMLINK>\n"
+                       "<PACKAGE>common</PACKAGE>\n<AREA>" +
+                       std::to_string(Id(l.item)) + "</AREA>\n</ITEMLINK>\n<HEADERLINK/>\n<FOOTERLINK/>\n"
+                       "<NEIGHBORS>\n<UP>NULL</UP>\n"
+                       "<DOWN>NULL</DOWN>\n<LEFT>NULL</LEFT>\n<RIGHT>NULL</RIGHT>\n</NEIGHBORS>\n<DEFAULT>1</DEFAULT>\n"
+                       "</LIST>\n";
     std::string out;
     for (char c : list) {
         if (c == '\n') out += nl;
@@ -239,14 +308,17 @@ std::string ListXml(const List& l, std::string_view nl) {
 // a copy of page `source` after it, without its option rows (buttons, checkboxes, the aiming slider with its label,
 // value and bar) and with list `l` instead
 bool AddPage(std::string& xml, std::string_view source, const List& l, std::string_view nl) {
-    size_t at = xml.find("<NAME>" + std::string(source) + "</NAME>"), begin = 0, end = 0;
+    size_t at = xml.find("<NAME>" + std::string(source) + "</NAME>");
+    size_t begin = 0;
+    size_t end = 0;
     size_t page_begin = at == std::string::npos ? at : xml.rfind("<Page>", at);
     size_t page_end = at == std::string::npos ? at : xml.find("</Page>", at);
     if (page_begin == std::string::npos || page_end == std::string::npos) return false;
     page_end += 7;
     std::string ours = xml.substr(page_begin, page_end - page_begin);
     auto drop = [&](std::string_view tag, std::string_view name) {
-        while (name.empty() ? (begin = ours.find("<" + std::string(tag) + ">")) != std::string::npos : Block(ours, tag, name, 0, begin, end)) {
+        while (name.empty() ? (begin = ours.find("<" + std::string(tag) + ">")) != std::string::npos
+                            : Block(ours, tag, name, 0, begin, end)) {
             end = ours.find("</" + std::string(tag) + ">", begin) + tag.size() + 3;
             if (ours.compare(end, nl.size(), nl) == 0) end += nl.size();
             ours.erase(begin, end - begin);
@@ -268,11 +340,14 @@ bool AddPage(std::string& xml, std::string_view source, const List& l, std::stri
 
 // Options: our buttons after Online, and our pages
 bool SpliceOptions(std::string& xml) {
-    size_t page = xml.find("<NAME>P_Options</NAME>"), begin = 0, end = 0;
+    size_t page = xml.find("<NAME>P_Options</NAME>");
+    size_t begin = 0;
+    size_t end = 0;
     if (page == std::string::npos || xml.find("<NAME>" + std::string(kRowList.page) + "</NAME>") != std::string::npos ||
         !Block(xml, "BUTTONINST", "Online", page, begin, end))
         return false;
-    std::string online = xml.substr(begin, end - begin), added;
+    std::string online = xml.substr(begin, end - begin);
+    std::string added;
     std::string_view up = "Online";
     for (size_t i = 0; i < std::size(kButtons); i++) {
         std::string b = online;
@@ -286,7 +361,8 @@ bool SpliceOptions(std::string& xml) {
     }
     if (!SetTag(online, "DOWN", kButtons[0].name)) return false;
     xml.replace(begin, end - begin, online + added);
-    if (!Block(xml, "BUTTONINST", "Game", page, begin, end) || !SetTag(xml, "UP", kButtons[std::size(kButtons) - 1].name, begin))
+    if (!Block(xml, "BUTTONINST", "Game", page, begin, end) ||
+        !SetTag(xml, "UP", kButtons[std::size(kButtons) - 1].name, begin))
         return false;
 
     std::string_view nl = NewLine(xml);
@@ -296,7 +372,9 @@ bool SpliceOptions(std::string& xml) {
 
 // xboxlive: our popup, a copy of P_TeamsActionPopup with its list where the map list's popup has it
 bool SplicePopup(std::string& xml) {
-    size_t at = xml.find("<NAME>P_TeamsActionPopup</NAME>"), begin = 0, end = 0;
+    size_t at = xml.find("<NAME>P_TeamsActionPopup</NAME>");
+    size_t begin = 0;
+    size_t end = 0;
     size_t page_begin = at == std::string::npos ? at : xml.rfind("<Page>", at);
     size_t page_end = at == std::string::npos ? at : xml.find("</Page>", at);
     if (page_begin == std::string::npos || page_end == std::string::npos ||
@@ -389,7 +467,8 @@ void SetY(uint32_t inst, int y) {
     auto set = [&](uint32_t frame) {
         if (frame && R32(frame) == kPositionFrame) W16(frame + kFrameY, uint16_t(int16_t(y)));
     };
-    uint32_t begin = R32(inst + kKeyframes), end = R32(inst + kKeyframes + 4);
+    uint32_t begin = R32(inst + kKeyframes);
+    uint32_t end = R32(inst + kKeyframesEnd);
     if (begin && end >= begin && end - begin <= 4 * 64)
         for (uint32_t it = begin; it < end; it += 4)
             if (uint32_t key = R32(it)) set(R32(key + kKeyFrame));
@@ -410,7 +489,8 @@ void SetTitle(X86Context& ctx, uint32_t page, const std::u16string& text) {
 }
 
 void FillSections(X86Context& ctx, uint32_t menu) {
-    uint32_t page = R32(menu + kPage), list = ListOf(ctx, page, kSectionList.list);
+    uint32_t page = R32(menu + kPage);
+    uint32_t list = ListOf(ctx, page, kSectionList.list);
     SetTitle(ctx, page, Titled(kButtons[0].label));
     if (!list) {
         LOGI("versus options: no list on %s", std::string(kSectionList.page).c_str());
@@ -442,18 +522,63 @@ void Values(X86Context& ctx) {
             continue;
         }
         const app::rows::Row& r = *g_rows.rows[i];
-        std::string v = app::rows::Value(r), key = app::TitleCase(v);
-        std::u16string text = r.kind == Kind::Value || v == "UNBOUND" ? Rows(v) : std::u16string(key.begin(), key.end());
+        std::string v = app::rows::Value(r);
+        std::string key = app::TitleCase(v);
+        std::u16string text =
+            r.kind == Kind::Value || v == "UNBOUND" ? Rows(v) : std::u16string(key.begin(), key.end());
         ctx.ecx = g_rows.list;
         CallGuest(ctx, kSetText, {uint32_t(i), g_rows.value, Guest(text)});
     }
 }
 
-void FillRows(X86Context& ctx, uint32_t menu) {
+// the rows our list shows, into g_rows
+void CollectRows(const app::rows::Row* rows, size_t count, int section, bool in_section) {
     using app::rows::Kind;
-    int mode = int(R32(menu + kMenuMode)), section = int(R32(menu + kMenuSection));
-    uint32_t page = R32(menu + kPage), list = ListOf(ctx, page, kRowList.list);
-    size_t count = 0, shown = 0;
+    // a section's value rows up to the next heading; MOUSE AND KEYBOARD and CONTROLLER with a blank row for each
+    // heading but the first, then a blank row and RESTORE DEFAULTS
+    for (size_t i = in_section ? size_t(section) + 1 : 0; i < count; i++) {
+        const app::rows::Row& r = rows[i];
+        if (r.kind == Kind::Heading && in_section) break;
+        if (r.kind == Kind::Heading && !g_rows.rows.empty()) g_rows.rows.push_back(&kGap);
+        if (r.kind == Kind::Heading || r.kind == Kind::Text || (r.kind == Kind::Value && !app::rows::Shown(r)))
+            continue;
+        g_rows.rows.push_back(&r);
+    }
+    if (!in_section) {
+        g_rows.rows.push_back(&kGap);
+        g_rows.rows.push_back(nullptr);
+    }
+}
+
+// one page serves them all: its list's place is set for each
+void PlaceList(X86Context& ctx, uint32_t page, bool in_section) {
+    ctx.ecx = page;
+    if (uint32_t inst = CallGuest(ctx, kFind, {Id(kRowList.list)})) {
+        int rows_shown = int(std::min<size_t>(g_rows.rows.size(), size_t(kRowList.rows)));
+        SetY(inst, in_section ? kFrameMiddle - rows_shown * kRowHeight / 2 : kRowListY);
+    }
+}
+
+// the list's rows with their labels; the count added
+size_t AddRows(X86Context& ctx, uint32_t list, uint32_t label) {
+    size_t shown = 0;
+    for (const app::rows::Row* r : g_rows.rows) {
+        ctx.ecx = list;
+        uint32_t row = CallGuest(ctx, kAddItem, {kEmpty, 0});
+        ctx.ecx = list;
+        CallGuest(ctx, kSetText,
+                  {row, label, r == &kGap ? kEmpty : Guest(Rows(r ? r->label : "RESTORE DEFAULTS"))});
+        shown++;
+    }
+    return shown;
+}
+
+void FillRows(X86Context& ctx, uint32_t menu) {
+    int mode = int(R32(menu + kMenuMode));
+    int section = int(R32(menu + kMenuSection));
+    uint32_t page = R32(menu + kPage);
+    uint32_t list = ListOf(ctx, page, kRowList.list);
+    size_t count = 0;
     const app::rows::Row* rows = app::rows::Page(mode, &count);
     bool in_section = mode == 0 && section >= 0 && size_t(section) < count;
     SetTitle(ctx, page, Titled(in_section ? rows[section].label : kButtons[mode].label));
@@ -468,34 +593,12 @@ void FillRows(X86Context& ctx, uint32_t menu) {
     ctx.ecx = list;
     CallGuest(ctx, kClear, {});
     g_rows = {menu, list, value, mode, {}};
-    // a section's value rows up to the next heading; MOUSE AND KEYBOARD and CONTROLLER with a blank row for each
-    // heading but the first, then a blank row and RESTORE DEFAULTS
-    for (size_t i = in_section ? size_t(section) + 1 : 0; i < count; i++) {
-        const app::rows::Row& r = rows[i];
-        if (r.kind == Kind::Heading && in_section) break;
-        if (r.kind == Kind::Heading && !g_rows.rows.empty()) g_rows.rows.push_back(&kGap);
-        if (r.kind == Kind::Heading || r.kind == Kind::Text || (r.kind == Kind::Value && !app::rows::Shown(r))) continue;
-        g_rows.rows.push_back(&r);
-    }
-    if (!in_section) {
-        g_rows.rows.push_back(&kGap);
-        g_rows.rows.push_back(nullptr);
-    }
-    // one page serves them all: its list's place is set for each
-    ctx.ecx = page;
-    if (uint32_t inst = CallGuest(ctx, kFind, {Id(kRowList.list)})) {
-        int rows_shown = int(std::min<size_t>(g_rows.rows.size(), size_t(kRowList.rows)));
-        SetY(inst, in_section ? kFrameMiddle - rows_shown * kRowHeight / 2 : kRowListY);
-    }
-    for (const app::rows::Row* r : g_rows.rows) {
-        ctx.ecx = list;
-        uint32_t row = CallGuest(ctx, kAddItem, {kEmpty, 0});
-        ctx.ecx = list;
-        CallGuest(ctx, kSetText, {row, label, r == &kGap ? kEmpty : Guest(Rows(r ? r->label : "RESTORE DEFAULTS"))});
-        shown++;
-    }
+    CollectRows(rows, count, section, in_section);
+    PlaceList(ctx, page, in_section);
+    size_t shown = AddRows(ctx, list, label);
     Values(ctx);
-    LOGI("versus options: %s, %zu rows", in_section ? rows[section].label : std::string(kButtons[mode].label).c_str(), shown);
+    LOGI("versus options: %s, %zu rows", in_section ? rows[section].label : std::string(kButtons[mode].label).c_str(),
+         shown);
 }
 
 void FillPopup(X86Context& ctx, uint32_t menu) {
@@ -523,6 +626,13 @@ void FillPopup(X86Context& ctx, uint32_t menu) {
 
 uint32_t Handler(int kind);
 
+// the list on our page of this kind (0 sections, 1 rows, 2 popup)
+std::string_view ListName(uint32_t kind) {
+    if (kind == 0) return kSectionList.list;
+    if (kind == 1) return kRowList.list;
+    return kChoiceList.list;
+}
+
 // our pages' open (thiscall menu): the base one, then the list and its handler
 void MenuOpen(X86Context& __restrict ctx, uint8_t*) {
     uint32_t menu = ctx.ecx;
@@ -532,9 +642,9 @@ void MenuOpen(X86Context& __restrict ctx, uint8_t*) {
     else if (kind == 1) FillRows(ctx, menu);
     else FillPopup(ctx, menu);
     uint32_t h = Handler(int(kind) + 3);
-    W32(h + 4, R32(h + 4) + 1);  // the bind takes a counted reference
+    W32(h + kHandlerRefcount, R32(h + kHandlerRefcount) + 1);  // the bind takes a counted reference
     ctx.ecx = menu;
-    CallGuest(ctx, kBind, {h, Id(kind == 0 ? kSectionList.list : kind == 1 ? kRowList.list : kChoiceList.list)});
+    CallGuest(ctx, kBind, {h, Id(ListName(kind))});
     ctx.esp += 4;
 }
 
@@ -543,7 +653,10 @@ void Sound(X86Context& ctx, uint32_t sound);
 
 // our menus' keys (thiscall menu (key, action, ?), ret 0xC): B goes back a page, as P_Options' does
 void MenuKey(X86Context& __restrict ctx, uint8_t*) {
-    uint32_t menu = ctx.ecx, key = R32(ctx.esp + 4), action = R32(ctx.esp + 8), handled = 0;
+    uint32_t menu = ctx.ecx;
+    uint32_t key = R32(ctx.esp + 4);
+    uint32_t action = R32(ctx.esp + 8);
+    uint32_t handled = 0;
     if (key == kJoyB && action == kRelease) {
         if (R32(menu + kMenuKind) == 2) {
             ClosePopup(ctx, kBackSound);
@@ -588,15 +701,18 @@ void OpenPage(X86Context& ctx, const List& l, int mode, int section) {
     std::memset(HostPtr(menu), 0, kMenuSize);
     ctx.ecx = names;
     CallGuest(ctx, kFString, {Name(l.package)});
-    ctx.ecx = names + 0xC;
+    ctx.ecx = names + kFStringSize;
     CallGuest(ctx, kFString, {Name(l.page)});
     ctx.ecx = menu;
-    CallGuest(ctx, kMenuCtor, {names, names + 0xC});
-    for (uint32_t s : {names, names + 0xC})
+    CallGuest(ctx, kMenuCtor, {names, names + kFStringSize});
+    for (uint32_t s : {names, names + kFStringSize})
         if (uint32_t text = R32(s)) CallGuest(ctx, kFree, {text});
     W32(menu, MenuVtable());
     bool popup = &l == &kChoiceList;
-    W32(menu + kMenuKind, &l == &kSectionList ? 0 : popup ? 2 : 1);
+    uint32_t kind = 1;
+    if (&l == &kSectionList) kind = 0;
+    else if (popup) kind = 2;
+    W32(menu + kMenuKind, kind);
     W32(menu + kMenuMode, uint32_t(mode));
     W32(menu + kMenuSection, uint32_t(section));
     CallGuest(ctx, kPush, {menu, popup ? 0u : 1u, 1});
@@ -605,7 +721,7 @@ void OpenPage(X86Context& ctx, const List& l, int mode, int section) {
 void Sound(X86Context& ctx, uint32_t sound) {
     if (uint32_t player = R32(kSoundPlayer)) {
         ctx.ecx = player;
-        CallGuest(ctx, R32(R32(player) + 8), {sound});
+        CallGuest(ctx, R32(R32(player) + kPlaySound), {sound});
     }
 }
 
@@ -656,7 +772,7 @@ bool Act(X86Context& ctx, int step) {
 // a press (thiscall handler, one argument, ret 4): the handler's +0x10 is what it opens, 0..2 our buttons, 3 the
 // section picked on the sections list, 4 a row, 5 the value picked in the popup
 void Press(X86Context& __restrict ctx, uint8_t*) {
-    int kind = int(R32(ctx.ecx + 0x10));
+    int kind = int(R32(ctx.ecx + kHandlerKind));
     if (kind == 0) {
         OpenPage(ctx, kSectionList, 0, -1);
     } else if (kind < 3) {
@@ -681,10 +797,13 @@ void Press(X86Context& __restrict ctx, uint8_t*) {
 // Up / Down past a blank row: from the row before it to the one after, or off it when it was selected anyway (the
 // mouse); the list moves by itself otherwise
 bool PastGap(X86Context& ctx, int dir) {
-    int row = Selected(g_rows.list), rows = int(g_rows.rows.size());
+    int row = Selected(g_rows.list);
+    int rows = int(g_rows.rows.size());
     if (row < 0 || row >= rows) return false;
     auto gap = [&](int r) { return r >= 0 && r < rows && g_rows.rows[size_t(r)] == &kGap; };
-    int to = gap(row) ? row + dir : gap(row + dir) ? row + 2 * dir : -1;
+    int to = -1;
+    if (gap(row)) to = row + dir;
+    else if (gap(row + dir)) to = row + 2 * dir;
     if (to < 0 || to >= rows) return false;
     ctx.ecx = g_rows.list;
     CallGuest(ctx, kSelect, {uint32_t(to), 1});
@@ -694,8 +813,10 @@ bool PastGap(X86Context& ctx, int dir) {
 // an event on our lists (thiscall handler, ?, event*, ret 8): Left / Right step a row, Up / Down pass the blank rows;
 // our buttons leave theirs to P_Options
 void Event(X86Context& __restrict ctx, uint8_t*) {
-    int kind = int(R32(ctx.ecx + 0x10));
-    uint32_t event = R32(ctx.esp + 8), key = event ? R32(event) : 0, handled = 0;
+    int kind = int(R32(ctx.ecx + kHandlerKind));
+    uint32_t event = R32(ctx.esp + 8);
+    uint32_t key = event ? R32(event) : 0;
+    uint32_t handled = 0;
     if (kind == 4 && (key == kLeft || key == kRight)) {
         handled = Act(ctx, key == kLeft ? -1 : 1);
     } else if (kind == 4 && (key == kUp || key == kDown)) {
@@ -707,7 +828,8 @@ void Event(X86Context& __restrict ctx, uint8_t*) {
 
 // the handlers, laid out as the Game button's {vtable, refcount, 1, 0x3380E0} plus what they open; never released
 uint32_t Handler(int kind) {
-    constexpr uint32_t kHandlers = 6, kSize = 0x18;
+    constexpr uint32_t kHandlers = 6;
+    constexpr uint32_t kSize = 0x18;
     static uint32_t handlers = 0;
     if (!handlers) {
         uint32_t vtable = mem::AllocSystem(kHandlerSlots * 4 + kSize * kHandlers);
@@ -718,13 +840,39 @@ uint32_t Handler(int kind) {
         for (uint32_t i = 0; i < kHandlers; i++) {
             uint32_t h = handlers + i * kSize;
             W32(h, vtable);
-            W32(h + 4, 0x10000);  // refcount: never reaches 0
-            W32(h + 8, 1);
-            W32(h + 0xC, kHandlerTail);
-            W32(h + 0x10, i);
+            W32(h + kHandlerRefcount, 0x10000);  // refcount: never reaches 0
+            W32(h + kHandlerField8, 1);
+            W32(h + kHandlerTailField, kHandlerTail);
+            W32(h + kHandlerKind, i);
         }
     }
     return handlers + uint32_t(kind) * kSize;
+}
+
+// the package text with ours spliced in, as a guest copy now given to the reader; 0 when it is not changed
+uint32_t SplicedCopy(X86Context& ctx, uint32_t text) {
+    std::string_view view(static_cast<const char*>(HostPtr(text)));
+    bool options = view.find("<NAME>P_Options</NAME>") != std::string_view::npos;
+    bool common = view.find("<NAME>B_MainItem</NAME>") != std::string_view::npos;
+    bool xboxlive = view.find("<NAME>P_TeamsActionPopup</NAME>") != std::string_view::npos;
+    const char* name = "xboxlive";
+    if (options) name = "Options";
+    else if (common) name = "common";
+    if (!options && !common && !xboxlive) return 0;
+    std::string xml(view);
+    bool changed = (options && SpliceOptions(xml)) | (common && SpliceItem(xml)) | (xboxlive && SplicePopup(xml));
+    if (changed && !Balanced(xml)) {
+        LOGE("versus options: the spliced %s does not balance, the stock text is kept", name);
+        changed = false;
+    }
+    uint32_t copy = 0;
+    if (changed) copy = CallGuest(ctx, kMalloc, {uint32_t(xml.size() + 1), 0});
+    if (copy) {
+        std::memcpy(HostPtr(copy), xml.c_str(), xml.size() + 1);
+        W32(ctx.esp + 4, copy);
+    }
+    LOGI("versus options: %s %s", name, copy ? "spliced" : "not changed");
+    return copy;
 }
 
 }  // namespace
@@ -735,7 +883,7 @@ namespace versus {
 void OptionsTick(X86Context& ctx, uint32_t top) {
     static uint32_t revision = 0;
     uint32_t r = app::SettingsRevision();
-    if (r == revision || !top || R32(top + 4) != Id(kRowList.page) || !g_rows.list) return;
+    if (r == revision || !top || R32(top + kPageId) != Id(kRowList.page) || !g_rows.list) return;
     revision = r;
     Values(ctx);
 }
@@ -744,7 +892,8 @@ void OptionsTick(X86Context& ctx, uint32_t top) {
 // open; 0 for the rest
 uint32_t OptionsText(uint32_t section, uint32_t section2, uint32_t key) {
     auto in = [&](uint32_t page) { return section == page || section2 == page; };
-    if ((in(Id(kRowList.page)) || in(Id(kSectionList.page))) && key == Id("Title")) return Guest(Titled(kButtons[0].label));
+    if ((in(Id(kRowList.page)) || in(Id(kSectionList.page))) && key == Id("Title"))
+        return Guest(Titled(kButtons[0].label));
     if (!in(kOptionsPage)) return 0;
     for (const Button& b : kButtons)
         if (key == Id(b.name)) return Guest(Caps(Translated(b.label)));
@@ -756,28 +905,9 @@ uint32_t OptionsText(uint32_t section, uint32_t section2, uint32_t key) {
 // the XML reader's parse (thiscall reader, text, ret 4): the text is copied in, so ours is freed after
 X86_EXTERN_FUNC(__imp__sub_0026F0B0);
 X86_FUNC(sub_0026F0B0) {
-    uint32_t text = R32(ctx.esp + 4), copy = 0;
-    if (text) {
-        std::string_view view(static_cast<const char*>(HostPtr(text)));
-        bool options = view.find("<NAME>P_Options</NAME>") != std::string_view::npos;
-        bool common = view.find("<NAME>B_MainItem</NAME>") != std::string_view::npos;
-        bool xboxlive = view.find("<NAME>P_TeamsActionPopup</NAME>") != std::string_view::npos;
-        const char* name = options ? "Options" : common ? "common" : "xboxlive";
-        if (options || common || xboxlive) {
-            std::string xml(view);
-            bool changed = (options && SpliceOptions(xml)) | (common && SpliceItem(xml)) | (xboxlive && SplicePopup(xml));
-            if (changed && !Balanced(xml)) {
-                LOGE("versus options: the spliced %s does not balance, the stock text is kept", name);
-                changed = false;
-            }
-            if (changed) copy = CallGuest(ctx, kMalloc, {uint32_t(xml.size() + 1), 0});
-            if (copy) {
-                std::memcpy(HostPtr(copy), xml.c_str(), xml.size() + 1);
-                W32(ctx.esp + 4, copy);
-            }
-            LOGI("versus options: %s %s", name, copy ? "spliced" : "not changed");
-        }
-    }
+    uint32_t text = R32(ctx.esp + 4);
+    uint32_t copy = 0;
+    if (text) copy = SplicedCopy(ctx, text);
     __imp__sub_0026F0B0(ctx, base);
     if (copy) {
         uint32_t result = ctx.eax;
@@ -793,7 +923,7 @@ X86_FUNC(sub_001AD030) {
     __imp__sub_001AD030(ctx, base);
     for (int i = 0; i < int(std::size(kButtons)); i++) {
         uint32_t h = Handler(i);
-        W32(h + 4, R32(h + 4) + 1);  // the bind takes a counted reference
+        W32(h + kHandlerRefcount, R32(h + kHandlerRefcount) + 1);  // the bind takes a counted reference
         ctx.ecx = menu;
         CallGuest(ctx, kBind, {h, Id(kButtons[i].name)});
     }

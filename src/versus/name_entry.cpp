@@ -12,8 +12,11 @@ using namespace kernel;
 namespace {
 
 // keyboard (vtable 0x339140): +0x28 its page, +0xC8 spaces allowed
-constexpr uint32_t kPageOf = 0x28, kSpaces = 0xC8;
-constexpr uint32_t kAppend = 0x1AE800, kDelete = 0x1AE8E0;  // thiscall keyboard: (const wchar_t* character), ()
+constexpr uint32_t kPageOf = 0x28;
+constexpr uint32_t kSpaces = 0xC8;
+// thiscall keyboard: (const wchar_t* character), ()
+constexpr uint32_t kAppend = 0x1AE800;
+constexpr uint32_t kDelete = 0x1AE8E0;
 
 uint32_t g_live[4];  // constructed keyboards (game thread)
 uint32_t g_chars = 0;

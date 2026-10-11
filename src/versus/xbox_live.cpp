@@ -18,14 +18,21 @@ namespace {
 // localization database find (thiscall(section, section2, key*, package), ret 0x10): returns the text in the table.
 // Sections and keys are cooked name indices, or crc32 of the lowercase name for Magma pages and elements.
 struct Text {
-    uint32_t section, key;
+    uint32_t section;
+    uint32_t key;
     std::u16string_view text;
 };
 constexpr uint32_t kMagma = 0x178B;  // [Magma]
-constexpr uint32_t kMainMenu = 0x8BBFE343, kSystemLinkPage = 0xE12C2CDF, kOptionsPage = 0xD7F513E8;
+constexpr uint32_t kMainMenu = 0x8BBFE343;
+constexpr uint32_t kSystemLinkPage = 0xE12C2CDF;
+constexpr uint32_t kOptionsPage = 0xD7F513E8;
 constexpr uint32_t kOnlineOptionsPage = 0xE95B9F21;
-constexpr uint32_t kXboxLive = 0x44F5EDB2, kSystemLink = 0xB67F2AD0, kTutorials = 0xC21EFE28, kOptions = 0xD035FA87;
-constexpr uint32_t kTitle = 0x2B36786B, kOnline = 0x9E32BEEA;
+constexpr uint32_t kXboxLive = 0x44F5EDB2;
+constexpr uint32_t kSystemLink = 0xB67F2AD0;
+constexpr uint32_t kTutorials = 0xC21EFE28;
+constexpr uint32_t kOptions = 0xD035FA87;
+constexpr uint32_t kTitle = 0x2B36786B;
+constexpr uint32_t kOnline = 0x9E32BEEA;
 constexpr Text kTexts[] = {
     {kMagma, 0x5065, u""},  // Live_NoSignIn "Not signed In"
     {kMagma, 0x5064, u""},  // Live_FailedSignIn "Sign-In Failed"
@@ -40,14 +47,28 @@ constexpr Text kTexts[] = {
 constexpr uint32_t kSignInLegend = 0x1A764E;
 constexpr uint32_t kNullText = 0x4F05;
 
-// Menu pages: +0x28 the Magma page; P_Options_Online +0xC8 CHK_Appear. Page: +0xC begin, +0x10 end of instance pointers, +0x24 focus.
-// Button and checkbox instance: +8 id, +0x10 widget (+4 its current position frame), +0x18 begin, +0x1C end of keyframe pointers
-// (keyframe +0x18 its position frame), +0xA8 up and +0xAC down neighbour instances, +0xB8 bit 0 default.
+// Menu pages: +0x28 the Magma page; P_Options_Online +0xC8 CHK_Appear. Page: +0xC begin, +0x10 end of instance
+// pointers, +0x24 focus.
+// Button and checkbox instance: +8 id, +0x10 widget (+4 its current position frame), +0x18 begin, +0x1C end of
+// keyframe pointers (keyframe +0x18 its position frame), +0xA8 up and +0xAC down neighbour instances, +0xB8 bit 0
+// default.
 // Position frame (vtable 0x361FC8): +0xE y (short, page units).
-constexpr uint32_t kPage = 0x28, kBegin = 0x0C, kEnd = 0x10, kFocus = 0x24;
-constexpr uint32_t kId = 0x08, kWidget = 0x10, kKeyframes = 0x18, kKeyFrame = 0x18, kWidgetFrame = 0x04;
-constexpr uint32_t kUp = 0xA8, kDown = 0xAC, kFlags = 0xB8, kDefault = 0x01;
-constexpr uint32_t kPositionFrame = 0x361FC8, kY = 0x0E;
+constexpr uint32_t kPage = 0x28;
+constexpr uint32_t kBegin = 0x0C;
+constexpr uint32_t kEnd = 0x10;
+constexpr uint32_t kFocus = 0x24;
+constexpr uint32_t kId = 0x08;
+constexpr uint32_t kWidget = 0x10;
+constexpr uint32_t kKeyframes = 0x18;
+constexpr uint32_t kKeyframesEnd = 0x1C;
+constexpr uint32_t kKeyFrame = 0x18;
+constexpr uint32_t kWidgetFrame = 0x04;
+constexpr uint32_t kUp = 0xA8;
+constexpr uint32_t kDown = 0xAC;
+constexpr uint32_t kFlags = 0xB8;
+constexpr uint32_t kDefault = 0x01;
+constexpr uint32_t kPositionFrame = 0x361FC8;
+constexpr uint32_t kY = 0x0E;
 constexpr uint32_t kSetEnabled = 0x25CFB0;  // thiscall instance (bool)
 constexpr uint32_t kResetFocus = 0x25C1D0;  // cdecl(page): the default enabled button takes the focus
 constexpr int kOffPage = -1000;             // no hidden flag in this Magma: the button is moved off the canvas
@@ -67,7 +88,8 @@ uint32_t Instance(uint32_t page, uint32_t id) {
 
 template <typename F>
 void EachFrame(uint32_t inst, F f) {
-    uint32_t begin = R32(inst + kKeyframes), end = R32(inst + kKeyframes + 4);
+    uint32_t begin = R32(inst + kKeyframes);
+    uint32_t end = R32(inst + kKeyframesEnd);
     if (begin && end >= begin && end - begin <= 4 * 64)
         for (uint32_t it = begin; it < end; it += 4)
             if (uint32_t key = R32(it)) f(R32(key + kKeyFrame));
@@ -91,7 +113,8 @@ void Move(uint32_t inst, int dy) {
 // Takes a button out of its page: disabled and off the canvas, the rows under it up one, its neighbours linked past
 // it, the default and the focus to the one below. Returns the row height, 0 when the page was done already.
 int Remove(X86Context& ctx, uint32_t page, uint32_t gone, std::initializer_list<uint32_t> below) {
-    uint32_t up = R32(gone + kUp), down = R32(gone + kDown);
+    uint32_t up = R32(gone + kUp);
+    uint32_t down = R32(gone + kDown);
     if (!up || !down || R32(down + kUp) != gone || !below.size()) return 0;
     int row = FirstY(*below.begin()) - FirstY(gone);
     if (row > 0 && row < 100)
@@ -115,7 +138,9 @@ int Remove(X86Context& ctx, uint32_t page, uint32_t gone, std::initializer_list<
 // the localization database find
 X86_EXTERN_FUNC(__imp__sub_00157A90);
 X86_FUNC(sub_00157A90) {
-    uint32_t section = R32(ctx.esp + 4), section2 = R32(ctx.esp + 8), key = R32(ctx.esp + 0xC);
+    uint32_t section = R32(ctx.esp + 4);
+    uint32_t section2 = R32(ctx.esp + 8);
+    uint32_t key = R32(ctx.esp + 0xC);
     uint32_t id = key ? R32(key) : 0;
     if (uint32_t text = versus::OptionsText(section, section2, id)) {
         ctx.eax = text;
@@ -159,8 +184,10 @@ X86_FUNC(sub_001A72F0) {
     __imp__sub_001A72F0(ctx, base);
     uint32_t page = R32(menu + kPage);
     if (!page) return;
-    uint32_t live = Instance(page, kXboxLive), lan = Instance(page, kSystemLink);
-    uint32_t tutorials = Instance(page, kTutorials), options = Instance(page, kOptions);
+    uint32_t live = Instance(page, kXboxLive);
+    uint32_t lan = Instance(page, kSystemLink);
+    uint32_t tutorials = Instance(page, kTutorials);
+    uint32_t options = Instance(page, kOptions);
     if (!live || !lan || !tutorials || !options) return;
     if (int row = Remove(ctx, page, live, {lan, tutorials, options}))
         LOGI("versus: XBOX LIVE button removed, LAN / Tutorials / Options up %d", row);
@@ -171,7 +198,8 @@ X86_EXTERN_FUNC(__imp__sub_001C4910);
 X86_FUNC(sub_001C4910) {
     uint32_t menu = ctx.ecx;
     __imp__sub_001C4910(ctx, base);
-    uint32_t page = R32(menu + kPage), appear = R32(menu + kAppear);
+    uint32_t page = R32(menu + kPage);
+    uint32_t appear = R32(menu + kAppear);
     if (!page || !appear) return;
     if (int row = Remove(ctx, page, appear, {R32(appear + kDown)}))
         LOGI("versus: Appear Offline removed, Voice On Speaker up %d", row);

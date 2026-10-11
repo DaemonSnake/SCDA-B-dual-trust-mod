@@ -11,11 +11,13 @@ using namespace kernel;
 namespace {
 
 // profile menu: +0xFC the operation's start time (float seconds over a 2^24 offset, so 2 s steps), +0x120 its box up
-constexpr uint32_t kStart = 0xFC, kBoxUp = 0x120;
+constexpr uint32_t kStart = 0xFC;
+constexpr uint32_t kBoxUp = 0x120;
 constexpr auto kShown = std::chrono::milliseconds(1000);
 
 struct Box {
-    uint32_t menu = 0, start = 0;  // the start time's bits when the box came up (a next operation writes its own)
+    uint32_t menu = 0;
+    uint32_t start = 0;  // the start time's bits when the box came up (a next operation writes its own)
     std::chrono::steady_clock::time_point since;
 };
 Box g_box;  // game thread
@@ -26,7 +28,8 @@ Box g_box;  // game thread
 // passes the 3.5 s wait; the box still closes only when the operation is done
 X86_EXTERN_FUNC(__imp__sub_001A06F0);
 X86_FUNC(sub_001A06F0) {
-    uint32_t menu = ctx.ecx, start = R32(menu + kStart);
+    uint32_t menu = ctx.ecx;
+    uint32_t start = R32(menu + kStart);
     auto now = std::chrono::steady_clock::now();
     if (!G<uint8_t>(menu + kBoxUp)) {
         g_box = {};
