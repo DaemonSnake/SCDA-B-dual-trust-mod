@@ -573,7 +573,7 @@ void RestoreDefaults(int page) {
 // the row being rebound, -1 when idle; its keys must be released before the next press binds
 std::atomic<int> g_capture{-1};
 int g_capture_slot = 0;  // its box: 0 the key, 1 the alternate
-int g_hovered_box = -1;  // the box under the mouse with a key in it, this frame
+int g_hovered_box = -1;  // the box under the mouse or focused with a key in it, this frame
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
 int g_page = kSettingsPage;
@@ -643,7 +643,8 @@ std::string BoxText(const std::string& key, bool capturing, const char* prompt) 
 constexpr float kKeyBoxEms = 10.0f;  // a key box's width when the row has two
 
 // label left, a box per key right (the keyboard's key and its alternate side by side), ending where the other rows'
-// values do; Enter or a click on a box starts its capture, a right click sets `cleared`. The box pressed, -1 for none.
+// values do; Enter or a click on a box starts its capture, a right click or Delete on it sets `cleared`. The box
+// pressed, -1 for none.
 int BindRow(const char* label, const std::vector<std::string>& keys, int capturing, const char* prompt, int& cleared) {
     const ImGuiStyle& style = ImGui::GetStyle();
     RowBox row = MeasureRow();
@@ -658,8 +659,11 @@ int BindRow(const char* label, const std::vector<std::string>& keys, int capturi
         ImGui::SetCursorPos(ImVec2(x, row.row_y));
         ImGui::PushID(i);
         if (ImGui::InvisibleButton("##key", ImVec2(box_w, row.row_h))) pressed = i;
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) cleared = i;
-        if (ImGui::IsItemHovered() && !keys[i].empty()) g_hovered_box = i;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right) ||
+            (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete, false)))
+            cleared = i;
+        if ((ImGui::IsItemHovered() || ImGui::IsItemFocused()) && !keys[i].empty() && keys[i] != "UNBOUND")
+            g_hovered_box = i;
         bool lit = capturing == i || ImGui::IsItemFocused() || ImGui::IsItemHovered();
         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
                                                   ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
@@ -805,8 +809,11 @@ void DrawRows(int page) {
                 g_capture = r.id;
                 g_capture_armed = false;
             }
-            // only the alternate: an action left with no key at all could be the settings panel's own
-            if (keys && cleared == 1 && g_capture < 0) input::Bind(size_t(r.id), 0, 1);
+            // a Delete that answered a capture is no clear
+            if (cleared >= 0 && g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1) {
+                if (keys) input::Bind(size_t(r.id), 0, cleared);
+                else input::BindPad(size_t(r.id), -1);
+            }
         } else {
             static char join[64] = {};
             static bool loaded = false;
@@ -902,7 +909,7 @@ void DrawPanel() {
         const char* hint = "";
         if (g_capture >= 0 && g_page == kControllerPage) hint = "Press a controller button to bind, Escape cancels";
         else if (g_capture >= 0) hint = "Press a key or mouse button to bind, Escape cancels";
-        else if (g_page == kKeyboardPage && g_hovered_box == 1) hint = "Right click clears the second key";
+        else if (g_page == kKeyboardPage && g_hovered_box >= 0) hint = "Right click or Delete clears the key";
         else if (g_page == kLevelsPage) hint = "Up and Down select, Enter or a click loads the level, Escape closes";
         ImGui::TextUnformatted(Ui(hint, false).c_str());
         ImGui::PopStyleColor();

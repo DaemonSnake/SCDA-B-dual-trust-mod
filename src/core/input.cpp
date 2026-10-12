@@ -454,8 +454,9 @@ void SettleMouse() {
 
 bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu) {
     bool held = false;
-    // in a menu the mouse buttons belong to the cursor
-    for (int vk : vks) held |= Down(vk) && !(no_mouse && Mouse(vk));
+    // in a menu the mouse buttons belong to the cursor, and Delete clears a binding on the options pages: bound to
+    // a move key it would move the selection off the row first
+    for (int vk : vks) held |= Down(vk) && !(no_mouse && Mouse(vk)) && !(menu && vk == VK_DELETE);
     if (kActions[i].play_only && menu) held = false;
     // typing a name: only the pause key still presses
     if (g_text && kActions[i].button != kPauseTarget) held = false;
@@ -1239,6 +1240,9 @@ std::string Binding(size_t action) {
     return action < kCount ? Join(g_binds[action]) : std::string();
 }
 
+// the settings panel with no key would leave a keyboard player no way back into it
+bool LockedOut(size_t action) { return kActions[action].event == KeyEvent::SettingsPanel; }
+
 void Bind(size_t action, int vk, int slot) {
     // the console, hide HUD and the settings panel act on the window's key messages, which mouse buttons do not send
     if (action >= kCount || slot < 0 || slot > 1 || (vk && !NameOf(vk))) return;
@@ -1249,6 +1253,7 @@ void Bind(size_t action, int vk, int slot) {
         int slots[2] = {keys.size() > 0 ? keys[0] : 0, keys.size() > 1 ? keys[1] : 0};
         if (vk && slots[1 - slot] == vk) slots[1 - slot] = 0;
         slots[slot] = vk;
+        if (!slots[0] && !slots[1] && LockedOut(action)) return;
         keys.clear();
         for (int k : slots) {
             if (k) keys.push_back(k);
@@ -1256,6 +1261,24 @@ void Bind(size_t action, int vk, int slot) {
         app::Get().keys[kActions[action].action.id] = Join(keys);
     }
     app::Save();
+}
+
+void Unbind(size_t action) {
+    if (action >= kCount || LockedOut(action)) return;
+    {
+        std::lock_guard lock(g_bind_lock);
+        g_binds[action].clear();
+        app::Get().keys[kActions[action].action.id].clear();
+    }
+    app::Save();
+}
+
+bool TakeDeletePress() {
+    static bool held = false;
+    bool down = Down(VK_DELETE);
+    bool fresh = down && !held;
+    held = down;
+    return fresh && Active();
 }
 
 bool ConsoleKey(int vk) {
@@ -1341,15 +1364,16 @@ std::string PadBinding(size_t action) {
 }
 
 void BindPad(size_t action, int button) {
-    if (action >= kPadCount || button < 0 || button >= kPadButtons) return;
+    bool event = action < kPadCount && kPadActions[action].event != KeyEvent::None;
+    if (action >= kPadCount || button < -1 || button >= kPadButtons || (button < 0 && !event)) return;
     {
         std::lock_guard lock(g_bind_lock);
         // the action that had the button takes this one's old button: buttons only change places. An event, which may
         // have none, comes off the button it has.
         int old = g_pad_binds[action];
-        bool off = old == button && kPadActions[action].event != KeyEvent::None;
+        bool off = button < 0 || (old == button && event);
         for (int& b : g_pad_binds) {
-            if (b == button) b = old;
+            if (button >= 0 && b == button) b = old;
         }
         g_pad_binds[action] = off ? -1 : button;
         auto& saved = app::Get().pad_buttons;

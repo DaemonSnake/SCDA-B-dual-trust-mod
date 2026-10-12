@@ -126,13 +126,17 @@ const Action* Actions(size_t* count);
 std::string Binding(size_t action);
 // slot 0 the key, 1 its alternate (the F10 panel's second box); vk 0 clears the slot. A key the other slot has moves.
 void Bind(size_t action, int vk, int slot = 0);
+// every key off the action; neither this nor Bind with vk 0 leaves the settings panel without a key
+void Unbind(size_t action);
+// Delete went down in the game window since the last call, the menus' key for clearing a binding
+bool TakeDeletePress();
 void ResetBindings();
 void LoadBindings();  // after the settings load, the controller's too
 int PressedKey();     // a bindable key or mouse button held now, 0 for none
 // The controller's buttons by action, for every controller: each action is one of the console pad's controls,
 // pressed in play by the physical button bound to it (defaults: the stock one's name, empty for quick save and quick
 // load, which have none); menus keep the stock buttons. A button another action has changes places with the one
-// rebound; quick save or load bound again to its own button comes off it.
+// rebound; quick save or load bound again to its own button comes off it, as does one given button -1.
 const Action* PadActions(size_t* count);
 std::string PadBinding(size_t action);
 void BindPad(size_t action, int button);

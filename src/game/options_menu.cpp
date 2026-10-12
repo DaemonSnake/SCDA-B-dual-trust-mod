@@ -669,6 +669,20 @@ static void PassGap(X86Context& ctx) {
     g_take.last_row = row;
 }
 
+// Delete on a binding row
+static void Clear(X86Context& ctx) {
+    int row = int16_t(R16(g_take.list + kSelection));
+    if (row < 0 || row >= int(g_take.rows.size()) || !OurPage(ctx, g_take.menu)) return;
+    const app::rows::Row* r = g_take.rows[size_t(row)];
+    if (!r || (r->kind != app::rows::Kind::Bind && r->kind != app::rows::Kind::PadBind)) return;
+    std::string was = app::rows::Value(*r);
+    if (r->kind == app::rows::Kind::Bind) input::Unbind(size_t(r->id));
+    else input::BindPad(size_t(r->id), -1);
+    if (app::rows::Value(*r) == was) return;
+    Refresh(ctx);
+    Sound(ctx, g_take.owner);
+}
+
 // a rebind waiting for its key or button
 static void CaptureTick(X86Context& ctx) {
     // a controller row takes any controller button, Escape cancels either
@@ -720,8 +734,10 @@ void MenuTick(X86Context& ctx) {
     }
     MenuPlace(ctx);
     PassGap(ctx);
-    if (g_capture < 0) return;
-    CaptureTick(ctx);
+    // read every tick, so a Delete that answers a capture is not a fresh press once it ends
+    bool clear = input::TakeDeletePress();
+    if (g_capture >= 0) return CaptureTick(ctx);
+    if (clear) Clear(ctx);
 }
 
 }  // namespace game

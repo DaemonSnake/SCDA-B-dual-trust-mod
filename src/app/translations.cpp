@@ -130,7 +130,7 @@ constexpr Entry kEntries[] = {
     {"COOP JOIN IP", {u"IP de connexion co-op", u"Koop-Beitritts-IP", u"IP per unirsi in cooperativa", u"IP para unirse en coop."}},
     {"VERSUS JOIN IP", {u"IP de connexion Versus", u"Versus-Beitritts-IP", u"IP per unirsi in Versus", u"IP para unirse en Versus"}},
     {"Press a key or mouse button to bind, Escape cancels", {u"Appuyez sur une touche ou un bouton de souris, Échap pour annuler", u"Taste oder Maustaste drücken, Escape bricht ab", u"Premi un tasto o un pulsante del mouse, Esc per annullare", u"Pulsa una tecla o un botón del ratón, Escape para cancelar"}},
-    {"Right click clears the second key", {u"Clic droit pour effacer la seconde touche", u"Rechtsklick löscht die zweite Taste", u"Clic destro per cancellare il secondo tasto", u"Clic derecho para borrar la segunda tecla"}},
+    {"Right click or Delete clears the key", {u"Clic droit ou Suppr pour effacer la touche", u"Rechtsklick oder Entf löscht die Taste", u"Clic destro o Canc per cancellare il tasto", u"Clic derecho o Supr para borrar la tecla"}},
     {"Press a controller button to bind, Escape cancels", {u"Appuyez sur un bouton de la manette, Échap pour annuler", u"Controller-Taste drücken, Escape bricht ab", u"Premi un pulsante del controller, Esc per annullare", u"Pulsa un botón del controlador, Escape para cancelar"}},
 
     // Exit on the game mode menu
