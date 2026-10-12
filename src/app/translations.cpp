@@ -76,6 +76,8 @@ constexpr Entry kEntries[] = {
     {"JUMP", {u"Sauter", u"Springen", u"Salta", u"Saltar"}},
     {"JUMP / SPLIT JUMP", {u"Sauter / saut-écart", u"Springen / Spagatsprung", u"Salta / Spaccata", u"Saltar / Salto de piernas abiertas"}},
     {"CROUCH", {u"S'accroupir", u"Ducken", u"Chinati", u"Agacharse"}},
+    {"ZOOM IN / ACCELERATE", {u"Zoom avant / accélérer", u"Heranzoomen / Beschleunigen", u"Zoom avanti / Accelera", u"Acercar / Acelerar"}},
+    {"ZOOM OUT / DECELERATE", {u"Zoom arrière / ralentir", u"Herauszoomen / Verlangsamen", u"Zoom indietro / Rallenta", u"Alejar / Decelerar"}},
     {"CROUCH / STAND UP / EXIT INTERACTION", {u"S'accroupir / se relever / quitter l'interaction", u"Ducken / Aufstehen / Interaktion beenden", u"Chinati / Alzati / Esci dall'interazione", u"Agacharse / De pie / Salir de la acción"}},
     {"BACK TO WALL / SWITCH HAND", {u"Dos au mur / changer de main", u"An Wand lehnen / Hand wechseln", u"Spalle al muro / Cambia mano", u"Espalda a la pared / Cambiar de mano"}},
     {"BACK TO WALL / SWITCH HAND / ZOOM IN OUT", {u"Dos au mur / changer de main / zoom", u"An Wand lehnen / Hand wechseln / Zoom", u"Spalle al muro / Cambia mano / Zoom", u"Espalda a la pared / Cambiar de mano / Zoom"}},
