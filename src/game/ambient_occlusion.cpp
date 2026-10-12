@@ -10,6 +10,7 @@ using namespace kernel;
 X86_EXTERN_FUNC(__imp__sub_002AC2FC);
 X86_FUNC(sub_002AC2FC) {
     uint32_t node = R32(R32(ctx.esp + 4));
-    if (app::Get().ambient_occlusion && !R32(ctx.esp + 8) && !R32(node + 8)) d3d::Occlusion(&G<float>(node + 0x8C));
+    uint32_t mode = app::Get().ambient_occlusion;
+    if (mode && !R32(ctx.esp + 8) && !R32(node + 8)) d3d::Occlusion(&G<float>(node + 0x8C), mode == 2);
     __imp__sub_002AC2FC(ctx, base);
 }

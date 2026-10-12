@@ -79,7 +79,9 @@ void Load() {
     s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
     s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
     s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);
-    s.ambient_occlusion = t["ambient_occlusion"].value_or(s.ambient_occlusion);
+    // true was the old ON, now SSAO
+    if (auto on = t["ambient_occlusion"].value<bool>()) s.ambient_occlusion = *on;
+    s.ambient_occlusion = std::min(t["ambient_occlusion"].value_or(s.ambient_occlusion), 2u);
     s.async_shaders = t["async_shaders"].value_or(s.async_shaders);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
@@ -128,7 +130,7 @@ toml::table Table() {
                   {"shader_model", int64_t(s.shader_model)},
                   {"hdr_rendering", s.hdr_rendering},
                   {"tone_mapping", s.tone_mapping},
-                  {"ambient_occlusion", s.ambient_occlusion},
+                  {"ambient_occlusion", int64_t(s.ambient_occlusion)},
                   {"async_shaders", s.async_shaders},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
