@@ -56,6 +56,8 @@ struct Voice {
     float p[3] = {}, min_dist = 1, max_dist = 1e9f;
     float lf = 1, hf = 1;  // I3DL2 direct path: lows and highs (I3DL2Source)
     float lp[2] = {};      // its low pass, per channel
+    float gain[2][2] = {};  // the last block's levels, the next block ramps from them
+    bool has_gain = false;
     // ADPCM block cache
     int64_t block = -1;
     int16_t decoded[65 * 8];
@@ -201,8 +203,13 @@ void Render(float* out, uint32_t frames) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (auto& [obj, v] : g_voices) {
         if (v.paused || (!v.stream && !v.playing)) continue;
-        float g[2][2];
+        float g[2][2], dg[2][2];
         Levels(v, g);
+        // 3D levels follow the listener once a game frame: stepped per block, a fast turn clicks
+        if (!v.has_gain) std::memcpy(v.gain, g, sizeof(g));
+        v.has_gain = true;
+        for (int c = 0; c < 2; c++)
+            for (int side = 0; side < 2; side++) dg[c][side] = (g[c][side] - v.gain[c][side]) / float(frames);
         double step = double(v.freq ? v.freq : v.rate) / audio::kRate;
         for (uint32_t i = 0; i < frames; i++) {
             uint32_t f = uint32_t(v.pos);
@@ -261,10 +268,13 @@ void Render(float* out, uint32_t frames) {
                 x0 = v.lp[0] * v.lf + (x0 - v.lp[0]) * v.hf;
                 x1 = v.lp[1] * v.lf + (x1 - v.lp[1]) * v.hf;
             }
-            out[i * 2] += x0 * g[0][0] + x1 * g[1][0];
-            out[i * 2 + 1] += x0 * g[0][1] + x1 * g[1][1];
+            for (int c = 0; c < 2; c++)
+                for (int side = 0; side < 2; side++) v.gain[c][side] += dg[c][side];
+            out[i * 2] += x0 * v.gain[0][0] + x1 * v.gain[1][0];
+            out[i * 2 + 1] += x0 * v.gain[0][1] + x1 * v.gain[1][1];
             v.pos += step;
         }
+        std::memcpy(v.gain, g, sizeof(g));
     }
     for (uint32_t i = 0; i < frames * 2; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
 }
