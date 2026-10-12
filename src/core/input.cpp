@@ -508,8 +508,10 @@ void PressTarget(int b, Pad& p, int (&move)[4]) {
     if (b == kAnalogA && g_title) p.buttons |= kStart;
 }
 
-void PressMenuKeys(Pad& p, bool menu, bool keypad) {
-    if ((Down(VK_BACK) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON))) p.analog[kAnalogB] = 0xFF;
+void PressMenuKeys(Pad& p, bool menu, bool back, bool keypad) {
+    // Backspace backs out where Escape does; in play B is crouch
+    if ((Down(VK_BACK) && (menu || back) && !g_text && !keypad) || (menu && !g_map && Down(VK_RBUTTON)))
+        p.analog[kAnalogB] = 0xFF;
     // a synced session has no menu cursor, so a click confirms as A does
     if (menu && g_net && !g_settle_mouse && Down(VK_LBUTTON)) p.analog[kAnalogA] = 0xFF;
     // Enter confirms in every menu whatever interact is bound to
@@ -652,7 +654,7 @@ void Keyboard(Pad& p) {
         }
         PressTarget(LatchTarget(i, camera, back, menu), p, move);
     }
-    PressMenuKeys(p, menu, keypad);
+    PressMenuKeys(p, menu, back, keypad);
     NoteKeysHeld(keys);
     UpdateStick(p, move, camera, menu);
 }
