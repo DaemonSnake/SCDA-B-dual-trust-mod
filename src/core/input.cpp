@@ -101,6 +101,7 @@ struct Remap {
 constexpr int kAnalogA = 0;
 constexpr int kAnalogB = 1;
 constexpr int kBlack = 4;  // Pad::analog
+constexpr int kAltFire = 6;  // LT
 constexpr int kButtonTarget = 8;
 constexpr int kPauseTarget = kButtonTarget + 4;  // Start
 constexpr int kMoveTarget = 16;
@@ -170,6 +171,7 @@ std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet ta
 
 std::atomic<bool> g_net{false};
 std::atomic<bool> g_interact_reloads{false};
+std::atomic<bool> g_carrying{false};
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -483,6 +485,11 @@ int RemapTarget(int button, bool camera, bool back, bool menu) {
 int LatchTarget(size_t i, bool camera, bool back, bool menu) {
     // latched for the press, so an interaction coming into reach does not start one under a held key
     if (!g_down_as[i] && kActions[i].button == 0 && g_interact_reloads && !menu) g_down_as[i] = -1;
+    // the synced co-op lockstep carries only the pad, so there alt fire stays LT
+    if (!g_down_as[i] && kActions[i].button == kAltFire && g_carrying && !menu && !g_net) {
+        g_events |= 1u << int(KeyEvent::DropBody);
+        g_down_as[i] = -1;
+    }
     int b = g_down_as[i] - 1;  // -2: held as no button
     if (b == -1) {
         int button = kActions[i].button;
@@ -1060,6 +1067,10 @@ void SetInteractReloads(bool on) {
 
 void SetTargeting(bool on) {
     g_targeting = on;
+}
+
+void SetCarrying(bool on) {
+    g_carrying = on;
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }

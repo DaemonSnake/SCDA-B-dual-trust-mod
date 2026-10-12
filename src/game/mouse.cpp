@@ -361,6 +361,8 @@ X86_FUNC(sub_0004B525) {
     game::KeypadKeys(ctx, viewport, menu, net);
     game::QuickSaveKeys(ctx, viewport, menu);
     if (input::TakeEvent(input::KeyEvent::Reload) && !menu) game::QueueCommand("Reload", game::Route::Player);
+    // exec Interact calls ProcessInteract straight, past the interaction list: s_Carry's puts the body down
+    if (input::TakeEvent(input::KeyEvent::DropBody) && !menu) game::QueueCommand("Interact", game::Route::Player);
     game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

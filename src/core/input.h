@@ -79,7 +79,7 @@ void SetInteractionList(bool focused);
 // the directions the move keys push port 0's stick (up, down, left, right as bits 0-3), whatever the walking speed
 uint32_t StickKeys();
 // keys the game side acts on itself, once per press in play
-enum class KeyEvent { None, Whistle, SidekickCommand, QuickSave, QuickLoad, Reload, PushToTalk, HideHud, SettingsPanel };
+enum class KeyEvent { None, Whistle, SidekickCommand, QuickSave, QuickLoad, Reload, PushToTalk, HideHud, SettingsPanel, DropBody };
 // A synced co-op session. Its lockstep carries the pad, not what the game side calls on its own, so there the
 // sidekick key holds the black button (co-op action) and whistle is off.
 void SetNetSession(bool net);
@@ -89,6 +89,8 @@ bool NetSession();
 void SetInteractReloads(bool on);
 // aiming, the EEV, a scope: the slowest walking speed stays past m_gentleForce, the least these move at
 void SetTargeting(bool on);
+// carrying a body: the keyboard's alt fire drops it (DropBody), as SCCT PC's s_Carry ProcessAltFire, not the pad's LT
+void SetCarrying(bool on);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
 bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is down now, with the window in front
 // the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses

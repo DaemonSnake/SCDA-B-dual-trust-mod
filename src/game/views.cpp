@@ -4,6 +4,7 @@
 // click is tapped until the level is reached. Sticky camera: the input side zooms it with the stick and remaps its keys.
 // Scripted events (in-game cinematics): s_ScriptedEvent's ProcessPauseMenu skips them, so Enter presses Start too.
 // Aiming with no interaction in reach, the pad's A reloads; the keyboard has a reload key instead.
+// Carrying a body, the keyboard's alt fire puts it down, as on SCCT PC.
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -156,6 +157,7 @@ void UpdateView(uint32_t viewport) {
     input::SetView(view, zoom_speed);
     input::SetInteractReloads(InteractReloads(pc, state));
     input::SetTargeting(Targeting(state) || GentleMove(state));
+    input::SetCarrying(state == unreal::Name("s_Carry"));
     if (view == input::View::Eev && sniping) Sniper(pc);
     else if (view == input::View::Eev) Eev(pc);
     else g_zoomer = 0;
