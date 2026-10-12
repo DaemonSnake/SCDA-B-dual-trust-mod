@@ -11,6 +11,7 @@
 
 
 #include "audio/audio.h"
+#include "audio/output.h"
 #include "xbe/xbe.h"
 #include "xdk/hle.h"
 
@@ -71,7 +72,7 @@ struct Voice {
     float lf = 1, hf = 1;  // I3DL2 direct path: lows and highs (I3DL2Source)
     float lp[2] = {};      // its low pass, per channel
     float room = 1;        // I3DL2 reverb send of a 3D voice (lRoom)
-    float gain[2][2] = {};  // the last block's levels, the next block ramps from them
+    float gain[2][audio::kChannels] = {};  // the last block's levels, the next block ramps from them
     bool has_gain = false;
     // a mono 3D voice's interaural delay in samples and its recent samples
     float itd = 0;
@@ -87,7 +88,7 @@ struct Place {
     bool on = false;
     float att = 1;      // every bin
     float front = 1;    // crosstalk front pair
-    float back = 0;     // crosstalk back pair, silent on a stereo console (0x4CF3F7)
+    float back = 0;     // crosstalk back pair, silent on a stereo console
     float centre = 1;   // centre bin
     float azimuth = 0;
     float elevation = 0;
@@ -108,6 +109,7 @@ thread_local std::vector<Done> t_flushed;  // run by the STREAM call that flushe
 std::atomic<int64_t> g_pumped{0};          // the last DirectSoundDoWork, steady ms
 bool g_started = false;
 uint32_t g_ds = 0;
+bool g_headphones = false;  // IDirectSound_EnableHeadphones
 // IDirectSound_SetMixBinHeadroom, a step halves the bin. The library starts bins 0..30 at 1 and 31 at 0
 // (0x4D032A..0x4D033B), the game sets 0..9 to 0 (0x19390)
 uint8_t g_bin_headroom[32] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -213,7 +215,7 @@ struct Reverb {
     Line line[14];
     Params now, next;
     bool on = false, pending = false;
-    float fade = 1, held[2] = {};
+    float fade = 1, held[4] = {};
     uint32_t tick = 0;
 
     Reverb() {
@@ -310,8 +312,9 @@ struct Reverb {
         l[12].Put(q.echo_lp[0].Run(ea));
         l[13].Put(q.echo_lp[1].Run(eb));
     }
-    // adds the reverb of the 48 kHz send to the stereo frames, the rear pair folds into the front
+    // adds the reverb of the 48 kHz send to the front and back pairs, as the image's crosstalk bins reach them
     void Run(const float* send, float* out, uint32_t frames) {
+        static const audio::Speaker kOut[4] = {audio::FrontLeft, audio::FrontRight, audio::BackLeft, audio::BackRight};
         for (uint32_t i = 0; on && i < frames; i++) {
             float x = now.in_lp.Run(send[i] * 0.5f), o[4];
             if (!(tick++ & 1)) {
@@ -323,11 +326,9 @@ struct Reverb {
                     fade = std::min(fade + 1 / 128.0f, 1.0f);
                 }
                 Frame(x, o);
-                held[0] = (o[0] + o[2]) * fade;
-                held[1] = (o[1] + o[3]) * fade;
+                for (int k = 0; k < 4; k++) held[k] = o[k] * fade;
             }
-            out[i * 2] += held[0];
-            out[i * 2 + 1] += held[1];
+            for (int k = 0; k < 4; k++) out[i * audio::kChannels + kOut[k]] += held[k];
         }
     }
 } g_reverb;
@@ -419,6 +420,16 @@ void ShareCentre(Place& at) {
     at.front *= 1 - 0.5f * both * both;
 }
 
+// Share of a 3D voice for the crosstalk pair behind, by power (0x4D1986): none to 45 degrees, half at 90, all from
+// 135, drawn towards half and half within half a unit of the head
+float BackShare(float azimuth, float elevation, float dist) {
+    float a = std::fabs(azimuth) / 90;
+    float e = std::fabs(elevation) / 90;
+    float back = std::clamp(0.5f - (1 - a) * (1 - e), 0.0f, 1.0f);
+    if (dist < 0.5f) back = ((back - 0.5f) * dist + 1) * 0.5f;
+    return back;
+}
+
 // Where a 3D voice sits for the library's 3D pass (0x4D005C): distance attenuation and direction
 Place Locate(const Voice& v) {
     Place at;
@@ -431,6 +442,12 @@ Place Locate(const Voice& v) {
                       g_top[0] * g_front[1] - g_top[1] * g_front[0]};
     at.azimuth = Azimuth(d, g_front, right);
     at.elevation = Elevation(d, g_front, right, g_top);
+    // surround without headphones splits the crosstalk pairs (0x4CF3F7), a stereo console plays the front alone
+    if (audio::IsSurround() && !g_headphones) {
+        float back = BackShare(at.azimuth, at.elevation, dist);
+        at.front = std::sqrt(1 - back);
+        at.back = std::sqrt(back);
+    }
     // the centre takes the front's share too
     at.centre = at.front;
     if (v.nbins >= 5 && v.bin[4] == kBinCentre) ShareCentre(at);
@@ -447,10 +464,32 @@ float BinScale(const Place& at, uint32_t bin) {
     return at.att;
 }
 
-// gain of voice channel c on host left and right, w its share for the reverb. A hardware voice holds two channels
-// and owns a run of slots, which alternate left and right.
-void Levels(const Voice& v, const Place& at, float g[2][2], float w[2]) {
-    std::memset(g, 0, 4 * sizeof(float));
+// the speaker a bin plays on: bins 0 to 5 are the speakers, the image's crosstalk effect (dsstdfx effect 4) adds
+// 6 to 9 into the front and back pairs
+static_assert(kBinSub == audio::Sub && kBinCentre == audio::Centre && audio::BackRight == 5);
+uint32_t SpeakerOf(uint32_t bin) {
+    static const audio::Speaker kCrosstalk[4] = {audio::FrontLeft, audio::FrontRight, audio::BackLeft,
+                                                 audio::BackRight};
+    if (bin < kBinCrosstalkFrontLeft) return bin;
+    return kCrosstalk[bin - kBinCrosstalkFrontLeft];
+}
+
+// a slot onto the speakers, effect sends on none. A voice heard through effect sends alone plays on the front pair.
+void AddToSpeakers(float g[audio::kChannels], uint32_t b, float x, bool speakers) {
+    if (!speakers) {
+        g[audio::FrontLeft] = std::max(g[audio::FrontLeft], x);
+        g[audio::FrontRight] = std::max(g[audio::FrontRight], x);
+        return;
+    }
+    if (b >= kBinFirstSend) return;
+    uint32_t to = SpeakerOf(b);
+    g[to] = std::max(g[to], x);
+}
+
+// gain of voice channel c on each speaker, w its share for the reverb. A hardware voice holds two channels and owns
+// a run of slots, which alternate between them.
+void Levels(const Voice& v, const Place& at, float g[2][audio::kChannels], float w[2]) {
+    std::memset(g, 0, 2 * audio::kChannels * sizeof(float));
     w[0] = w[1] = 0;
     if (v.link_voice && audio::VoiceLinkHeard()) return;
     static const uint8_t kFront[2] = {0, 1};
@@ -470,29 +509,24 @@ void Levels(const Voice& v, const Place& at, float g[2][2], float w[2]) {
                 w[c] += std::ldexp(x, -g_bin_headroom[b]);
                 continue;
             }
-            if (speakers && (b == kBinSub || b >= kBinFirstSend)) continue;  // sub and other effect sends
-            if (b == kBinCentre) x *= 0.707f;
-            // even bins are left, odd right, 2 is the centre
-            if (!speakers || b == kBinCentre || !(b & 1)) g[c][0] = std::max(g[c][0], x);
-            if (!speakers || b == kBinCentre || (b & 1)) g[c][1] = std::max(g[c][1], x);
+            if (speakers && b >= kBinFirstSend) continue;  // other effect sends
+            AddToSpeakers(g[c], b, x, speakers);
         }
-    // a mono 3D voice leaves the HRTF as two ears: the right ear plays as channel 1
-    if (at.on && v.channels == 1) std::swap(g[0][1], g[1][1]);
     // the game can place a sound at NaN, every frame, that voice alone goes silent, where its
     // NaN gain would turn the whole mix to NaN, which plays as silence
     for (int c = 0; c < 2; c++) {
-        for (int side = 0; side < 2; side++)
-            if (!std::isfinite(g[c][side])) g[c][side] = 0;
+        for (uint32_t k = 0; k < audio::kChannels; k++)
+            if (!std::isfinite(g[c][k])) g[c][k] = 0;
         if (!std::isfinite(w[c])) w[c] = 0;
     }
 }
 
 // 3D levels follow the listener once a game frame: stepped per block, a fast turn clicks
-void UpdateRamp(Voice& v, const float g[2][2], uint32_t frames, float dg[2][2]) {
+void UpdateRamp(Voice& v, const float g[2][audio::kChannels], uint32_t frames, float dg[2][audio::kChannels]) {
     if (!v.has_gain) std::memcpy(v.gain, g, sizeof(v.gain));
     v.has_gain = true;
     for (int c = 0; c < 2; c++)
-        for (int side = 0; side < 2; side++) dg[c][side] = (g[c][side] - v.gain[c][side]) / float(frames);
+        for (uint32_t k = 0; k < audio::kChannels; k++) dg[c][k] = (g[c][k] - v.gain[c][k]) / float(frames);
 }
 
 // the 3D voice's recent samples, the ear further from the sound reads them later
@@ -589,17 +623,31 @@ void ReadFrame(Voice& v, const Cursor& at, float x[2]) {
     }
 }
 
-// adds the voice to the stereo frames and its reverb share to the send
+// A mono 3D voice leaves the HRTF as two ears on the left and right speakers, the far one delayed. The centre and
+// sub are not HRTF slots (0x4D45CB) and take it as it is.
+void EarFrame(Voice& v, float x, float frame[audio::kChannels]) {
+    PushEar(v, x);
+    float left = EarAt(v, v.itd);
+    float right = EarAt(v, -v.itd);
+    frame[audio::FrontLeft] = left;
+    frame[audio::BackLeft] = left;
+    frame[audio::FrontRight] = right;
+    frame[audio::BackRight] = right;
+    frame[audio::Centre] = x;
+    frame[audio::Sub] = x;
+}
+
+// adds the voice to the speaker frames and its reverb share to the send
 void MixVoice(Voice& v, float* out, float* send, uint32_t frames) {
     Place at = Locate(v);
-    float g[2][2];
+    float g[2][audio::kChannels];
     float w[2];
     Levels(v, at, g, w);
     bool ears = at.on && v.channels == 1;
-    float itd = Itd(at.azimuth, at.elevation, false);
+    float itd = Itd(at.azimuth, at.elevation, audio::IsSurround());
     if (!v.has_gain) v.itd = itd;
     float itd_step = (itd - v.itd) / float(frames);
-    float dg[2][2];
+    float dg[2][audio::kChannels];
     UpdateRamp(v, g, frames, dg);
     double rate = double(v.freq ? v.freq : v.rate) / audio::kRate;
     for (uint32_t i = 0; i < frames; i++) {
@@ -608,24 +656,27 @@ void MixVoice(Voice& v, float* out, float* send, uint32_t frames) {
         float x[2];
         ReadFrame(v, *cursor, x);
         send[i] += x[0] * w[0] + x[1] * w[1];  // the send leaves before the HRTF
+        float ear[audio::kChannels];
         if (ears) {
             v.itd += itd_step;
-            PushEar(v, x[0]);
-            x[0] = EarAt(v, v.itd);
-            x[1] = EarAt(v, -v.itd);
+            EarFrame(v, x[0], ear);
         }
-        for (int c = 0; c < 2; c++)
-            for (int side = 0; side < 2; side++) v.gain[c][side] += dg[c][side];
-        out[i * 2] += x[0] * v.gain[0][0] + x[1] * v.gain[1][0];
-        out[i * 2 + 1] += x[0] * v.gain[0][1] + x[1] * v.gain[1][1];
+        float* o = out + i * audio::kChannels;
+        for (uint32_t k = 0; k < audio::kChannels; k++) {
+            v.gain[0][k] += dg[0][k];
+            v.gain[1][k] += dg[1][k];
+            if (ears) o[k] += ear[k] * v.gain[0][k];
+            else o[k] += x[0] * v.gain[0][k] + x[1] * v.gain[1][k];
+        }
         v.pos += rate;
     }
     std::memcpy(v.gain, g, sizeof(g));
     v.itd = itd;
 }
 
+// the device clips once, after the fold to stereo sums the speakers
 void Render(float* out, uint32_t frames) {
-    std::memset(out, 0, frames * 2 * sizeof(float));
+    std::memset(out, 0, frames * audio::kChannels * sizeof(float));
     static std::vector<float> send;  // the output thread alone renders
     send.assign(frames, 0.0f);
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -634,7 +685,6 @@ void Render(float* out, uint32_t frames) {
         MixVoice(v, out, send.data(), frames);
     }
     g_reverb.Run(send.data(), out, frames);
-    for (uint32_t i = 0; i < frames * 2; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
 }
 
 int64_t NowMs() {
@@ -758,12 +808,19 @@ HLE_STDCALL(DirectSoundCreate, 3) {
 }
 HLE_STDCALL(IDirectSound_Release, 1) { return 0; }
 HLE_STDCALL(DirectSoundUseFullHRTF, 0) { return 0; }
+// DSSPEAKER as the library keeps it (0x4CDB34): the dashboard's XC_AUDIO_FLAGS
 HLE_STDCALL(IDirectSound_GetSpeakerConfig, 2) {
-    W32(a[1], 0);  // stereo
+    constexpr uint32_t kStereo = 0;
+    constexpr uint32_t kSurroundAc3 = 0x2 | 0x10000;  // DSSPEAKER_SURROUND | DSSPEAKER_ENABLE_AC3
+    W32(a[1], audio::IsSurround() ? kSurroundAc3 : kStereo);
     return 0;
 }
 HLE_STDCALL(IDirectSound_SetEffectData, 6) { return 0; }
-HLE_STDCALL(IDirectSound_EnableHeadphones, 2) { return 0; }
+HLE_STDCALL(IDirectSound_EnableHeadphones, 2) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    g_headphones = a[1] != 0;
+    return 0;
+}
 HLE_STDCALL(IDirectSound_SetMixBinHeadroom, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (a[1] < 32) g_bin_headroom[a[1]] = a[2] & 7;

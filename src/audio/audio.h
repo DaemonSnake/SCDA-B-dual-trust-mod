@@ -4,12 +4,9 @@
 #include <string>
 #include <vector>
 
+#include "audio/output.h"
+
 namespace audio {
-
-constexpr uint32_t kRate = 48000;
-
-// the platform output pulls interleaved stereo float frames from render
-void StartOutput(std::function<void(float* out, uint32_t frames)> render);
 
 // headset audio (voice.cpp), any thread: the recording devices' names, as app::Settings::microphone keeps them,
 // and 16-bit PCM streams, null when a device would not open
