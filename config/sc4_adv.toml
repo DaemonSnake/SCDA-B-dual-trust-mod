@@ -237,5 +237,7 @@ D3D_Streams                 = 0x294FE8
 D3D_pDevice                 = 0x292B28
 DSound_StreamVtable         = 0x33D7D0
 DSound_StreamVtable2        = 0x33D7C0
+DSound_HrtfFilters          = 0x2C6220
+DSound_HrtfIndex            = 0x2D77E0
 XPP_GamepadType             = 0x3126DC
 XPP_MemoryUnitType          = 0x3127E8

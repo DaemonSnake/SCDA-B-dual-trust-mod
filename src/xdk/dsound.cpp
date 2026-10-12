@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <deque>
 #include <map>
+#include <optional>
 #include <vector>
 
 
@@ -24,6 +25,17 @@ namespace {
 constexpr uint32_t kStreamVtable = SYM(DSound_StreamVtable);  // CDirectSoundStream XMediaObject vtable
 constexpr uint32_t kStreamVtable2 = SYM(DSound_StreamVtable2);
 constexpr uint32_t kPacketPending = 0x8000000A, kFlushed = 0x80004004;
+
+// mix bins (DSMIXBIN) the host mixes by name
+constexpr uint32_t kBinCentre = 2;
+constexpr uint32_t kBinSub = 3;
+constexpr uint32_t kBinCrosstalkFrontLeft = 6;
+constexpr uint32_t kBinCrosstalkFrontRight = 7;
+constexpr uint32_t kBinCrosstalkBackLeft = 8;
+constexpr uint32_t kBinCrosstalkBackRight = 9;
+constexpr uint32_t kBinFirstSend = 10;  // effect sends from here up
+
+constexpr uint32_t kEarLength = 64;  // past the longest interaural delay, 31 samples
 
 struct Packet {
     uint32_t data, size, completed_ptr, status_ptr, context;
@@ -58,9 +70,24 @@ struct Voice {
     float lp[2] = {};      // its low pass, per channel
     float gain[2][2] = {};  // the last block's levels, the next block ramps from them
     bool has_gain = false;
+    // a mono 3D voice's interaural delay in samples and its recent samples
+    float itd = 0;
+    float ear[kEarLength] = {};
+    uint32_t ear_pos = 0;
     // ADPCM block cache
     int64_t block = -1;
     int16_t decoded[65 * 8];
+};
+
+// a 3D voice as the library's 3D pass sees it (0x4CE757 into the slot builder 0x4D45CB), as gains
+struct Place {
+    bool on = false;
+    float att = 1;      // every bin
+    float front = 1;    // crosstalk front pair
+    float back = 0;     // crosstalk back pair, silent on a stereo console (0x4CF3F7)
+    float centre = 1;   // centre bin
+    float azimuth = 0;
+    float elevation = 0;
 };
 
 struct Done {
@@ -154,9 +181,124 @@ void Complete(Voice& v, Packet& pk, uint32_t status) {
     }
 }
 
+// The library's full HRTF tables (DirectSoundUseFullHRTF): a filter number per azimuth step by elevation step, and
+// the filters, 31 taps and the interaural delay in the last byte, the right ear's filter after the left's
+constexpr uint32_t kHrtfIndex = SYM(DSound_HrtfIndex);
+constexpr uint32_t kHrtfFilters = SYM(DSound_HrtfFilters);
+constexpr uint32_t kHrtfFilterBytes = 32;
+constexpr uint32_t kHrtfDelayByte = 31;
+constexpr int kHrtfAzimuths = 61;     // 0 to 180 degrees in 3
+constexpr int kHrtfElevations = 31;   // -90 to 90 degrees in 6
+constexpr int kHrtfAzimuthStep = 3;
+constexpr int kHrtfElevationStep = 6;
+// the azimuth steps widen towards the poles: 3 up to 30 degrees of elevation, 6 up to 60, 12 beyond, none at 90
+constexpr int kHrtfMidStep = 6;
+constexpr int kHrtfPoleStep = 12;
+constexpr int kHrtfLowBand = 30;
+constexpr int kHrtfMidBand = 60;
+constexpr int kHrtfPole = 90;
+
+float Dot(const float a[3], const float b[3]) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+// Degrees from straight ahead, plus to the right. The library's octant estimate (0x4D15A1), not atan2: it picks
+// the HRTF entry and the interaural delay.
+float Azimuth(const float d[3], const float front[3], const float right[3]) {
+    float ahead = Dot(d, front);
+    float side = Dot(d, right);
+    float a = std::fabs(ahead);
+    float s = std::fabs(side);
+    float deg = 0;
+    if (a > s) deg = 45 * s / a;
+    else if (s > 0) deg = 90 - 45 * a / s;
+    if (ahead < 0) deg = 180 - deg;
+    return side < 0 ? -deg : deg;
+}
+
+// degrees above the horizontal, the same estimate (0x4D15A1)
+float Elevation(const float d[3], const float front[3], const float right[3], const float top[3]) {
+    float flat = std::hypot(Dot(d, front), Dot(d, right));
+    float up = Dot(d, top);
+    float u = std::fabs(up);
+    float deg = 0;
+    if (flat > u) deg = 45 * u / flat;
+    else if (u > 0) deg = 90 - 45 * flat / u;
+    return up < 0 ? -deg : deg;
+}
+
+// The library's filter pick (0x4D1B70). With speakers behind the listener a sound behind takes the entry of its
+// mirror in front (0x4D4D6C).
+uint32_t HrtfEntry(float azimuth, float elevation, bool surround) {
+    int half = kHrtfElevationStep / 2;
+    int el = int(elevation < 0 ? elevation - half : elevation + half) / kHrtfElevationStep * kHrtfElevationStep;
+    float az = std::fabs(azimuth);
+    int step = kHrtfAzimuthStep;
+    if (std::abs(el) > kHrtfLowBand) step = kHrtfMidStep;
+    if (std::abs(el) > kHrtfMidBand) step = kHrtfPoleStep;
+    int deg = int(az + step / 2.0f) / step * step;
+    if (std::abs(el) == kHrtfPole) deg = 0;
+    if (surround && deg > 90) deg = 180 - deg;
+    int a = deg / kHrtfAzimuthStep;
+    int e = (el + kHrtfPole) / kHrtfElevationStep;
+    if (a < 0 || a >= kHrtfAzimuths) a = 0;
+    if (e < 0 || e >= kHrtfElevations) e = 0;
+    return static_cast<const uint16_t*>(HostPtr(kHrtfIndex))[a * kHrtfElevations + e];
+}
+
+// Interaural delay in samples, above 0 the left ear hears later: the last byte of the far ear's filter (0x4D4D14)
+float Itd(float azimuth, float elevation, bool surround) {
+    if (!(std::fabs(azimuth) <= 180) || !(std::fabs(elevation) <= 90)) return 0;
+    const uint8_t* filters = static_cast<const uint8_t*>(HostPtr(kHrtfFilters));
+    float delay = filters[HrtfEntry(azimuth, elevation, surround) * kHrtfFilterBytes + kHrtfDelayByte];
+    return azimuth < 0 ? -delay : delay;
+}
+
+// A voice whose fifth bin is the centre (0x4CF25D) shares the front with it (0x4D1A55) by whole degrees below 45:
+// tables 0x4D9250 and 0x4D9308 are 0.7071 cos^2(2a) and 0.8409 cos(2a)
+void ShareCentre(Place& at) {
+    constexpr float kRadiansPerDegree = 0.017453293f;
+    constexpr int kCentreLimit = 45;
+    int az = int(std::fabs(at.azimuth));
+    int el = int(std::fabs(at.elevation));
+    if (az >= kCentreLimit || el >= kCentreLimit) {
+        at.centre = 0;
+        return;
+    }
+    float both = std::cos(2 * az * kRadiansPerDegree) * std::cos(2 * el * kRadiansPerDegree);
+    at.centre *= 0.7071f * both;
+    at.front *= 1 - 0.5f * both * both;
+}
+
+// Where a 3D voice sits for the library's 3D pass (0x4D005C): distance attenuation and direction
+Place Locate(const Voice& v) {
+    Place at;
+    if (!v.is3d) return at;
+    at.on = true;
+    float d[3] = {v.p[0] - g_listener[0], v.p[1] - g_listener[1], v.p[2] - g_listener[2]};
+    float dist = std::sqrt(Dot(d, d));
+    if (dist > v.min_dist) at.att = v.min_dist / std::min(dist, v.max_dist);
+    float right[3] = {g_top[1] * g_front[2] - g_top[2] * g_front[1], g_top[2] * g_front[0] - g_top[0] * g_front[2],
+                      g_top[0] * g_front[1] - g_top[1] * g_front[0]};
+    at.azimuth = Azimuth(d, g_front, right);
+    at.elevation = Elevation(d, g_front, right, g_top);
+    // the centre takes the front's share too
+    at.centre = at.front;
+    if (v.nbins >= 5 && v.bin[4] == kBinCentre) ShareCentre(at);
+    return at;
+}
+
+// The library's level of a 3D voice in a bin (0x4D45CB): the crosstalk pairs and the centre take their shares,
+// every bin takes the distance attenuation. Left and right come from the HRTF, both bins of a pair get the same.
+float BinScale(const Place& at, uint32_t bin) {
+    if (!at.on) return 1.0f;
+    if (bin == kBinCentre) return at.att * at.centre;
+    if (bin == kBinCrosstalkFrontLeft || bin == kBinCrosstalkFrontRight) return at.att * at.front;
+    if (bin == kBinCrosstalkBackLeft || bin == kBinCrosstalkBackRight) return at.att * at.back;
+    return at.att;
+}
+
 // gain of voice channel c on host left and right. A hardware voice holds two channels and owns a run of slots,
 // which alternate left and right.
-void Levels(Voice& v, float g[2][2]) {
+void Levels(const Voice& v, const Place& at, float g[2][2]) {
     std::memset(g, 0, 4 * sizeof(float));
     if (v.link_voice && audio::VoiceLinkHeard()) return;
     static const uint8_t kFront[2] = {0, 1};
@@ -165,27 +307,20 @@ void Levels(Voice& v, float g[2][2]) {
     uint32_t per = std::max<uint32_t>(n / voices, 2), step = v.channels == 1 ? 1 : 2;
     bool speakers = false;
     // muted speaker bins do not count: such a voice is heard through its effect send
-    for (uint32_t s = 0; s < n; s++) speakers |= bin[s] < 10 && bin[s] != 3 && v.bin_mb[bin[s]] > -10000;
+    for (uint32_t s = 0; s < n; s++)
+        speakers |= bin[s] < kBinFirstSend && bin[s] != kBinSub && v.bin_mb[bin[s]] > -10000;
     for (uint32_t c = 0; c < 2; c++)
         for (uint32_t s = c; c < v.channels && s < per && s < n; s += step) {
             uint32_t b = bin[s];
-            if (speakers && (b == 3 || b > 9)) continue;  // sub and effect sends
-            float x = Db(v.bin_mb[b]) * v.volume * v.headroom * (b == 2 ? 0.707f : 1.0f);
+            if (speakers && (b == kBinSub || b >= kBinFirstSend)) continue;  // sub and effect sends
+            float x = Db(v.bin_mb[b]) * v.volume * v.headroom * BinScale(at, b);
+            if (b == kBinCentre) x *= 0.707f;
             // even bins are left, odd right, 2 is the centre
-            if (!speakers || b == 2 || !(b & 1)) g[c][0] = std::max(g[c][0], x);
-            if (!speakers || b == 2 || (b & 1)) g[c][1] = std::max(g[c][1], x);
+            if (!speakers || b == kBinCentre || !(b & 1)) g[c][0] = std::max(g[c][0], x);
+            if (!speakers || b == kBinCentre || (b & 1)) g[c][1] = std::max(g[c][1], x);
         }
-    if (!v.is3d) return;
-    float d[3] = {v.p[0] - g_listener[0], v.p[1] - g_listener[1], v.p[2] - g_listener[2]};
-    float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-    float att = dist <= v.min_dist ? 1.0f : v.min_dist / std::min(dist, v.max_dist);
-    float right[3] = {g_top[1] * g_front[2] - g_top[2] * g_front[1], g_top[2] * g_front[0] - g_top[0] * g_front[2],
-                      g_top[0] * g_front[1] - g_top[1] * g_front[0]};
-    float pan = dist > 1e-3f ? (d[0] * right[0] + d[1] * right[1] + d[2] * right[2]) / dist : 0.0f;
-    for (int c = 0; c < 2; c++) {
-        g[c][0] *= att * std::min(1.0f, 1.0f - pan);
-        g[c][1] *= att * std::min(1.0f, 1.0f + pan);
-    }
+    // a mono 3D voice leaves the HRTF as two ears: the right ear plays as channel 1
+    if (at.on && v.channels == 1) std::swap(g[0][1], g[1][1]);
     // the game can place a sound at NaN, every frame, that voice alone goes silent, where its
     // NaN gain would turn the whole mix to NaN, which plays as silence
     for (int c = 0; c < 2; c++)
@@ -193,9 +328,139 @@ void Levels(Voice& v, float g[2][2]) {
             if (!std::isfinite(g[c][side])) g[c][side] = 0;
 }
 
+// 3D levels follow the listener once a game frame: stepped per block, a fast turn clicks
+void UpdateRamp(Voice& v, const float g[2][2], uint32_t frames, float dg[2][2]) {
+    if (!v.has_gain) std::memcpy(v.gain, g, sizeof(v.gain));
+    v.has_gain = true;
+    for (int c = 0; c < 2; c++)
+        for (int side = 0; side < 2; side++) dg[c][side] = (g[c][side] - v.gain[c][side]) / float(frames);
+}
+
+// the 3D voice's recent samples, the ear further from the sound reads them later
+void PushEar(Voice& v, float x) {
+    v.ear[v.ear_pos % kEarLength] = x;
+    v.ear_pos++;
+}
+float EarAt(const Voice& v, float delay) {
+    float back = std::max(delay, 0.0f);
+    uint32_t whole = uint32_t(back);
+    float part = back - float(whole);
+    float now = v.ear[(v.ear_pos - 1 - whole) % kEarLength];
+    float before = v.ear[(v.ear_pos - 2 - whole) % kEarLength];
+    return now + (before - now) * part;
+}
+
 // a stream goes quiet: a started one loses its pause
 void Deactivate(Voice& v) {
     if (v.active) v.active = v.paused = v.ending = false;
+}
+
+// where a frame and the one after it are read from, for interpolation
+struct Cursor {
+    uint32_t data;
+    uint32_t f;
+    uint32_t next_data;
+    uint32_t next_f;
+};
+
+// the stream's frame at its position, none once its packets ran out
+std::optional<Cursor> StreamFrame(Voice& v) {
+    uint32_t f = uint32_t(v.pos);
+    while (!v.packets.empty() && f >= FramesOf(v, v.packets.front().size)) {
+        Packet pk = v.packets.front();
+        v.packets.pop_front();
+        pk.used = pk.size;
+        Complete(v, pk, 0);
+        v.pos -= FramesOf(v, pk.size);
+        f = uint32_t(v.pos);
+    }
+    if (v.packets.empty()) {
+        v.pos = 0;
+        if (v.ending) Deactivate(v);
+        return std::nullopt;
+    }
+    Packet& pk = v.packets.front();
+    Cursor at = {pk.data, f, pk.data, f};
+    if (f + 1 < FramesOf(v, pk.size)) {
+        at.next_f = f + 1;
+    } else if (v.packets.size() > 1) {
+        at.next_data = v.packets[1].data;
+        at.next_f = 0;
+    }
+    return at;
+}
+
+// the buffer's frame at its position, none once it stopped
+std::optional<Cursor> BufferFrame(Voice& v) {
+    uint32_t f = uint32_t(v.pos);
+    uint32_t end = FramesOf(v, v.bytes);
+    if (v.looping && v.loop_len) end = FramesOf(v, v.loop_start + v.loop_len);
+    uint32_t start = 0;
+    if (v.loop_len) start = FramesOf(v, v.loop_start);
+    if (f >= end) {
+        if (!v.looping || !end) {
+            v.playing = false;
+            v.pos = 0;
+            return std::nullopt;
+        }
+        v.pos -= end - start;
+        f = uint32_t(v.pos);
+    }
+    if (!v.data) return std::nullopt;
+    Cursor at = {v.data, f, v.data, f};
+    if (f + 1 < end) {
+        at.next_f = f + 1;
+    } else if (v.looping && end) {
+        at.next_f = start;
+    }
+    return at;
+}
+
+// the voice's channels at its position, interpolated, through its I3DL2 direct path filter
+void ReadFrame(Voice& v, const Cursor& at, float x[2]) {
+    float t = float(v.pos - at.f);
+    for (int c = 0; c < 2; c++) {
+        float now = Sample(v, at.data, at.f, c);
+        x[c] = now + (Sample(v, at.next_data, at.next_f, c) - now) * t;
+    }
+    if (v.lf == 1 && v.hf == 1) return;
+    for (int c = 0; c < 2; c++) {
+        v.lp[c] += kLowPass * (x[c] - v.lp[c]);
+        x[c] = v.lp[c] * v.lf + (x[c] - v.lp[c]) * v.hf;
+    }
+}
+
+// adds the voice to the stereo frames
+void MixVoice(Voice& v, float* out, uint32_t frames) {
+    Place at = Locate(v);
+    float g[2][2];
+    Levels(v, at, g);
+    bool ears = at.on && v.channels == 1;
+    float itd = Itd(at.azimuth, at.elevation, false);
+    if (!v.has_gain) v.itd = itd;
+    float itd_step = (itd - v.itd) / float(frames);
+    float dg[2][2];
+    UpdateRamp(v, g, frames, dg);
+    double rate = double(v.freq ? v.freq : v.rate) / audio::kRate;
+    for (uint32_t i = 0; i < frames; i++) {
+        std::optional<Cursor> cursor = v.stream ? StreamFrame(v) : BufferFrame(v);
+        if (!cursor) break;
+        float x[2];
+        ReadFrame(v, *cursor, x);
+        if (ears) {
+            v.itd += itd_step;
+            PushEar(v, x[0]);
+            x[0] = EarAt(v, v.itd);
+            x[1] = EarAt(v, -v.itd);
+        }
+        for (int c = 0; c < 2; c++)
+            for (int side = 0; side < 2; side++) v.gain[c][side] += dg[c][side];
+        out[i * 2] += x[0] * v.gain[0][0] + x[1] * v.gain[1][0];
+        out[i * 2 + 1] += x[0] * v.gain[0][1] + x[1] * v.gain[1][1];
+        v.pos += rate;
+    }
+    std::memcpy(v.gain, g, sizeof(g));
+    v.itd = itd;
 }
 
 void Render(float* out, uint32_t frames) {
@@ -203,78 +468,7 @@ void Render(float* out, uint32_t frames) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (auto& [obj, v] : g_voices) {
         if (v.paused || (!v.stream && !v.playing)) continue;
-        float g[2][2], dg[2][2];
-        Levels(v, g);
-        // 3D levels follow the listener once a game frame: stepped per block, a fast turn clicks
-        if (!v.has_gain) std::memcpy(v.gain, g, sizeof(g));
-        v.has_gain = true;
-        for (int c = 0; c < 2; c++)
-            for (int side = 0; side < 2; side++) dg[c][side] = (g[c][side] - v.gain[c][side]) / float(frames);
-        double step = double(v.freq ? v.freq : v.rate) / audio::kRate;
-        for (uint32_t i = 0; i < frames; i++) {
-            uint32_t f = uint32_t(v.pos);
-            float a, b, a1, b1;  // this frame and the next, interpolated between
-            if (v.stream) {
-                while (!v.packets.empty() && f >= FramesOf(v, v.packets.front().size)) {
-                    Packet pk = v.packets.front();
-                    v.packets.pop_front();
-                    pk.used = pk.size;
-                    Complete(v, pk, 0);
-                    v.pos -= FramesOf(v, pk.size);
-                    f = uint32_t(v.pos);
-                }
-                if (v.packets.empty()) {
-                    v.pos = 0;
-                    if (v.ending) Deactivate(v);
-                    break;
-                }
-                Packet& pk = v.packets.front();
-                a = Sample(v, pk.data, f, 0);
-                b = Sample(v, pk.data, f, 1);
-                if (f + 1 < FramesOf(v, pk.size)) {
-                    a1 = Sample(v, pk.data, f + 1, 0);
-                    b1 = Sample(v, pk.data, f + 1, 1);
-                } else if (v.packets.size() > 1) {
-                    a1 = Sample(v, v.packets[1].data, 0, 0);
-                    b1 = Sample(v, v.packets[1].data, 0, 1);
-                } else {
-                    a1 = a;
-                    b1 = b;
-                }
-            } else {
-                uint32_t end = v.looping && v.loop_len ? FramesOf(v, v.loop_start + v.loop_len) : FramesOf(v, v.bytes);
-                if (f >= end) {
-                    if (!v.looping || !end) {
-                        v.playing = false;
-                        v.pos = 0;
-                        break;
-                    }
-                    uint32_t start = v.loop_len ? FramesOf(v, v.loop_start) : 0;
-                    v.pos -= end - start;
-                    f = uint32_t(v.pos);
-                }
-                if (!v.data) break;
-                a = Sample(v, v.data, f, 0);
-                b = Sample(v, v.data, f, 1);
-                uint32_t g = f + 1 < end ? f + 1 : v.looping && end ? (v.loop_len ? FramesOf(v, v.loop_start) : 0) : f;
-                a1 = Sample(v, v.data, g, 0);
-                b1 = Sample(v, v.data, g, 1);
-            }
-            float t = float(v.pos - f);
-            float x0 = a + (a1 - a) * t, x1 = b + (b1 - b) * t;
-            if (v.lf != 1 || v.hf != 1) {
-                v.lp[0] += kLowPass * (x0 - v.lp[0]);
-                v.lp[1] += kLowPass * (x1 - v.lp[1]);
-                x0 = v.lp[0] * v.lf + (x0 - v.lp[0]) * v.hf;
-                x1 = v.lp[1] * v.lf + (x1 - v.lp[1]) * v.hf;
-            }
-            for (int c = 0; c < 2; c++)
-                for (int side = 0; side < 2; side++) v.gain[c][side] += dg[c][side];
-            out[i * 2] += x0 * v.gain[0][0] + x1 * v.gain[1][0];
-            out[i * 2 + 1] += x0 * v.gain[0][1] + x1 * v.gain[1][1];
-            v.pos += step;
-        }
-        std::memcpy(v.gain, g, sizeof(g));
+        MixVoice(v, out, frames);
     }
     for (uint32_t i = 0; i < frames * 2; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
 }
