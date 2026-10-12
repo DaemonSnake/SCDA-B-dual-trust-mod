@@ -595,16 +595,17 @@ void PickStick(Pad& p, const int (&move)[4]) {
 }
 
 // the move keys, the wheel's zoom and the arrows as the left stick, also kept in g_stick_keys and g_pick_last
-void UpdateStick(Pad& p, const int (&move)[4], bool camera, bool menu) {
+void UpdateStick(Pad& p, const int (&move)[4], bool camera, bool menu, bool back) {
     int x = move[3] - move[2];
     int y = move[0] - move[1];
     // the camera zooms at the stick's rate times its zoom speed, so it gets the full stick
     bool full = camera || menu || g_quick || View(g_view.load()) == View::Ledge;
     float v = StickSpeed(full);
     y = WheelZoom(camera, y);
-    // the arrows, read after the wheel's zoom, take the stick over at full tilt
-    int ax = Down(VK_RIGHT) - Down(VK_LEFT);
-    int ay = Down(VK_UP) - Down(VK_DOWN);
+    // the arrows, read after the wheel's zoom, take the stick over at full tilt where it moves a cursor or a selection
+    bool arrows = menu || back || g_map || g_quick;
+    int ax = arrows ? Down(VK_RIGHT) - Down(VK_LEFT) : 0;
+    int ay = arrows ? Down(VK_UP) - Down(VK_DOWN) : 0;
     if (ax || ay) {
         x = ax;
         y = ay;
@@ -656,7 +657,7 @@ void Keyboard(Pad& p) {
     }
     PressMenuKeys(p, menu, back, keypad);
     NoteKeysHeld(keys);
-    UpdateStick(p, move, camera, menu);
+    UpdateStick(p, move, camera, menu, back);
 }
 
 // the cursor stays where the drag started, so it hovers nothing on the way
