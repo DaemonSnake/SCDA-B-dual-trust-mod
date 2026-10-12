@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include "app/app.h"
@@ -116,10 +117,11 @@ constexpr Page kPages[] = {
     {"P_Trust", kMenu, Mode::Bars},           {"P_Videos", kMenu, Mode::Bars},
 };
 
-constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8, kFade = 32;  // page units
+constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8, kFade = 32, kFullSlack = 8;  // page units
 constexpr float kInset = 1.5f, kBand = 24.0f;  // texels, taken as page units
 // share of the width a 4:3 page leaves spare that goes left of it
 constexpr float kLeft = 0.0f, kCentre = 0.5f, kRight = 1.0f, kNone = -1.0f;
+constexpr float kLeftMiddle = 0.25f, kRightMiddle = 0.75f;  // split screen: the middle of each half
 
 float g_offset = kCentre;
 Mode g_mode = Mode::Centre;
@@ -128,12 +130,25 @@ uint32_t g_drawing = 0;  // the Magma page drawing
 bool g_hud_seen = false, g_decided = false;
 bool g_in_level = false;  // P_hud was drawn last frame
 
-// magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil
-void FlushCanvas(X86Context& ctx) {
+// magma manager +0x34/+0x38 viewport, viewport +0x5C canvas, canvas +0x84 its FCanvasUtil (+0x28 width)
+uint32_t CanvasUtil() {
     uint32_t m = R32(kMagma);
     uint32_t vp = m ? R32(m + 0x34) : 0;
     if (vp && R32(m + 0x38)) vp = R32(m + 0x38);
-    uint32_t canvas = vp ? R32(vp + 0x5C) : 0, util = canvas ? R32(canvas + 0x84) : 0;
+    uint32_t canvas = vp ? R32(vp + 0x5C) : 0;
+    return canvas ? R32(canvas + 0x84) : 0;
+}
+
+// A split screen player's canvas: its FCanvasUtil says 320 wide, but its page (hud_split / hud_split2.mgm) is laid out
+// over the whole 640 wide screen, the left player's mirrored into the left half
+bool SplitCanvas() {
+    uint32_t util = CanvasUtil();
+    int w = util ? int(R32(util + 0x28)) : 0;
+    return w > 0 && w < 640;
+}
+
+void FlushCanvas(X86Context& ctx) {
+    uint32_t util = CanvasUtil();
     if (!util) return;
     uint32_t ecx = ctx.ecx;
     ctx.ecx = util;
@@ -141,24 +156,24 @@ void FlushCanvas(X86Context& ctx) {
     ctx.ecx = ecx;
 }
 
+// at: the share of the spare width left of the 4:3 page, when the mode's own is not wanted
 template <typename F>
-void Draw(X86Context& ctx, uint8_t* base, Mode mode, F original) {
+void Draw(X86Context& ctx, uint8_t* base, Mode mode, F original, float at = kNone) {
     FlushCanvas(ctx);
     float offset = g_offset;
     Mode saved = g_mode;
     g_mode = mode;
-    g_offset = mode == Mode::Stretch ? kNone : mode == Mode::Left ? kLeft : mode == Mode::Right ? kRight : kCentre;
+    g_offset = at >= 0 ? at : mode == Mode::Stretch ? kNone : mode == Mode::Left ? kLeft : mode == Mode::Right ? kRight : kCentre;
     original(ctx, base);
     FlushCanvas(ctx);
     g_offset = offset;
     g_mode = saved;
 }
 
-// page rect of an unlisted element; GetBounds clears the screen's per child text and font, kept here
-Mode ByHalf(X86Context& ctx, uint32_t instance) {
+// page rect of an element, false when it has none; GetBounds clears the screen's per child text and font, kept here
+bool Bounds(X86Context& ctx, uint32_t instance, int& l, int& r) {
     uint32_t widget = R32(instance + 8), screen = R32(kMagmaScreen);
-    if (!widget || !screen) return g_page->others;
-    int sw = int16_t(R16(screen + 0x84));
+    if (!widget || !screen) return false;
     uint32_t esp = ctx.esp, rect = (esp - 0x40) & ~0xFu, text = R32(screen + 0x7C), font = R32(screen + 0x80);
     W32(rect, 0x80007FFF);  // left 0x7FFF, right -0x8000: empty unless GetBounds fills it
     ctx.esp = rect - 0x10;
@@ -168,10 +183,60 @@ Mode ByHalf(X86Context& ctx, uint32_t instance) {
     ctx.ecx = instance;
     W32(screen + 0x7C, text);
     W32(screen + 0x80, font);
-    int l = int16_t(R16(rect)), r = int16_t(R16(rect + 2));
-    Mode mode = l > r ? g_page->others : r <= sw / 2 + kSlack ? Mode::Left : l >= sw / 2 - kSlack ? Mode::Right : g_page->others;
+    l = int16_t(R16(rect));
+    r = int16_t(R16(rect + 2));
+    return l <= r;
+}
+
+// an unlisted element sitting in one half of the page goes to that side
+Mode ByHalf(X86Context& ctx, uint32_t instance) {
+    uint32_t screen = R32(kMagmaScreen);
+    int l, r, sw = screen ? int16_t(R16(screen + 0x84)) : 0;
+    if (!Bounds(ctx, instance, l, r)) return g_page->others;
+    Mode mode = r <= sw / 2 + kSlack ? Mode::Left : l >= sw / 2 - kSlack ? Mode::Right : g_page->others;
     LOG_FIRST(100, "hud: page %08X element %08X x %d..%d mode %d", g_page->id, R32(instance + 4), l, r, int(mode));
     return mode;
+}
+
+// Split screen pieces held at the middle of their half, the centre of that player's view: the reticles (A_reticules,
+// placed by the game on the aim point, a little wider than a half) and every piece of the quick inventory and the
+// sniper scope (but its full screen overlays, Stretch)
+constexpr uint32_t kSplitReticles = game::magma::Id("A_reticules");
+constexpr uint32_t kSplitScope = game::magma::Id("P_Sniper");
+constexpr uint32_t kSplitCentredPages[] = {game::magma::Id("P_QuickInventory_New"), kSplitScope};
+// the split scope's quarters (A_center) fill their half: strips of their edge texels carry them out to its sides
+
+bool SplitCentredPage(uint32_t page) {
+    return page && std::find(std::begin(kSplitCentredPages), std::end(kSplitCentredPages), R32(page + 0x14)) !=
+                       std::end(kSplitCentredPages);
+}
+
+// Split screen: each player's HUD keeps together and narrows toward its own side of the screen, the left player's
+// to the left edge, the right player's to the right. On the middle line (the divider, the shared comms box) it is held
+// at the screen's middle. kNone for an area wider than a half (its pieces are placed one by one) or one with no rect.
+// A piece inside such an area reports its rect without the area's offset (the left player's A_HUD sits at -341), so
+// it takes its page's side, learned per page from the pieces placed at the top.
+int g_split_inside = 0;                            // areas left to their pieces, open now
+std::unordered_map<uint32_t, float> g_split_side;  // page instance: kLeft or kRight
+
+float SplitAt(X86Context& ctx, uint32_t instance) {
+    uint32_t screen = R32(kMagmaScreen);
+    int l, r, sw = screen ? int16_t(R16(screen + 0x84)) : 0;
+    if (sw <= 0 || !Bounds(ctx, instance, l, r)) return kNone;
+    auto side = g_split_side.find(g_drawing);
+    if (R32(instance + 4) == kSplitReticles)
+        return (side != g_split_side.end() ? side->second == kLeft : l + r < sw) ? kLeftMiddle : kRightMiddle;
+    if (r - l > sw / 2) return kNone;
+    int half = sw / 2;
+    bool across = l < half - kSlack && r > half + kSlack;
+    bool on_line = l >= half - kSlack && r <= half + kSlack;
+    bool centred_page = SplitCentredPage(g_drawing);
+    float at = across || on_line ? kCentre : l + r < sw ? kLeft : kRight;
+    if ((g_split_inside || (centred_page && at != kCentre)) && side != g_split_side.end()) at = side->second;
+    else if (!g_split_inside && at != kCentre && r - l >= kMinWidth) g_split_side[g_drawing] = at;
+    if (centred_page && at != kCentre)
+        at = at == kLeft ? kLeftMiddle : kRightMiddle;
+    return at;
 }
 
 }  // namespace
@@ -195,6 +260,44 @@ X86_FUNC(sub_0028F090) {
     }
     float lo = std::min({x(0), x(1), x(2), x(3)}), hi = std::max({x(0), x(1), x(2), x(3)});
     bool left = lo <= kSlack * unit, right = hi >= w - kSlack * unit;
+    // a backdrop the canvas wide but a little off (the training video's, 5 page units left) still covers both sides
+    if (lo <= kFullSlack * unit && hi >= w - kFullSlack * unit) left = right = true;
+    // where an Extend strip reaches: the screen sides, or on a split canvas (the split scope) its half's sides, each
+    // taken back through the narrowing about the point the piece is held to
+    // a canvas pixel past the screen side: the canvas sits half a pixel left, a split one's pixels are twice as wide
+    float pad = std::max(unit, 1.0f), far_lo = -side - pad, far_hi = w + side + pad;
+    bool split = g_mode == Mode::Extend && SplitCanvas();
+    if (split) {
+        float h0 = g_offset < kCentre ? 0 : w / 2, h1 = h0 + w / 2, spare = g_offset * (1 - k) * w;
+        bool held = g_offset != kCentre;  // not on the middle line (the comms box)
+        left = held && std::fabs(lo - h0) <= kSlack * unit;
+        right = held && std::fabs(hi - h1) <= kSlack * unit;
+        far_lo = (h0 - spare) / k - unit;
+        far_hi = (h1 - spare) / k + unit;
+    }
+    // The split scope's quarters crop their texture (sniper_frame_center: region 160 of its 256 texels in
+    // hud_split.mgm): widened out to their half's side, their u goes on at the same rate and shows more of the frame.
+    // A quarter whose u would run off the texture stays as it is.
+    if (split && (left || right)) {
+        uint32_t saved[23];
+        std::memcpy(saved, &G<uint32_t>(args), sizeof saved);
+        auto was = [&](int i, int field) { return std::bit_cast<float>(saved[i * 5 + field]); };
+        bool fits = true;
+        for (int i = 0; i < 4; i++) {
+            float xi = was(i, 0);
+            if (!((left && xi == lo) || (right && xi == hi))) continue;
+            float far = xi == lo ? far_lo : far_hi;
+            for (int j = 0; j < 4; j++) {
+                if (was(j, 0) == xi || was(j, 1) != was(i, 1)) continue;
+                float u = was(i, 2) + (was(i, 2) - was(j, 2)) * (far - xi) / (xi - was(j, 0));
+                fits &= u >= -0.001f && u <= 1.001f;
+                x(i) = far;
+                G<float>(args + i * 0x14 + 8) = u;
+            }
+        }
+        if (!fits) std::memcpy(&G<uint32_t>(args), saved, sizeof saved);
+        return __imp__sub_0028F090(ctx, base);
+    }
     if (g_mode == Mode::Shade && left != right && hi - lo >= (kBand + kMinWidth) * unit) {
         uint32_t saved[23];
         std::memcpy(saved, &G<uint32_t>(args), sizeof saved);
@@ -232,7 +335,7 @@ X86_FUNC(sub_0028F090) {
             }
         return __imp__sub_0028F090(ctx, base);
     }
-    if (g_mode == Mode::Extend && (left || right) && hi - lo <= kFade * unit) {
+    if (g_mode == Mode::Extend && !split && (left || right) && hi - lo <= kFade * unit) {
         for (int i = 0; i < 4; i++) x(i) += left ? -side : side;
         return __imp__sub_0028F090(ctx, base);
     }
@@ -248,7 +351,7 @@ X86_FUNC(sub_0028F090) {
         std::memcpy(&G<uint32_t>(args), saved, sizeof saved);
         for (int i = 0; i < 4; i++) {
             if (was(i, 0) == from) {
-                x(i) = from == lo ? -side : w + side;
+                x(i) = from == lo ? far_lo : far_hi;
                 continue;
             }
             // the inner vertex takes its edge partner's texel and colour, so the strip repeats the edge column (the
@@ -275,7 +378,7 @@ X86_EXTERN_FUNC(__imp__sub_0028EDCC);
 X86_FUNC(sub_0028EDCC) {
     uint32_t util = ctx.ecx;
     int w = int(R32(util + 0x28)), h = int(R32(util + 0x2C));
-    if (g_offset < 0 || w < 640 || h < 448 || !app::Widescreen()) return __imp__sub_0028EDCC(ctx, base);
+    if (g_offset < 0 || w < 320 || h < 448 || !app::Widescreen()) return __imp__sub_0028EDCC(ctx, base);
     float& scale = G<float>(util + 0x74);
     float& move = G<float>(util + 0xA4);
     float s = scale, m = move, k = app::Narrow();
@@ -469,7 +572,24 @@ X86_FUNC(sub_002C64E0) {
     uint32_t id = R32(instance + 4);
     std::span<const Rule> rules = g_page ? g_page->rules : std::span<const Rule>(kMenu);
     auto rule = std::find_if(rules.begin(), rules.end(), [&](const Rule& r) { return r.id == id; });
-    if (rule == rules.end() ? !g_page : rule->mode == Mode::Open) return __imp__sub_002C64E0(ctx, base);
+    // a split page's layout is its own, mirrored for the left player: placed by where it sits, not kHud's sides
+    bool split_page = SplitCanvas() && ((g_page && g_page->half) || SplitCentredPage(g_drawing));
+    bool open = rule != rules.end() && rule->mode == Mode::Open;
+    if (open || (!split_page && rule == rules.end() && !g_page)) return __imp__sub_002C64E0(ctx, base);
+    if (split_page && (rule == rules.end() || rule->mode != Mode::Stretch)) {
+        float at = SplitAt(ctx, instance);
+        ctx.ecx = instance;
+        if (at < 0) {
+            g_split_inside++;
+            __imp__sub_002C64E0(ctx, base);
+            g_split_inside--;
+            return;
+        }
+        g_decided = true;
+        Draw(ctx, base, R32(g_drawing + 0x14) == kSplitScope ? Mode::Extend : Mode::Centre, __imp__sub_002C64E0, at);
+        g_decided = false;
+        return;
+    }
     Mode mode = rule != rules.end() ? rule->mode : g_page->half ? ByHalf(ctx, instance) : g_page->others;
     g_decided = true;
     Draw(ctx, base, mode, __imp__sub_002C64E0);

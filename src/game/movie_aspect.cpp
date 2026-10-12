@@ -34,7 +34,7 @@ X86_FUNC(GUEST(BinkWait)) {
         ctx.esp += 8;  // ret 4
         return;
     }
-    // Yield the CPU while waiting for the next frame to avoid busy-spinning and waking guest threads.
+    // the fullscreen player spins on this between frames, sleep instead of holding a whole core
     bool player_loop = R32(ctx.esp) == 0x3948C;
     GUEST_ORIG(BinkWait)(ctx, base);
     if (player_loop && ctx.eax) std::this_thread::sleep_for(std::chrono::milliseconds(1));
