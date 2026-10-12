@@ -158,6 +158,7 @@ void UpdateView(uint32_t viewport) {
     input::SetInteractReloads(InteractReloads(pc, state));
     input::SetTargeting(Targeting(state) || GentleMove(state));
     input::SetCarrying(state == unreal::Name("s_Carry"));
+    input::SetHanging(state == unreal::Name("s_Ledge"));
     if (view == input::View::Eev && sniping) Sniper(pc);
     else if (view == input::View::Eev) Eev(pc);
     else g_zoomer = 0;

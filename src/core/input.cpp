@@ -172,6 +172,7 @@ std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet ta
 std::atomic<bool> g_net{false};
 std::atomic<bool> g_interact_reloads{false};
 std::atomic<bool> g_carrying{false};
+std::atomic<bool> g_hanging{false};
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -655,6 +656,8 @@ void Keyboard(Pad& p) {
         }
         PressTarget(LatchTarget(i, camera, back, menu), p, move);
     }
+    // SCCT PC's s_Ledge lets go on aForward below m_backwardFull as on bDuckHold; v2 only takes bDuckHold
+    if (g_hanging && !menu && move[1] && !move[2] && !move[3]) p.analog[kAnalogB] = 0xFF;
     PressMenuKeys(p, menu, back, keypad);
     NoteKeysHeld(keys);
     UpdateStick(p, move, camera, menu, back);
@@ -1074,6 +1077,10 @@ void SetTargeting(bool on) {
 
 void SetCarrying(bool on) {
     g_carrying = on;
+}
+
+void SetHanging(bool on) {
+    g_hanging = on;
 }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }

@@ -91,6 +91,8 @@ void SetInteractReloads(bool on);
 void SetTargeting(bool on);
 // carrying a body: the keyboard's alt fire drops it (DropBody), as SCCT PC's s_Carry ProcessAltFire, not the pad's LT
 void SetCarrying(bool on);
+// hanging from a ledge (s_Ledge): the move backward key, with no strafe key held, holds B (crouch) and drops, as SCCT PC
+void SetHanging(bool on);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
 bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is down now, with the window in front
 // the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses
