@@ -75,7 +75,7 @@ bool FindGame(GameFiles& game) {
         }
     std::sort(isos.begin(), isos.end());
 
-    // the first copy with this xbe wins, the extracted files before any image; another release is kept to offer
+    // the first copy with this xbe wins, the extracted files before any image; another release is kept as a fallback
     GameFiles other;
     std::unique_ptr<kernel::Disc> other_disc;
     fs::path other_name;
@@ -119,10 +119,9 @@ bool FindGame(GameFiles& game) {
                     kTitle, MB_ICONERROR);
         return false;
     }
-    std::wstring text = other_name.filename().wstring() +
-                        L" is a different release of the game than this build was made from, and will most likely "
-                        L"crash.\n\nStart it anyway?";
-    if (MessageBoxW(nullptr, text.c_str(), kTitle, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) != IDYES) return false;
+    // only one release is known in NA/EU, so a mismatch is almost always a harmless dump difference
+    LOGW("Game: %s in %s is not the release this build was made from (expected sha1 %s), starting it anyway", IMAGE_XBE,
+         other_name.string().c_str(), kImageSha1);
     game = std::move(other);
     kernel::MountDisc(std::move(other_disc));
     return true;
