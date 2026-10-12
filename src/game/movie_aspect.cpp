@@ -3,7 +3,9 @@
 // fit takes a pixel aspect of 4/3 in a widescreen mode, except in the menu map (the controller's vtable +0xDC,
 // sub_001D05CB, map name "menu"). That keeps the 4:3 menu background from being pillarboxed, but letterboxed the 16:9
 // cinematics as well, so a movie wider than 4:3 is fitted there as it is in a level.
+#include <chrono>
 #include <cstdint>
+#include <thread>
 
 #include "game/loading.h"
 #include "xdk/hle.h"
@@ -32,7 +34,10 @@ X86_FUNC(GUEST(BinkWait)) {
         ctx.esp += 8;  // ret 4
         return;
     }
+    // Yield the CPU while waiting for the next frame to avoid busy-spinning and waking guest threads.
+    bool player_loop = R32(ctx.esp) == 0x3948C;
     GUEST_ORIG(BinkWait)(ctx, base);
+    if (player_loop && ctx.eax) std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 X86_EXTERN_FUNC(__imp__sub_002E6D5B);
