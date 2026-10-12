@@ -78,6 +78,10 @@ std::atomic<int> g_view{0};
 std::atomic<float> g_zoom_speed{0.0f};
 std::atomic<int> g_wheel{0};
 std::atomic<int> g_menu_wheel{0};  // wheel delta in a menu not yet taken, WHEEL_DELTA a notch
+// The wheel binds as two keys, codes Windows leaves unassigned. A notch holds the actions bound to it for one tap.
+constexpr int kWheelUp = 0x0E, kWheelDown = 0x0F;
+constexpr uint64_t kWheelTapMs = 80;
+std::atomic<uint64_t> g_wheel_ms[2] = {};  // the last notch up, down
 std::atomic<bool> g_list{false};  // SetInteractionList
 std::atomic<uint16_t> g_tap{0};
 std::atomic<uint64_t> g_tap_until{0};
@@ -191,6 +195,9 @@ constexpr Target kStoryActions[] = {
     {{"strafe_right", "MOVE RIGHT", "D"}, 19},
     {{"jump", "JUMP / SPLIT JUMP", "Shift"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
+    // as SCCT PC's: a press is a wheel notch, which steps the walking speed or zooms (EEV, scope, sticky camera, map)
+    {{"zoom_in", "ZOOM IN / ACCELERATE", "Wheel Up"}, -1, false, KeyEvent::ZoomIn},
+    {{"zoom_out", "ZOOM OUT / DECELERATE", "Wheel Down"}, -1, false, KeyEvent::ZoomOut},
     {{"back_to_wall", "BACK TO WALL / SWITCH HAND", "Q"}, 14},
     {{"fire", "FIRE", "LMB"}, 7},
     {{"alt_fire", "ALTERNATE FIRE", "RMB"}, 6},
@@ -344,6 +351,7 @@ struct Name {
 };
 constexpr Name kNames[] = {
     {VK_LBUTTON, "LMB"}, {VK_RBUTTON, "RMB"}, {VK_MBUTTON, "MMB"}, {VK_XBUTTON1, "Mouse4"}, {VK_XBUTTON2, "Mouse5"},
+    {kWheelUp, "Wheel Up"}, {kWheelDown, "Wheel Down"},
     {VK_SPACE, "Space"}, {VK_RETURN, "Enter"}, {VK_ESCAPE, "Escape"}, {VK_BACK, "Backspace"}, {VK_TAB, "Tab"},
     {VK_SHIFT, "Shift"}, {VK_CONTROL, "Ctrl"}, {VK_MENU, "Alt"}, {VK_CAPITAL, "CapsLock"},
     {VK_UP, "Up"}, {VK_DOWN, "Down"}, {VK_LEFT, "Left"}, {VK_RIGHT, "Right"},
@@ -407,7 +415,10 @@ std::string Join(const std::vector<int>& vks) {
 }
 
 bool Active() { return g_hwnd && GetForegroundWindow() == g_hwnd && !g_blocked; }
-bool Down(int vk) { return GetAsyncKeyState(vk) < 0; }
+bool Down(int vk) {
+    if (vk == kWheelUp || vk == kWheelDown) return NowMs() - g_wheel_ms[vk == kWheelDown] < kWheelTapMs;
+    return GetAsyncKeyState(vk) < 0;
+}
 bool HeldKeys(KeyEvent event) {
     std::vector<int> keys;
     {
@@ -428,7 +439,8 @@ bool Bound(KeyEvent event, int vk) {
 }
 std::atomic<uint64_t> g_capture_ms{0};  // PressedKey
 bool Mouse(int vk) {
-    return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2;
+    return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2 ||
+           vk == kWheelUp || vk == kWheelDown;
 }
 
 bool AnyKeyDown(const std::array<std::vector<int>, kCount>& binds) {
@@ -452,11 +464,24 @@ void SettleMouse() {
     }
 }
 
+// 1 for zoom in, -1 for zoom out, 0 for any other action
+int ZoomOf(size_t i) {
+    KeyEvent e = kActions[i].event;
+    return e == KeyEvent::ZoomIn ? 1 : e == KeyEvent::ZoomOut ? -1 : 0;
+}
+
+void Notch(int notch);
+
 bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu) {
     bool held = false;
     // in a menu the mouse buttons belong to the cursor, and Delete clears a binding on the options pages: bound to
-    // a move key it would move the selection off the row first
-    for (int vk : vks) held |= Down(vk) && !(no_mouse && Mouse(vk)) && !(menu && vk == VK_DELETE);
+    // a move key it would move the selection off the row first. The wheel's notches reach the zooms one by one
+    // (OnRawInput), not as a held key, and only step the focused interaction list.
+    for (int vk : vks) {
+        bool wheel = vk == kWheelUp || vk == kWheelDown;
+        held |= Down(vk) && !(no_mouse && Mouse(vk)) && !(menu && vk == VK_DELETE) &&
+                !(wheel && (ZoomOf(i) || g_list));
+    }
     if (kActions[i].play_only && menu) held = false;
     // typing a name: only the pause key still presses
     if (g_text && kActions[i].button != kPauseTarget) held = false;
@@ -465,6 +490,11 @@ bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu)
 
 // action i's event, held: no pad button but the game side acts on it once per press
 void ApplyEventKey(size_t i, Pad& p) {
+    if (int zoom = ZoomOf(i)) {
+        if (!g_down_as[i]) Notch(zoom);
+        g_down_as[i] = 1;
+        return;
+    }
     if (g_net) {
         if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
         if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[kAnalogA] = 0xFF;
@@ -884,6 +914,22 @@ void SetMotors(int slot, uint16_t left, uint16_t right) {
     if (g_sdl && slot >= 0 && slot < 4 && g_pads[slot]) SDL_RumbleGamepad(g_pads[slot], left, right, 0);
 }
 
+// a wheel notch or a zoom key's press, up positive: the map zooms, a menu or the interaction list steps, the EEV and
+// the sticky camera zoom, else the walking speed steps
+void Notch(int notch) {
+    if (g_map) {
+        g_wheel += notch;
+    } else if (g_menu || g_list) {
+        g_menu_wheel += notch * WHEEL_DELTA;
+    } else {
+        int s = g_speed + notch;
+        View view = View(g_view.load());
+        if (view == View::Eev || view == View::StickyCamera) g_wheel += notch;
+        else if (kVersus) g_speed = notch > 0 ? int(std::size(kSpeeds)) - 1 : 0;
+        else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
+    }
+}
+
 }  // namespace
 
 bool MapDrag() { return g_map && Active() && Down(VK_RBUTTON); }
@@ -907,26 +953,36 @@ void OnRawInput(void* handle) {
     RAWINPUT ri;
     UINT size = sizeof(ri);
     UINT read = GetRawInputData(static_cast<HRAWINPUT>(handle), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER));
-    if (read == UINT(-1) || ri.header.dwType != RIM_TYPEMOUSE || !Active()) return;
+    if (read == UINT(-1) || ri.header.dwType != RIM_TYPEMOUSE) return;
+    const RAWMOUSE& m = ri.data.mouse;
+    int notch = !(m.usButtonFlags & RI_MOUSE_WHEEL) ? 0 : SHORT(m.usButtonData) > 0 ? 1 : -1;
+    // noted while the input is taken too, so a key capture sees the wheel
+    if (notch && g_hwnd && GetForegroundWindow() == g_hwnd) g_wheel_ms[notch < 0] = NowMs();
+    if (!Active()) return;
     // only the clip: settling would drop a held key that keeps a menu open (quick inventory)
     if (MapDrag()) Pin();
     else if (Pointing()) ClipCursor(nullptr);
     else Clip();
-    const RAWMOUSE& m = ri.data.mouse;
     if (m.lLastX || m.lLastY || m.usButtonFlags) g_keyboard_ms = NowMs();
     if (!(m.usFlags & MOUSE_MOVE_ABSOLUTE)) {
         g_dx += m.lLastX;
         g_dy += m.lLastY;
     }
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && g_map) g_wheel += SHORT(m.usButtonData) > 0 ? 1 : -1;
-    else if ((m.usButtonFlags & RI_MOUSE_WHEEL) && (g_menu || g_list)) g_menu_wheel += SHORT(m.usButtonData);
-    if ((m.usButtonFlags & RI_MOUSE_WHEEL) && !g_menu && !g_list) {
-        int notch = SHORT(m.usButtonData) > 0 ? 1 : -1;
-        int s = g_speed + notch;
-        View view = View(g_view.load());
-        if (view == View::Eev || view == View::StickyCamera) g_wheel += notch;
-        else if (kVersus) g_speed = notch > 0 ? int(std::size(kSpeeds)) - 1 : 0;
-        else if (s >= 0 && s < int(std::size(kSpeeds))) g_speed = s;
+    if (!notch) return;
+    // the map, menus and the interaction list keep the wheel whatever it is bound to, as the arrows; versus has no
+    // zoom actions, its wheel picks walk or run
+    if (g_map) {
+        Notch(notch);
+    } else if (g_menu || g_list) {
+        g_menu_wheel += SHORT(m.usButtonData);
+    } else if (kVersus) {
+        Notch(notch);
+    }
+    if (g_map || g_menu || g_list || kVersus) return;
+    int vk = notch > 0 ? kWheelUp : kWheelDown;
+    std::lock_guard lock(g_bind_lock);
+    for (size_t i = 0; i < kCount; i++) {
+        if (ZoomOf(i) && std::ranges::find(g_binds[i], vk) != g_binds[i].end()) Notch(ZoomOf(i));
     }
 }
 
