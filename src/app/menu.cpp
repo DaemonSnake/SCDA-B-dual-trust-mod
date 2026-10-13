@@ -528,7 +528,7 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
         }
         case kShadowFilter:
             if (step) s.shadow_filter = StepIndex(s.shadow_filter >= 3, step, 2) ? 3 : 1;
-            std::snprintf(text, sizeof(text), "%s", s.shadow_filter >= 3 ? "SM3 SOFT" : "SM1 (DEFAULT)");
+            std::snprintf(text, sizeof(text), "%s", s.shadow_filter >= 3 ? "SM3 SOFT" : "SM1.1 (DEFAULT)");
             return true;
         default:
             return false;

@@ -858,7 +858,7 @@ private:
     };
     // what the passes share: kSoftShadowHlsl's constants, the scene's viewport in its pixels, its depth's samples
     struct SoftShadowFrame {
-        float c[8];
+        float c[12];
         D3D12_RECT rect;
         uint32_t depth_samples;
     };
@@ -1093,6 +1093,7 @@ private:
     D3D12_RESOURCE_STATES soft_state_[kSoftShadowTargets] = {};
     uint32_t soft_w_ = 0;
     uint32_t soft_h_ = 0;
+    uint32_t soft_scale_ = 1;  // the copy and the mask over Chaos Theory's 256x256 and 128x128
     uint32_t soft_rt_ = 0;  // surface data of the scene FilterShadows filtered, 0 when none is pending
     SoftShadowFrame soft_frame_{};
     // SMAA: edges, blend weights and the blended frame, at the frame's size; its two lookups
@@ -2123,9 +2124,10 @@ D3D12_RECT ScaledViewportRect(const Viewport& v, const Target& rt) {
 
 // Chaos Theory's shader model 3 soft shadows, over the shadow the scene's alpha holds: a 256x256 copy of view depth
 // and shadow, a 128x128 mask of the penumbra, the masked pixels filtered by a depth aware disk of 8 taps, then the
-// result written back over the alpha. The tuning is a Chaos Theory level's SM3Shadows
+// result written back over the alpha. The tuning is a Chaos Theory level's SM3Shadows. Both grow with the render
+// scale while every footprint stays in Chaos Theory's 256x256 texels, so the softness stays the same
 const char* kSoftShadowHlsl = R"(
-cbuffer F : register(b1) { float4 zp; float4 vp; };
+cbuffer F : register(b1) { float4 zp; float4 vp; float4 sz; };
 #ifdef MS
 Texture2DMS<float> depth : register(t0);
 float RawDepth(int2 p) { return depth.Load(p, 0); }
@@ -2153,7 +2155,7 @@ static const float2 kDisk[8] = {{0, 0}, {0.527837, -0.085868}, {-0.040088, 0.536
 static const float2 kCorners[4] = {{-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
 static const float kDiskWeight[8] = {1, 0.7140148, 0.7110037, 0.5181218, 0.4445845, 0.3971701, 0.3047835, 0.1993830};
 float4 vs(uint id : SV_VertexID) : SV_Position { return float4(float2((id << 1) & 2, id & 2) * float2(2, -2) + float2(-1, 1), 0, 1); }
-// zp: view z = zp.x / (depth - zp.y); vp: the scene's viewport in pixels
+// zp: view z = zp.x / (depth - zp.y); vp: the scene's viewport in pixels; sz: the copy's and the mask's size
 int2 Inside(int2 p) { return clamp(p, int2(vp.xy), int2(vp.xy + vp.zw) - 1); }
 // view z from 0.1 to 1000 units as 0..1, clamped as Chaos Theory's 8 bit copy held it
 float ViewDepth(int2 p) {
@@ -2170,20 +2172,25 @@ float2 Bilinear(float2 at) {
     float2 bottom = lerp(DepthShadow(i + int2(0, 1)), DepthShadow(i + int2(1, 1)), t.x);
     return lerp(top, bottom, t.y);
 }
-// 256x256: four bilinear reads a pixel off each diagonal
+// the copy: four bilinear reads off each diagonal, a pixel apart at 640x480
 float4 shadow_small(float4 pos : SV_Position) : SV_Target {
-    float2 at = vp.xy + pos.xy / 256 * vp.zw;
+    float2 at = vp.xy + pos.xy / sz.x * vp.zw;
+    float2 tap = 0.4 / 256 * vp.zw;
     float2 sum = 0;
-    [unroll] for (int i = 0; i < 4; i++) sum += Bilinear(at + kCorners[i]);
+    [unroll] for (int i = 0; i < 4; i++) sum += Bilinear(at + kCorners[i] * tap);
     float2 mean = sum * 0.25;
     return float4(mean.x / kDepthRadius, mean.y, 0, 0);
 }
-// 128x128: the shadow, 2x2 of the copy
-float4 shadow_quarter(float4 pos : SV_Position) : SV_Target { return small.SampleLevel(bilinear, pos.xy / 128, 0).y; }
-// 128x128: 1 where the 3x3 tent around the pixel is partly in shadow
+// the mask's shadow: 2x2 texels of a 256x256 copy
+float4 shadow_quarter(float4 pos : SV_Position) : SV_Target {
+    float s = 0;
+    [unroll] for (int i = 0; i < 4; i++) s += small.SampleLevel(bilinear, pos.xy / sz.y + kCorners[i] * 0.5 / 256, 0).y;
+    return s * 0.25;
+}
+// the mask: 1 where the 3x3 tent of 128x128 texels around the pixel is partly in shadow
 float4 shadow_penumbra(float4 pos : SV_Position) : SV_Target {
     float s = 0;
-    [unroll] for (int i = 0; i < 4; i++) s += quarter.SampleLevel(bilinear, (pos.xy + kCorners[i] * 0.5) / 128, 0).x;
+    [unroll] for (int i = 0; i < 4; i++) s += quarter.SampleLevel(bilinear, pos.xy / sz.y + kCorners[i] * 0.5 / 128, 0).x;
     s *= 0.25;
     return s >= kPenumbraLow && s < kPenumbraHigh ? 1 : 0;
 }
@@ -2192,7 +2199,7 @@ float4 shadow_filter(float4 pos : SV_Position) : SV_Target {
     int2 p = int2(pos.xy);
     float2 uv = (pos.xy - vp.xy) / vp.zw;
     float lit = scene.Load(int3(p, 0)).a;
-    int2 cell = min(int2(uv * 128), 127);
+    int2 cell = min(int2(uv * sz.y), int(sz.y) - 1);
     if (quarter.Load(int3(cell, 0)).x <= 0.5) return lit * small.SampleLevel(bilinear, uv, 0).y;
     float d = ViewDepth(p);
     float nearness = 1 / (d + kNearOffset);
@@ -2213,7 +2220,8 @@ float4 shadow_filter(float4 pos : SV_Position) : SV_Target {
 float4 shadow_apply(float4 pos : SV_Position) : SV_Target { return float4(0, 0, 0, scene.Load(int3(pos.xy, 0)).x); }
 )";
 
-// the soft shadow targets, in SoftShadowTarget order; the filtered one is the scene's size
+// the soft shadow targets, in SoftShadowTarget order: the copy and the mask times the render scale, rounded, then the
+// filtered one at the scene's size
 constexpr uint32_t kSoftSmallSize = 256;
 constexpr uint32_t kSoftQuarterSize = 128;
 constexpr DXGI_FORMAT kDepthViewFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
@@ -2241,8 +2249,11 @@ void D3D12Backend::FilterShadows(const State& s, const float p[kShadowFilterPara
     }
     float rect_w = float(rect.right - rect.left);
     float rect_h = float(rect.bottom - rect.top);
-    // kSoftShadowHlsl's zp and vp
-    SoftShadowFrame f{.c = {p[0] * zr, v.min_z + p[1] * zr, 0, 0, float(rect.left), float(rect.top), rect_w, rect_h},
+    float copy_size = float(kSoftSmallSize * soft_scale_);
+    float mask_size = float(kSoftQuarterSize * soft_scale_);
+    // kSoftShadowHlsl's zp, vp and sz
+    SoftShadowFrame f{.c = {p[0] * zr, v.min_z + p[1] * zr, 0, 0, float(rect.left), float(rect.top), rect_w, rect_h,
+                            copy_size, mask_size, 0, 0},
                       .rect = rect,
                       .depth_samples = ds->samples};
     LOG_FIRST(1, "d3d12: soft shadows %ux%u, %u samples, view z %.6f / (depth - %.8f)", rt->w, rt->h, ds->samples,
@@ -2256,9 +2267,11 @@ bool D3D12Backend::EnsureSoftShadowTargets(uint32_t w, uint32_t h) {
     if (soft_[kSoftFiltered] && soft_w_ == w && soft_h_ == h) return true;
     soft_w_ = w;
     soft_h_ = h;
+    soft_scale_ = std::max<uint32_t>(1, uint32_t(std::lround(float(h) / guest_h_)));
+    uint32_t copy_size = kSoftSmallSize * soft_scale_;
+    uint32_t mask_size = kSoftQuarterSize * soft_scale_;
     const uint32_t sizes[kSoftShadowTargets][2] = {
-        {kSoftSmallSize, kSoftSmallSize}, {kSoftQuarterSize, kSoftQuarterSize}, {kSoftQuarterSize, kSoftQuarterSize},
-        {w, h}};
+        {copy_size, copy_size}, {mask_size, mask_size}, {mask_size, mask_size}, {w, h}};
     for (int i = 0; i < kSoftShadowTargets; i++) {
         uint32_t view = kSoftShadowRtv + i;
         if (!CreatePostTarget(soft_[i], soft_state_[i], kSoftShadowFormats[i], sizes[i][0], sizes[i][1], view)) {
@@ -2276,10 +2289,12 @@ bool D3D12Backend::DrawSoftShadowPasses(Target& rt, Target& ds, const SoftShadow
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     ID3D12Resource* depth = ds.res.Get();
     ID3D12Resource* copy = soft_[kSoftSmall].Get();
+    uint32_t copy_size = kSoftSmallSize * soft_scale_;
+    uint32_t mask_size = kSoftQuarterSize * soft_scale_;
     SoftShadowPass passes[kSoftShadowTargets] = {
-        {.entry = "shadow_small", .w = kSoftSmallSize, .h = kSoftSmallSize, .reads = {depth, scene}},
-        {.entry = "shadow_quarter", .w = kSoftQuarterSize, .h = kSoftQuarterSize, .reads = {nullptr, nullptr, copy}},
-        {.entry = "shadow_penumbra", .w = kSoftQuarterSize, .h = kSoftQuarterSize,
+        {.entry = "shadow_small", .w = copy_size, .h = copy_size, .reads = {depth, scene}},
+        {.entry = "shadow_quarter", .w = mask_size, .h = mask_size, .reads = {nullptr, nullptr, copy}},
+        {.entry = "shadow_penumbra", .w = mask_size, .h = mask_size,
          .reads = {nullptr, nullptr, nullptr, soft_[kSoftQuarter].Get()}},
         {.entry = "shadow_filter", .w = rt.w, .h = rt.h, .in_viewport = true,
          .reads = {depth, scene, copy, soft_[kSoftPenumbra].Get()}}};

@@ -97,7 +97,7 @@ The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/
   </table>
 </div>
 
-- **Shadow Filter** - Choose between SM1, the Xbox shadow filter (default), and SM3 Soft, the Chaos Theory PC Shader Model 3 soft shadow filter.
+- **Shadow Filter** - Choose between SM1.1, the Xbox shadow filter (default), and SM3 Soft, the Chaos Theory PC Shader Model 3 soft shadow filter.
 - **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet. Choose between SSAO and GTAO.
 ### Shader Model 3
 - **Shader Model** - Choose between Shader Model 1.1, the Xbox look, and Shader Model 3.0, which enables the Chaos Theory PC style features.
