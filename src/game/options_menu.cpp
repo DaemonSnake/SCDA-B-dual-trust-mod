@@ -454,6 +454,7 @@ void Act(X86Context& ctx, int step) {
         if (step) return;
         app::rows::Defaults(g_take.mode);
     } else if (r->kind == app::rows::Kind::Value) {
+        if (!app::rows::Enabled(*r)) return;
         int current = 0;
         std::vector<std::string> choices = app::rows::Choices(*r, &current);
         // a row with a list changes only through the popup, an on / off one flips on A

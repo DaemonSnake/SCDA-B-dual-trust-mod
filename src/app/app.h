@@ -149,8 +149,10 @@ void Defaults(int page);
 // a value row's list, empty when it only steps; current is the one it has
 std::vector<std::string> Choices(const Row& row, int* current);
 void Choose(const Row& row, int index);
-// false for a row the game menu leaves out: the shader model 3.0 features at 1.1, the microphone and push to talk (F10 only)
+// false for a row the game menu leaves out: the microphone and push to talk (F10 only)
 bool Shown(const Row& row);
+// false for a row shown greyed that takes no change: the shader model 3.0 features at 1.1
+bool Enabled(const Row& row);
 }  // namespace rows
 
 // the console on the backtick key, drawn by DrawUi

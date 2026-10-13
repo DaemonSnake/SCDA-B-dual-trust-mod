@@ -376,6 +376,9 @@ const std::vector<Row>& PadRows() {
 // shader model 3.0 features
 bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping; }
 
+// shown dimmed and left as it is: a shader model 3.0 feature at 1.1
+bool Greyed(int id) { return ShaderModel3Row(id) && Get().shader_model < 3; }
+
 // the setting an ON / OFF row flips, nullptr for any other row
 bool* ToggleFlag(Settings& s, int id) {
     switch (id) {
@@ -844,10 +847,13 @@ void DrawRows(int page) {
             MicrophoneRow(r.label);
         } else if (r.kind == Kind::Value) {
             bool held = g_display_held && DisplayRow(r.id);
-            if (int step = OptionRow(r.label, Ui(RowText(r.id, 0, held ? g_display : Get())).c_str())) {
-                if (DisplayRow(r.id)) HoldDisplay(r.id, step);
-                else RowText(r.id, step);
-            }
+            bool greyed = Greyed(r.id);
+            ImGui::BeginDisabled(greyed);
+            int step = OptionRow(r.label, Ui(RowText(r.id, 0, held ? g_display : Get())).c_str());
+            ImGui::EndDisabled();
+            if (step && greyed) step = 0;
+            if (step && DisplayRow(r.id)) HoldDisplay(r.id, step);
+            else if (step) RowText(r.id, step);
         } else if (r.kind == Kind::Bind || r.kind == Kind::PadBind) {
             bool keys = r.kind == Kind::Bind;
             std::vector<std::string> boxes = keys ? KeyBoxes(size_t(r.id)) : std::vector<std::string>{rows::Value(r)};
@@ -1068,9 +1074,12 @@ std::vector<std::string> Choices(const Row& row, int* current) {
 bool Shown(const Row& row) {
     std::lock_guard lock(UiLock());
     bool hidden = row.id == kMicrophone || row.id == kPushToTalk || VersusHides(row.id);
-    if (row.kind == Kind::Value && hidden) return false;
-    bool sm3 = row.kind == Kind::Value && ShaderModel3Row(row.id);
-    return !sm3 || Get().shader_model >= 3;
+    return row.kind != Kind::Value || !hidden;
+}
+
+bool Enabled(const Row& row) {
+    std::lock_guard lock(UiLock());
+    return row.kind != Kind::Value || !Greyed(row.id);
 }
 
 void Choose(const Row& row, int index) {
