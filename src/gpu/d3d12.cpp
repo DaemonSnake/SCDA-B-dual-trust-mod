@@ -2905,8 +2905,11 @@ bool D3D12Backend::BindStageTexturesAndTargets(const State& s, DrawTextures& sta
     draw_rt_ = bound_rt_;
     draw_ds_ = bound_ds_;
     for (int i = 0; i < 4; i++) stages.res[i] = BindTexture(s, i, stages);
-    // textures may have recorded copies that unbound the targets
-    return BindTargets(s);
+    // textures may have recorded copies that unbound the targets or moved them out of their target states
+    if (bound_rt_ != draw_rt_ || bound_ds_ != draw_ds_) return BindTargets(s);
+    if (bound_rt_) Transition(bound_rt_->res.Get(), bound_rt_->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    if (bound_ds_) Transition(bound_ds_->res.Get(), bound_ds_->state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    return true;
 }
 
 constexpr uint64_t kPixelKeySalt = 0x9E3779B97F4A7C15ull;
@@ -3297,6 +3300,14 @@ bool UnitTexcoords(const Assembled& a) {
     return any;
 }
 
+// UnitTexcoords only changes stages that wrap
+bool AnyStageWraps(const State& s) {
+    for (const auto& t : s.tss) {
+        if (t[kTssAddressU] == kTaddressWrap || t[kTssAddressV] == kTaddressWrap) return true;
+    }
+    return false;
+}
+
 // a stage without a texture gets a null view of its kind; the samplers read the views after
 void D3D12Backend::SetTextureViewsAndSamplers(const State& s, const Assembled& a, DrawTextures& stages) {
     uint32_t slot = AllocSrvSlots(4);
@@ -3309,7 +3320,7 @@ void D3D12Backend::SetTextureViewsAndSamplers(const State& s, const Assembled& a
         dev_->CreateShaderResourceView(stages.res[i], &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     cl_->SetGraphicsRootDescriptorTable(2, Gpu(srv_heap_.Get(), slot, srv_inc_));
-    uint32_t samplers = EnsureStageSamplers(s, stages, UnitTexcoords(a));
+    uint32_t samplers = EnsureStageSamplers(s, stages, AnyStageWraps(s) && UnitTexcoords(a));
     cl_->SetGraphicsRootDescriptorTable(3, Gpu(smp_heap_.Get(), samplers, smp_inc_));
 }
 

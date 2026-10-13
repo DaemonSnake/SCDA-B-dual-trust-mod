@@ -235,17 +235,26 @@ Mode Output() {
     return Desktop();
 }
 
-float Aspect() {
-    // asked per frame and per HUD quad: the desktop mode lookup only runs when the resolution setting changes
+// Output for every frame and HUD quad: the desktop mode lookup reads the registry, so it only runs again when the
+// resolution setting or the applied display changes
+Mode CachedOutput() {
     static std::atomic<uint64_t> key{~0ull};
-    static std::atomic<float> aspect{16.0f / 9.0f};
+    static std::atomic<uint64_t> mode{0};
     const Settings& s = Get();
     uint64_t k = (uint64_t(s.width) << 32 | s.height) ^ uint64_t(g_display_applied) << 48;
     if (key.exchange(k) != k) {
         Mode m = Output();
-        aspect = std::max(float(m.width) / std::max(m.height, 1u), 4.0f / 3.0f);
+        mode = uint64_t(m.width) << 32 | m.height;
     }
-    return aspect;
+    uint64_t m = mode;
+    // another thread is still looking it up
+    if (!m) return Output();
+    return {uint32_t(m >> 32), uint32_t(m)};
+}
+
+float Aspect() {
+    Mode m = CachedOutput();
+    return std::max(float(m.width) / std::max(m.height, 1u), 4.0f / 3.0f);
 }
 
 float FovScale() {
@@ -254,7 +263,7 @@ float FovScale() {
 }
 
 float RenderScale(uint32_t guest_height) {
-    float h = Output().height * (Get().render_percent / 100.0f);
+    float h = CachedOutput().height * (Get().render_percent / 100.0f);
     return guest_height ? std::max(h / guest_height, 0.1f) : 1.0f;
 }
 
