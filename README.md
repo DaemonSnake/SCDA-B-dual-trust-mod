@@ -22,7 +22,7 @@ The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/
 - **Field of View** - Sets the horizontal field of view during gameplay from 45 to 140 degrees, with 75 being the game's default. Cutscenes, scopes, gadget views and lock picking keep the original.
 - **Max Frame Rate** - Caps the frame rate to your monitor's refresh rate or a custom value, or removes the cap entirely, replacing the Xbox's 30 FPS limiter.
 - **V-Sync** - Reduces screen tearing.
-- **HDR Output** - Enables HDR10 output on displays with Windows HDR turned on, detected automatically. With HDR Rendering and Tone Mapping on, highlights extend up to the display's peak brightness.
+- **HDR Output** - Enables HDR10 output on displays with Windows HDR turned on, detected automatically. Highlights extend up to the display's peak brightness.
 - **FPS Counter** - Displays the frame rate on screen.
 
 ### Graphics

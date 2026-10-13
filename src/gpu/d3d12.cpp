@@ -157,7 +157,7 @@ float4 tone(O i) : SV_Target {
 }
 )";
 
-// HDR10 output: the frame with the panel over it, the frame's highlights put back through tone's roll off
+// HDR10 output: the frame with the panel over it, its highlights stretched towards the display's peak
 const char* kHdrHlsl = R"(
 cbuffer P : register(b1) { float4 p0; float4 p1; };
 Texture2D frame : register(t0);
@@ -170,26 +170,25 @@ O vs(uint id : SV_VertexID) {
     o.uv = t;
     return o;
 }
-static const float kKnee = 0.75;  // tone's in kPostHlsl
+static const float kKnee = 0.6;  // linear luminance where highlights start to stretch
+static const float3 kLum = float3(0.2126, 0.7152, 0.0722);
 static const float3x3 k709To2020 = {0.6274, 0.3293, 0.0433, 0.0691, 0.9195, 0.0114, 0.0164, 0.0880, 0.8956};
 float3 srgb_to_linear(float3 c) {
     return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
 }
-// tone's roll off undone, past 1 for what it brought under white
-float3 expand(float3 c) {
-    float3 rest = max(1 - (c - kKnee) / (1 - kKnee), 1e-6);
-    return c <= kKnee ? c : kKnee - (1 - kKnee) * log(rest);
+// scaled by luminance so hues keep; white reaches most, smoothly so 8 bit steps don't band
+float3 expand(float3 c, float most) {
+    float t = saturate((dot(c, kLum) - kKnee) / (1 - kKnee));
+    return c * lerp(1, most, t * t);
 }
 float3 pq(float3 nits) {
     float3 y = pow(saturate(nits / 10000), 0.1593017578125);
     return pow((0.8359375 + 18.8515625 * y) / (1 + 18.6875 * y), 78.84375);
 }
-// p0: SDR white nits, peak nits, expand
+// p0: SDR white nits, peak nits
 float4 hdr10(O i) : SV_Target {
     int3 px = int3(i.p.xy, 0);
-    float3 f = frame.Load(px).rgb;
-    if (p0.z > 0) f = expand(f);
-    f = min(srgb_to_linear(f) * p0.x, p0.y);
+    float3 f = min(expand(srgb_to_linear(frame.Load(px).rgb), max(p0.y / p0.x, 1)) * p0.x, p0.y);
     float4 u = ui.Load(px);
     float3 panel = srgb_to_linear(u.a > 0 ? u.rgb / u.a : 0) * p0.x;
     return float4(pq(mul(k709To2020, lerp(f, panel, u.a))), 1);
@@ -3448,7 +3447,7 @@ void D3D12Backend::DetectHdr() {
     peak_nits_ = found && desc.MaxLuminance > 0 ? desc.MaxLuminance : kDefaultPeakNits;
     paper_nits_ = SdrWhiteNits(mon);
     app::g_hdr_display = hdr_display_;
-    LOGI("d3d12: display HDR %s, peak %.0f nits, SDR white %.0f nits", hdr_display_ ? "on" : "off", peak_nits_,
+    LOGR("Display HDR: %s, peak %.0f nits, SDR white %.0f nits", hdr_display_ ? "on" : "off", peak_nits_,
          paper_nits_);
 }
 
@@ -3468,7 +3467,7 @@ void D3D12Backend::ResizeSwap() {
     hdr_want_ = hdr;
     hdr_out_ = hdr && ResizeBackBuffers(w, h, kHdr10Format, DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
     if (!hdr_out_) ResizeBackBuffers(w, h, kBgra, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
-    if (hdr && !hdr_out_) LOGI("d3d12: the swap chain can't show HDR10, SDR it is");
+    if (hdr && !hdr_out_) LOGR("Display HDR: the swap chain can't show HDR10, SDR it is");
     CreateBackBufferViews();
     bb_w_ = w;
     bb_h_ = h;
@@ -3625,9 +3624,7 @@ void D3D12Backend::DrawHdrFrame(Target* t, ID3D12Resource* r, bool pillarbox, D3
     Begin();  // RenderUi left ImGui's heap and root signature bound
     for (int i = 0; i < 2; i++) Transition(out_[i].Get(), out_state_[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     PostInputs in{{out_[0].Get(), out_[1].Get(), nullptr}, {kHdrFormat, kBgra, kBgra}};
-    // only tone mapping rolled highlights off, so only then are they put back
-    float expand = hdr_ && tone_ ? 1.0f : 0.0f;
-    float p[8] = {paper_nits_, peak_nits_, expand, 0};
+    float p[8] = {paper_nits_, peak_nits_, 0, 0};
     DrawPostPass("hdr10", {bb, kHdr10Format, bb_w_, bb_h_}, in, p, {.hlsl = kHdrHlsl});
 }
 
