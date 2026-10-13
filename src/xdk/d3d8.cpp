@@ -161,6 +161,11 @@ void LatchFog() {
 gpu::State& State() { return g_state; }
 std::recursive_mutex& Lock() { return g_lock; }
 
+void SkyScene(bool on) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    g_state.sky = on;
+}
+
 void ViewScale(float xy) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     g_view_scale = xy;

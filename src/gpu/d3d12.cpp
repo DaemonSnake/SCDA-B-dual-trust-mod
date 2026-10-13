@@ -1094,7 +1094,7 @@ private:
     ComPtr<ID3D12Resource> ray_scratch_;  // both builds', the top level's from ray_top_scratch_
     uint64_t ray_top_scratch_ = 0;
     D3D12_RESOURCE_STATES ray_verts_state_ = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_RESOURCE_STATES ray_filled_size_size_state_ = D3D12_RESOURCE_STATE_COMMON;
+    D3D12_RESOURCE_STATES ray_filled_size_state_ = D3D12_RESOURCE_STATE_COMMON;
     // SMAA: edges, blend weights and the blended frame, at the frame's size; its two lookups
     ComPtr<ID3D12Resource> smaa_[3];
     ComPtr<ID3D12Resource> smaa_lut_[2];
@@ -2356,7 +2356,11 @@ bool D3D12Backend::BuildSceneStructure(const AoFrame& f, const Target& rt) {
     top.DestAccelerationStructureData = ray_tlas_->GetGPUVirtualAddress();
     top.ScratchAccelerationStructureData = ray_scratch_->GetGPUVirtualAddress() + ray_top_scratch_;
     cl4_->BuildRaytracingAccelerationStructure(&top, 0, nullptr);
-    UavBarrier(ray_tlas_.Get());
+    UavBarrier(nullptr);
+    // with the UAV barrier alone the first traced pass still lost hits; aliasing on everything waits for the builds
+    D3D12_RESOURCE_BARRIER all{};
+    all.Type = D3D12_RESOURCE_BARRIER_TYPE_ALIASING;
+    cl_->ResourceBarrier(1, &all);
     return true;
 }
 
@@ -3379,7 +3383,7 @@ void D3D12Backend::IssueDraw(const Assembled& a) {
 // depth written into the frame's own scene by a 3D draw before its occlusion: the opaque world
 // alpha tested and blended surfaces (foliage, fences, glass) are left out rather than traced as solid quads
 bool D3D12Backend::IsSceneGeometry(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) const {
-    if (!ray_ao_ || !ray_seen_ || ao_drawn_ || ray_state_ == RayState::Unsupported) return false;
+    if (!ray_ao_ || !ray_seen_ || ao_drawn_ || s.sky || ray_state_ == RayState::Unsupported) return false;
     if (a.pretransformed || sh.quad || a.topology != Topology::Triangles) return false;
     if (!k.zen || !k.zwrite || k.blend || SimpleState(s, kMAlphaTestEnable)) return false;
     if (!bound_rt_ || !bound_ds_) return false;
@@ -3481,9 +3485,9 @@ ComPtr<ID3D12PipelineState> D3D12Backend::CreateStreamOutPipeline(const PsoKey& 
 void D3D12Backend::StartTriangleStream() {
     Alloc zero = Upload(sizeof(uint64_t), sizeof(uint64_t));
     std::memset(zero.cpu, 0, sizeof(uint64_t));
-    Transition(ray_filled_size_.Get(), ray_filled_size_size_state_, D3D12_RESOURCE_STATE_COPY_DEST);
+    Transition(ray_filled_size_.Get(), ray_filled_size_state_, D3D12_RESOURCE_STATE_COPY_DEST);
     cl_->CopyBufferRegion(ray_filled_size_.Get(), 0, zero.res, zero.off, sizeof(uint64_t));
-    Transition(ray_filled_size_.Get(), ray_filled_size_size_state_, D3D12_RESOURCE_STATE_STREAM_OUT);
+    Transition(ray_filled_size_.Get(), ray_filled_size_state_, D3D12_RESOURCE_STATE_STREAM_OUT);
     Transition(ray_verts_.Get(), ray_verts_state_, D3D12_RESOURCE_STATE_STREAM_OUT);
 }
 

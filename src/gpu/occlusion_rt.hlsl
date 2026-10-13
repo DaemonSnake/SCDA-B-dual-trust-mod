@@ -28,10 +28,10 @@ float3 Normal(float2 px, float3 c) {
     float3 dy = abs(d.z - c.z) < abs(c.z - u.z) ? d - c : c - u;
     return normalize(cross(dx, dy));
 }
-static const int kRays = 8;
-// any hit within the radius occludes
-static const uint kRayFlags =
-    RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES;
+static const int kRays = 16;
+static const uint kRayFlags = RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES;
+// a hit occludes fully up to the inner 38.5% of the radius, fading out over the rest like GTAO's falloff
+static const float kFalloff = 0.615;
 static const uint kTriangleBytes = 36;
 // the triangle under a pixel lies within this share of the depth's distance
 static const float kDepthMatch = 0.02;
@@ -53,7 +53,8 @@ bool HitSurface(float3 c, out Surface s) {
     ray.TMax = dist * (1 + kDepthMatch);
     RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
     q.TraceRayInline(scene, RAY_FLAG_NONE, 0xFF, ray);
-    q.Proceed();
+    // until traversal ends: a single Proceed can leave a nearer hit uncommitted
+    while (q.Proceed()) {}
     s.p = c;
     s.n = 0;
     s.bias = kDepthBias;
@@ -68,7 +69,7 @@ bool HitSurface(float3 c, out Surface s) {
     s.bias = kTriangleBias;
     return true;
 }
-// opt.x: world radius; out: the share of cosine weighted rays that leave it unblocked, view z
+// opt.x: world radius; out: visibility over cosine weighted rays, each nearest hit weighted by its distance, view z
 float2 rtao(float4 pos : SV_Position) : SV_Target {
     float3 c = View(pos.xy);
     if (Raw(int2(pos.xy)) >= 1) return float2(1, c.z);
@@ -87,7 +88,7 @@ float2 rtao(float4 pos : SV_Position) : SV_Target {
     ray.Origin = s.p + n * (s.p.z * s.bias);
     ray.TMin = 0;
     ray.TMax = opt.x;
-    int hits = 0;
+    float occluded = 0;
     for (int i = 0; i < kRays; i++) {
         // golden angle spiral over the disc, lifted onto the hemisphere: cosine weighted
         float u = (i + lift) / kRays;
@@ -96,8 +97,9 @@ float2 rtao(float4 pos : SV_Position) : SV_Target {
         ray.Direction = t * disc.x + b * disc.y + n * sqrt(1 - u);
         RayQuery<kRayFlags> q;
         q.TraceRayInline(scene, RAY_FLAG_NONE, 0xFF, ray);
-        q.Proceed();
-        if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) hits++;
+        while (q.Proceed()) {}
+        if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) continue;
+        occluded += saturate((ray.TMax - q.CommittedRayT()) / (ray.TMax * kFalloff));
     }
-    return float2(1 - float(hits) / kRays, c.z);
+    return float2(1 - occluded / kRays, c.z);
 }

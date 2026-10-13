@@ -14,3 +14,12 @@ X86_FUNC(sub_002AC2FC) {
     if (mode && !R32(ctx.esp + 8) && !R32(node + 8)) d3d::Occlusion(&G<float>(node + 0x8C), mode);
     __imp__sub_002AC2FC(ctx, base);
 }
+
+// FSkySceneNode::Render, thiscall: the sky zone drawn from its own camera into the frame's scene. Its triangles are
+// not where the world's are, so ray traced occlusion leaves them out
+X86_EXTERN_FUNC(__imp__sub_0028A4C1);
+X86_FUNC(sub_0028A4C1) {
+    d3d::SkyScene(true);
+    __imp__sub_0028A4C1(ctx, base);
+    d3d::SkyScene(false);
+}
