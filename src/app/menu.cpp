@@ -97,7 +97,7 @@ int StepTable(const uint32_t (&values)[N], uint32_t& value, int step) {
     return i;
 }
 
-// the monitor's modes, the primary's for empty
+// the monitor's modes smallest first, so Left steps down; the primary's for empty
 std::vector<Mode> Modes(const std::string& monitor) {
     std::vector<Mode> modes;
     std::wstring device(monitor.begin(), monitor.end());
@@ -110,7 +110,7 @@ std::vector<Mode> Modes(const std::string& monitor) {
         if (std::none_of(modes.begin(), modes.end(), same)) modes.push_back(m);
     }
     std::sort(modes.begin(), modes.end(), [](const Mode& a, const Mode& b) {
-        return a.width != b.width ? a.width > b.width : a.height > b.height;
+        return a.width != b.width ? a.width < b.width : a.height < b.height;
     });
     return modes;
 }
