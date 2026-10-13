@@ -208,7 +208,7 @@ std::u16string app::Translate(std::string_view text, std::string (*rest)(std::st
 std::string app::TitleCase(std::string_view text) {
     constexpr std::string_view kSmall[] = {"AND", "OR", "OF", "TO", "A"};
     constexpr std::string_view kKeep[] = {"FPS", "EEV", "EMF", "LMB", "RMB", "MMB", "IP", "OPSAT", "ESC", "HDR", "MSAA", "SMAA",
-                                          "HUD", "LB", "RB", "LT", "RT", "LS", "RS"};
+                                          "SSAO", "GTAO", "HUD", "LB", "RB", "LT", "RT", "LS", "RS"};
     std::string out;
     size_t i = 0;
     while (i < text.size()) {

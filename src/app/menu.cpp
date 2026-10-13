@@ -40,6 +40,8 @@ constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
 const char* const kMsaaNames[] = {"OFF", "2x", "4x", "8x"};
+constexpr uint32_t kAoValues[] = {0, 1, 2};
+const char* const kAoNames[] = {"OFF", "SSAO", "GTAO"};
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCapRefresh, 0};
@@ -372,7 +374,6 @@ bool* ToggleFlag(Settings& s, int id) {
         case kFpsCounter: return &s.fps_counter;
         case kHdr: return &s.hdr_rendering;
         case kToneMapping: return &s.tone_mapping;
-        case kAmbientOcclusion: return &s.ambient_occlusion;
         case kSmaa: return &s.smaa;
         case kSkipIntros: return &s.skip_intros;
         case kPushToTalk: return &s.push_to_talk;
@@ -457,6 +458,9 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
             return true;
         case kMsaa:
             std::snprintf(text, sizeof(text), "%s", kMsaaNames[StepTable(kMsaaValues, s.msaa, step)]);
+            return true;
+        case kAmbientOcclusion:
+            std::snprintf(text, sizeof(text), "%s", kAoNames[StepTable(kAoValues, s.ambient_occlusion, step)]);
             return true;
         case kAniso:
             std::snprintf(text, sizeof(text), "%s", kAnisoNames[StepTable(kAnisoValues, s.aniso, step)]);

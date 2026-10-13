@@ -95,7 +95,7 @@ The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/
   </table>
 </div>
 
-- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet.
+- **Ambient Occlusion** - Adds screen space ambient occlusion, creating soft contact shadows where surfaces meet. Choose between SSAO and GTAO.
 ### Shader Model 3
 - **Shader Model** - Choose between Shader Model 1.1, the Xbox look, and Shader Model 3.0, which enables the Chaos Theory PC style features.
 <div align="center">

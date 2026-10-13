@@ -167,11 +167,11 @@ void ViewScale(float xy) {
     UpdateViewportConstants();
 }
 
-void Occlusion(const float* m) {
+void Occlusion(const float* m, bool gtao) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     if (!g_backend || m[11] != 1.0f || m[15] != 0.0f || !m[0] || !m[5]) return;
     const float p[gpu::kOcclusionParams] = {1 / m[0], 1 / m[5], m[8], m[9], m[14], m[10],
-                                            g_fog.slope, g_fog.offset, g_fog.amount};
+                                            g_fog.slope, g_fog.offset, g_fog.amount, gtao ? 1.0f : 0.0f};
     g_backend->Occlusion(g_state, p);
 }
 
