@@ -68,7 +68,12 @@ size_t At(const State& s, const void* p) { return size_t(static_cast<const uint8
 std::vector<Range> StateRanges() {
     static const State s;
     return {
-        {At(s, &s.simple), At(s, &s.textures) - At(s, &s.simple)},
+        // of the simple states only what the backend reads: blend, depth, stencil and shade mode, then the pixel
+        // shader constants
+        {At(s, &s.simple[kMAlphaTestEnable >> 2]), kMDepthOffset + 4 - kMAlphaTestEnable},
+        {At(s, &s.simple[kMPsConstant0 >> 2]), kMPsAlphaOutputs - kMPsConstant0},
+        {At(s, &s.simple[kMPsFinalConstant0 >> 2]), kMPsFinalConstant1 + 4 - kMPsFinalConstant0},
+        {At(s, &s.rs), At(s, &s.textures) - At(s, &s.rs)},
         {At(s, &s.index_buffer), At(s, &s.vs) - At(s, &s.index_buffer)},
         {At(s, &s.vsc), At(s, &s.rt) - At(s, &s.vsc)},
         {At(s, &s.scissor_count), At(s, &s.transforms) - At(s, &s.scissor_count)},

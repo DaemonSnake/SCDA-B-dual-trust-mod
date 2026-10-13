@@ -2838,6 +2838,7 @@ uint32_t D3D12Backend::EnsureStageSamplers(const State& s, const DrawTextures& s
     return base;
 }
 
+// only methods render_thread.cpp's StateRanges sends reach the render thread
 uint32_t SimpleState(const State& s, uint32_t method) {
     return s.simple[method >> 2];
 }
