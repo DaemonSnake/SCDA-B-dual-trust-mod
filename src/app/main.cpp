@@ -34,6 +34,7 @@ namespace {
 HWND g_hwnd = nullptr;
 constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
 bool g_mode_changed = false;
+std::wstring g_mode_device;  // the monitor whose mode was changed
 bool g_apply_posted = false;  // a display apply is waiting in the queue or running
 
 // crash dump in CrashDumps beside the exe
@@ -85,14 +86,19 @@ void DumpThreads() {
 // window thread only
 void ApplyNow() {
     const Settings& s = Get();
-    HMONITOR mon = MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY);
+    std::string monitor;
+    {
+        std::lock_guard lock(UiLock());
+        monitor = s.monitor;
+    }
+    HMONITOR mon = static_cast<HMONITOR>(MonitorHandle(monitor));
     MONITORINFOEXW mi{};
     mi.cbSize = sizeof(mi);
-    GetMonitorInfoW(mon, &mi);
     if (g_mode_changed) {
-        ChangeDisplaySettingsExW(mi.szDevice, nullptr, nullptr, 0, nullptr);
+        ChangeDisplaySettingsExW(g_mode_device.c_str(), nullptr, nullptr, 0, nullptr);
         g_mode_changed = false;
     }
+    GetMonitorInfoW(mon, &mi);
     Mode out = Output();
     LONG_PTR visible = IsWindowVisible(g_hwnd) ? WS_VISIBLE : 0;  // a window held back for a splash or handover stays so
     DEVMODEW desktop{};
@@ -107,6 +113,7 @@ void ApplyNow() {
         dm.dmPelsHeight = s.height;
         dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
         g_mode_changed = ChangeDisplaySettingsExW(mi.szDevice, &dm, nullptr, CDS_FULLSCREEN, nullptr) == DISP_CHANGE_SUCCESSFUL;
+        g_mode_device = mi.szDevice;
         GetMonitorInfoW(mon, &mi);
     }
     if (s.display_mode == DisplayMode::Windowed) {
@@ -122,6 +129,7 @@ void ApplyNow() {
         SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_POPUP | visible);
         SetWindowPos(g_hwnd, HWND_NOTOPMOST, m.left, m.top, m.right - m.left, m.bottom - m.top, SWP_FRAMECHANGED);
     }
+    g_display_applied++;
 }
 
 // a key went down: the settings panel and hide HUD binds
@@ -164,10 +172,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // a changed display mode steps aside for the desktop, minimized, and comes back on return; not while
                 // handing over to the next instance, which runs in the same mode
                 if (g_mode_changed && !kernel::g_relaunching) {
-                    MONITORINFOEXW mi{};
-                    mi.cbSize = sizeof(mi);
-                    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
-                    ChangeDisplaySettingsExW(mi.szDevice, nullptr, nullptr, 0, nullptr);
+                    ChangeDisplaySettingsExW(g_mode_device.c_str(), nullptr, nullptr, 0, nullptr);
                     g_mode_changed = false;
                     ShowWindow(hwnd, SW_MINIMIZE);
                 }

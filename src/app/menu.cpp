@@ -94,11 +94,13 @@ int StepTable(const uint32_t (&values)[N], uint32_t& value, int step) {
     return i;
 }
 
-std::vector<Mode> Modes() {
+// the monitor's modes, the primary's for empty
+std::vector<Mode> Modes(const std::string& monitor) {
     std::vector<Mode> modes;
+    std::wstring device(monitor.begin(), monitor.end());
     DEVMODEW dm{};
     dm.dmSize = sizeof(dm);
-    for (DWORD i = 0; EnumDisplaySettingsW(nullptr, i, &dm); i++) {
+    for (DWORD i = 0; EnumDisplaySettingsW(device.empty() ? nullptr : device.c_str(), i, &dm); i++) {
         if (dm.dmBitsPerPel < 32 || dm.dmPelsWidth < 640) continue;
         Mode m{dm.dmPelsWidth, dm.dmPelsHeight};
         auto same = [&](const Mode& o) { return o.width == m.width && o.height == m.height; };
@@ -291,7 +293,7 @@ enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor
 };
 
 using rows::Kind;
@@ -309,6 +311,7 @@ bool VersusHides(int id) {
 
 constexpr Row kSettingsRows[] = {
     {Kind::Heading, -1, "DISPLAY"},
+    {Kind::Value, kMonitor, "MONITOR"},
     {Kind::Value, kDisplayMode, "DISPLAY MODE"},
     {Kind::Value, kResolution, "RESOLUTION"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
@@ -382,7 +385,7 @@ bool* ToggleFlag(Settings& s, int id) {
     }
 }
 
-bool DisplayRow(int id) { return id == kDisplayMode || id == kResolution; }
+bool DisplayRow(int id) { return id == kMonitor || id == kDisplayMode || id == kResolution; }
 
 // value clamped to lo to hi, stepped by inc through the values StepIndex wraps over
 int StepRange(int value, int lo, int hi, int inc, int step) {
@@ -390,10 +393,24 @@ int StepRange(int value, int lo, int hi, int inc, int step) {
     return lo + inc * StepIndex((std::clamp(value, lo, hi) - lo) / inc, step, count);
 }
 
+// the setting's monitor in the list, the primary's index when it is not connected
+int MonitorIndex(const std::vector<Display>& list, const std::string& monitor) {
+    int primary = 0;
+    for (size_t i = 0; i < list.size(); i++) {
+        if (list[i].device == monitor) return int(i);
+        if (list[i].primary) primary = int(i);
+    }
+    return primary;
+}
+
 // the mode shown, stepped first when step is not zero
 Mode StepResolution(Settings& s, int step) {
-    static const std::vector<Mode> modes = Modes();
-    Mode desktop = Desktop();
+    static std::map<std::string, std::vector<Mode>> cache;
+    auto [it, fresh] = cache.try_emplace(s.monitor);
+    if (fresh) it->second = Modes(s.monitor);
+    const std::vector<Mode>& modes = it->second;
+    std::vector<Display> monitors = Displays();
+    Mode desktop = monitors.empty() ? Desktop() : monitors[size_t(MonitorIndex(monitors, s.monitor))].desktop;
     Mode m = s.width && s.height ? Mode{s.width, s.height} : desktop;
     int i = 0;
     for (size_t k = 0; k < modes.size(); k++) {
@@ -412,6 +429,24 @@ Mode StepResolution(Settings& s, int step) {
 // the display rows that are no ON / OFF, stepped first; false for another row
 bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
     switch (id) {
+        case kMonitor: {
+            std::vector<Display> list = Displays();
+            int current = MonitorIndex(list, s.monitor);
+            int i = StepIndex(current, step, int(list.size()));
+            if (list.empty()) {
+                std::snprintf(text, sizeof(text), "PRIMARY");
+                return true;
+            }
+            const Display& d = list[size_t(i)];
+            // another monitor starts on its own desktop mode
+            if (step && i != current) {
+                s.monitor = d.device;
+                s.width = s.height = 0;
+            }
+            std::snprintf(text, sizeof(text), d.primary ? "%d: %ux%u (PRIMARY)" : "%d: %ux%u", d.number, d.desktop.width,
+                          d.desktop.height);
+            return true;
+        }
         case kDisplayMode: {
             static const char* const kModes[] = {"FULLSCREEN", "WINDOWED", "BORDERLESS"};
             int count = int(std::size(kModes));
@@ -588,17 +623,19 @@ Settings g_display;  // the held display mode and resolution
 void HoldDisplay(int id, int step) {
     const Settings& s = Get();
     if (!g_display_held) {
+        g_display.monitor = s.monitor;
         g_display.display_mode = s.display_mode;
         g_display.width = s.width;
         g_display.height = s.height;
     }
     RowText(id, step, g_display);
-    g_display_held =
-        g_display.display_mode != s.display_mode || g_display.width != s.width || g_display.height != s.height;
+    g_display_held = g_display.monitor != s.monitor || g_display.display_mode != s.display_mode ||
+                     g_display.width != s.width || g_display.height != s.height;
 }
 
 void Apply() {
     Settings& s = Get();
+    s.monitor = g_display.monitor;
     s.display_mode = g_display.display_mode;
     s.width = g_display.width;
     s.height = g_display.height;

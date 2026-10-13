@@ -84,8 +84,11 @@ bool OpenSplash() {
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32514));  // IDC_WAIT
     wc.lpszClassName = L"SCDASplash";
     RegisterClassExW(&wc);
-    // centred on the primary screen at one image pixel per screen pixel, as UE2 placed it
-    POINT at{(GetSystemMetrics(SM_CXSCREEN) - int(w)) / 2, (GetSystemMetrics(SM_CYSCREEN) - int(h)) / 2};
+    // centered on the game's monitor at one image pixel per screen pixel, as UE2 placed it on the primary
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfoW(static_cast<HMONITOR>(MonitorHandle(Get().monitor)), &mi);
+    const RECT& m = mi.rcMonitor;
+    POINT at{m.left + (m.right - m.left - int(w)) / 2, m.top + (m.bottom - m.top - int(h)) / 2};
     g_splash = CreateWindowExW(WS_EX_LAYERED, wc.lpszClassName, L"Tom Clancy's Splinter Cell: Double Agent", WS_POPUP,
                                at.x, at.y, int(w), int(h), nullptr, nullptr, inst, nullptr);
     if (!g_splash) return false;

@@ -30,6 +30,7 @@ constexpr Entry kEntries[] = {
     {"UNBOUND", {u"Non assigné", u"Nicht belegt", u"Non assegnato", u"Sin asignar"}},
 
     // RECOMP SETTINGS rows
+    {"MONITOR", {u"Écran", u"Monitor", u"Monitor", u"Monitor"}},
     {"DISPLAY MODE", {u"Mode d'affichage", u"Anzeigemodus", u"Modalità schermo", u"Modo de pantalla"}},
     {"RESOLUTION", {u"Résolution", u"Auflösung", u"Risoluzione", u"Resolución"}},
     {"RENDER RESOLUTION", {u"Résolution de rendu", u"Render-Auflösung", u"Risoluzione di rendering", u"Resolución de renderizado"}},
@@ -60,6 +61,7 @@ constexpr Entry kEntries[] = {
     {"AUTOMATIC", {u"Automatique", u"Automatisch", u"Automatico", u"Automático"}},
     {"(DEFAULT)", {u"(par défaut)", u"(Standard)", u"(predefinito)", u"(por defecto)"}},
     {"(RESTART)", {u"(redémarrage)", u"(Neustart)", u"(riavvio)", u"(reinicio)"}},
+    {"(PRIMARY)", {u"(principal)", u"(primär)", u"(principale)", u"(principal)"}},
     {"ENGLISH", {u"Anglais", u"Englisch", u"Inglese", u"Inglés"}},
     {"FRENCH", {u"Français", u"Französisch", u"Francese", u"Francés"}},
     {"GERMAN", {u"Allemand", u"Deutsch", u"Tedesco", u"Alemán"}},

@@ -27,6 +27,7 @@ struct Port {
 inline constexpr const char* kLanguages[] = {"int", "fra", "deu", "ita", "esp"};
 
 struct Settings {
+    std::string monitor;             // its device name, \\.\DISPLAY2; empty the primary
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
     uint32_t render_percent = 100;   // of the output height
@@ -71,6 +72,17 @@ struct Mode {
 };
 Mode Desktop();
 Mode Output();
+// the connected monitors, in their device numbers' order
+struct Display {
+    std::string device;  // \\.\DISPLAY1
+    int number;          // the device's number, as Windows numbers it
+    Mode desktop;
+    bool primary;
+};
+std::vector<Display> Displays();
+void* MonitorHandle(const std::string& device);  // HMONITOR, the primary for empty or one not connected
+// counts the window's display applies: the window may be on another monitor, with another desktop mode
+inline std::atomic<uint32_t> g_display_applied{0};
 float RenderScale(uint32_t guest_height);
 // tangent of the fov setting's half angle over that of the game's 75 degrees
 float FovScale();

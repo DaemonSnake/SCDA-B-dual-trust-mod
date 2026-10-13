@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -59,6 +60,7 @@ void Load() {
     } catch (...) {
         return;
     }
+    s.monitor = t["monitor"].value_or(s.monitor);
     std::string mode = t["display_mode"].value_or(std::string(kModes[uint32_t(s.display_mode)]));
     for (uint32_t i = 0; i < 3; i++)
         if (mode == kModes[i]) s.display_mode = DisplayMode(i);
@@ -114,7 +116,8 @@ namespace {
 
 toml::table Table() {
     const Settings& s = Get();
-    toml::table t{{"display_mode", kModes[uint32_t(s.display_mode)]},
+    toml::table t{{"monitor", s.monitor},
+                  {"display_mode", kModes[uint32_t(s.display_mode)]},
                   {"width", int64_t(s.width)},
                   {"height", int64_t(s.height)},
                   {"render_percent", int64_t(s.render_percent)},
@@ -184,6 +187,42 @@ Mode Desktop() {
     return {uint32_t(GetSystemMetrics(SM_CXSCREEN)), uint32_t(GetSystemMetrics(SM_CYSCREEN))};
 }
 
+std::vector<Display> Displays() {
+    std::vector<Display> out;
+    auto add = [](HMONITOR mon, HDC, LPRECT, LPARAM list) -> BOOL {
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        DEVMODEW dm{};
+        dm.dmSize = sizeof(dm);
+        if (!GetMonitorInfoW(mon, &mi) || !EnumDisplaySettingsW(mi.szDevice, ENUM_REGISTRY_SETTINGS, &dm)) return TRUE;
+        Display d{std::string(), 0, {dm.dmPelsWidth, dm.dmPelsHeight}, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0};
+        for (const wchar_t* c = mi.szDevice; *c; c++) d.device += char(*c);
+        size_t digits = d.device.find_last_not_of("0123456789") + 1;
+        d.number = digits < d.device.size() ? std::atoi(d.device.c_str() + digits) : 0;
+        reinterpret_cast<std::vector<Display>*>(list)->push_back(d);
+        return TRUE;
+    };
+    EnumDisplayMonitors(nullptr, nullptr, add, LPARAM(&out));
+    std::sort(out.begin(), out.end(), [](const Display& a, const Display& b) { return a.number < b.number; });
+    return out;
+}
+
+void* MonitorHandle(const std::string& device) {
+    struct Find {
+        std::wstring device;
+        HMONITOR found;
+    } find{std::wstring(device.begin(), device.end()), nullptr};
+    auto match = [](HMONITOR mon, HDC, LPRECT, LPARAM p) -> BOOL {
+        auto* f = reinterpret_cast<Find*>(p);
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfoW(mon, &mi) && f->device == mi.szDevice) f->found = mon;
+        return !f->found;
+    };
+    if (!device.empty()) EnumDisplayMonitors(nullptr, nullptr, match, LPARAM(&find));
+    return find.found ? find.found : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
 Mode Output() {
     const Settings& s = Get();
     if (s.width && s.height) return {s.width, s.height};
@@ -195,7 +234,7 @@ float Aspect() {
     static std::atomic<uint64_t> key{~0ull};
     static std::atomic<float> aspect{16.0f / 9.0f};
     const Settings& s = Get();
-    uint64_t k = uint64_t(s.width) << 32 | s.height;
+    uint64_t k = (uint64_t(s.width) << 32 | s.height) ^ uint64_t(g_display_applied) << 48;
     if (key.exchange(k) != k) {
         Mode m = Output();
         aspect = std::max(float(m.width) / std::max(m.height, 1u), 4.0f / 3.0f);
