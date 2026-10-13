@@ -42,6 +42,11 @@
 #include "gpu/vertex.h"
 #include "kernel/kernel.h"
 
+// dxc's bytecode for src/gpu/occlusion_rt.hlsl, compiled with the project
+#include "occlusion_rt_ps.h"
+#include "occlusion_rt_ps_ms.h"
+#include "occlusion_rt_vs.h"
+
 using Microsoft::WRL::ComPtr;
 
 namespace gpu {
@@ -74,6 +79,7 @@ constexpr float kHeadroom = 8.0f;
 constexpr DXGI_FORMAT kHdr10Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 constexpr float kDefaultPaperNits = 200.0f;
 constexpr float kDefaultPeakNits = 1000.0f;
+constexpr float kMaxPeakNits = 4000.0f;  // brighter is a display without calibration reporting PQ's 10000
 constexpr float kSdrWhiteUnit = 0.08f;  // Windows' SDR white level: 1000 is 80 nits
 // longest a frame missing draws still on the build threads keeps the last whole frame on screen instead
 constexpr auto kHoldMax = std::chrono::milliseconds(50);
@@ -810,7 +816,7 @@ private:
     bool EnsureSmaaTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h);
     bool DrawSmaaPasses(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_t w, uint32_t h, const char* hlsl);
     // a pass's shader entry, target and what it reads
-    // depth: the scene's, read by the first pass; src: the pass before; multiply: onto the scene
+    // depth: the scene's, read by the first pass; src: the pass before; multiply: onto the scene; traced: rtao
     struct AoPass {
         const char* entry;
         DXGI_FORMAT out;
@@ -821,6 +827,7 @@ private:
         ID3D12Resource* src = nullptr;
         float step_x = 0;
         float step_y = 0;
+        bool traced = false;
     };
     // what the passes share: kAoHlsl's constants, the scene rectangle and viewport, the depth's sample count
     struct AoFrame {
@@ -828,7 +835,7 @@ private:
         D3D12_RECT rect;
         D3D12_VIEWPORT vp;
         uint32_t depth_samples;
-        bool gtao;
+        AoMode mode;
     };
     // Occlusion, in order, each callee right after its caller
     bool EnsureAoTargets(uint32_t w, uint32_t h);
@@ -836,6 +843,12 @@ private:
     bool DrawAoPass(const AoFrame& f, const AoPass& pass);
     ID3D12PipelineState* EnsureAoPipeline(const AoPass& pass, bool ms);
     void CreateAoViews(uint32_t slot, const AoPass& pass, bool ms);
+    bool BuildSceneStructure(const AoFrame& f, const Target& rt);
+    // ray traced ambient occlusion's device support, shaders and buffers, once
+    bool EnsureRayTracing();
+    bool CreateRayBuffers();
+    bool CreateRayBuffer(ComPtr<ID3D12Resource>& r, uint64_t bytes, D3D12_RESOURCE_STATES st);
+    void UavBarrier(ID3D12Resource* r);
     // Draw, in call order, each callee right after its caller
     bool BindTargets(const State& s);
     bool EnterHdrForScene(const State& s, const Assembled& a);
@@ -873,6 +886,12 @@ private:
     void SetBlendFactorStencilRef(const State& s);
     void DrawGeometry(const Assembled& a);
     void UploadVertexBuffers(const Assembled& a);
+    void IssueDraw(const Assembled& a);
+    bool IsSceneGeometry(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) const;
+    void StreamOutTriangles(const Assembled& a, const PsoKey& k);
+    ID3D12PipelineState* EnsureStreamOutPipeline(const PsoKey& draw);
+    ComPtr<ID3D12PipelineState> CreateStreamOutPipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs);
+    void StartTriangleStream();
     // shaders by source hash: Register keeps the source, EnsureShaderCode finds the bytecode on disk or compiles it;
     // with compile false it only looks, and sets pending where the compiler is needed
     uint64_t Register(std::string src, const char* entry, const char* profile);
@@ -1056,6 +1075,26 @@ private:
     D3D12_RESOURCE_STATES ao_state_[2] = {};
     uint32_t ao_w_ = 0;
     uint32_t ao_h_ = 0;
+    // ray traced ambient occlusion: the opaque triangles drawn before the frame's occlusion, streamed out with their
+    // byte count, then a bottom level structure over them and a top level one placing it in view space
+    enum class RayState : uint8_t { Unchecked, Ready, Unsupported };
+    RayState ray_state_ = RayState::Unchecked;
+    bool ray_ao_ = false;      // the setting asks for it
+    bool ray_seen_ = false;    // an occlusion was ray traced: the image draws them (Versus never does)
+    bool ao_drawn_ = false;    // this frame's occlusion ran, later draws are not the opaque scene
+    uint32_t ray_tris_ = 0;    // triangles streamed out this frame
+    ComPtr<ID3D12Device5> dev5_;
+    ComPtr<ID3D12GraphicsCommandList4> cl4_;
+    ComPtr<ID3DBlob> ray_vs_;
+    ComPtr<ID3DBlob> ray_ps_[2];  // for single and multisampled depth
+    ComPtr<ID3D12Resource> ray_verts_;
+    ComPtr<ID3D12Resource> ray_filled_size_;
+    ComPtr<ID3D12Resource> ray_blas_;
+    ComPtr<ID3D12Resource> ray_tlas_;
+    ComPtr<ID3D12Resource> ray_scratch_;  // both builds', the top level's from ray_top_scratch_
+    uint64_t ray_top_scratch_ = 0;
+    D3D12_RESOURCE_STATES ray_verts_state_ = D3D12_RESOURCE_STATE_COMMON;
+    D3D12_RESOURCE_STATES ray_filled_size_size_state_ = D3D12_RESOURCE_STATE_COMMON;
     // SMAA: edges, blend weights and the blended frame, at the frame's size; its two lookups
     ComPtr<ID3D12Resource> smaa_[3];
     ComPtr<ID3D12Resource> smaa_lut_[2];
@@ -1238,7 +1277,9 @@ bool D3D12Backend::CreateRootSignature() {
     D3D12_ROOT_SIGNATURE_DESC rsd{};
     rsd.NumParameters = 4;
     rsd.pParameters = params;
-    rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+    // stream output: the scene's triangles for ray traced ambient occlusion
+    rsd.Flags =
+        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT;
     ComPtr<ID3DBlob> rs;
     ComPtr<ID3DBlob> err;
     if (FAILED(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &rs, &err))) return false;
@@ -1280,10 +1321,11 @@ void D3D12Backend::LoadSettings() {
     msaa_ = Samples(msaa_set_);
 }
 
-// tone mapping and async shaders from the settings; sm3_ is set before
+// tone mapping, async shaders and ray traced ambient occlusion from the settings; sm3_ is set before
 void D3D12Backend::LatchFeatureSettings(const app::Settings& set) {
     tone_ = sm3_ && set.tone_mapping;
     async_ = set.async_shaders;
+    ray_ao_ = set.ambient_occlusion == kAoTraced;
 }
 
 void D3D12Backend::Begin() {
@@ -2067,12 +2109,16 @@ ID3D12Resource* D3D12Backend::Smaa(ID3D12Resource* src, DXGI_FORMAT fmt, uint32_
 }
 
 // ambient occlusion's target format, and the formats its passes read at t0 to t3: depth, the pass before, stencil,
-// then a fourth slot no pass reads
+// then a fourth slot only the traced pass reads, as the scene structure; it reads its triangles at t1
 constexpr DXGI_FORMAT kAoFormat = DXGI_FORMAT_R16G16_FLOAT;
 constexpr DXGI_FORMAT kAoViewFormats[4] = {DXGI_FORMAT_R24_UNORM_X8_TYPELESS, kAoFormat,
                                            DXGI_FORMAT_X24_TYPELESS_G8_UINT, kBgra};
 constexpr float kAoMaxSpan = 0.15f;  // most pixels the radius may span, as a share of the viewport height
 constexpr float kAoRadius = 80.0f;   // world units, the engine's are cm
+constexpr int kAoProj = 0;      // AoFrame::c's proj: 1 / scale x y, centre x y
+constexpr int kAoViewport = 8;  // its vp: the viewport in pixels
+constexpr uint32_t kRayTriangles = 1u << 19;  // most a frame streams out for ray traced ambient occlusion
+constexpr uint32_t kRayVertexBytes = 12;      // clip x, y and w
 
 // the viewport in the target's pixels, clamped to it
 D3D12_RECT ScaledViewportRect(const Viewport& v, const Target& rt) {
@@ -2096,9 +2142,16 @@ ID3D12PipelineState* D3D12Backend::EnsureAoPipeline(const AoPass& pass, bool ms)
     uint64_t seed = uint64_t(pass.out) | uint64_t(ms) << 32 | uint64_t(pass.samples) << 40;
     auto& pso = blit_psos_[Hash(pass.entry, std::strlen(pass.entry), seed)];
     if (pso) return pso.Get();
-    std::string text = std::string(ms ? "#define MS 1\n" : "") + kAoHlsl;
-    ID3DBlob* vs = Compile(text, "vs", "vs_5_0");
-    ID3DBlob* ps = Compile(text, pass.entry, "ps_5_0");
+    ID3DBlob* vs = nullptr;
+    ID3DBlob* ps = nullptr;
+    if (pass.traced) {
+        vs = ray_vs_.Get();
+        ps = ray_ps_[ms].Get();
+    } else {
+        std::string text = std::string(ms ? "#define MS 1\n" : "") + kAoHlsl;
+        vs = Compile(text, "vs", "vs_5_0");
+        ps = Compile(text, pass.entry, "ps_5_0");
+    }
     if (!vs || !ps) return nullptr;
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d = FullScreenPipelineDesc(vs, ps, pass.out, pass.samples);
     if (pass.multiply) {
@@ -2128,6 +2181,19 @@ void D3D12Backend::CreateAoViews(uint32_t slot, const AoPass& pass, bool ms) {
         }
         dev_->CreateShaderResourceView(r, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
+    if (!pass.traced) return;
+    D3D12_SHADER_RESOURCE_VIEW_DESC tris{};
+    tris.Format = DXGI_FORMAT_R32_TYPELESS;
+    tris.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    tris.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    tris.Buffer.NumElements = UINT(ray_verts_->GetDesc().Width / 4);
+    tris.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+    dev_->CreateShaderResourceView(ray_verts_.Get(), &tris, Cpu(srv_heap_.Get(), slot + 1, srv_inc_));
+    D3D12_SHADER_RESOURCE_VIEW_DESC as{};
+    as.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+    as.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    as.RaytracingAccelerationStructure.Location = ray_tlas_->GetGPUVirtualAddress();
+    dev_->CreateShaderResourceView(nullptr, &as, Cpu(srv_heap_.Get(), slot + 3, srv_inc_));
 }
 
 bool D3D12Backend::DrawAoPass(const AoFrame& f, const AoPass& pass) {
@@ -2150,13 +2216,20 @@ bool D3D12Backend::DrawAoPass(const AoFrame& f, const AoPass& pass) {
     return true;
 }
 
+const char* const kAoModeNames[] = {"off", "SSAO", "GTAO", "RTAO"};
+
+const char* AoEntry(AoMode mode) {
+    if (mode == kAoTraced) return "rtao";
+    return mode == kAoGtao ? "gtao" : "occlusion";
+}
+
 // occlusion from ds's depth, blurred across, then blurred down and multiplied into rt
 void D3D12Backend::DrawOcclusionPasses(Target& rt, Target& ds, const AoFrame& f) {
     bound_rt_ = bound_ds_ = nullptr;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     Transition(ao_[0].Get(), ao_state_[0], D3D12_RESOURCE_STATE_RENDER_TARGET);
-    const char* entry = f.gtao ? "gtao" : "occlusion";
-    AoPass occlusion{.entry = entry, .out = kAoFormat, .rtv = PostRtv(kAoRtv), .depth = ds.res.Get()};
+    AoPass occlusion{.entry = AoEntry(f.mode), .out = kAoFormat, .rtv = PostRtv(kAoRtv), .depth = ds.res.Get(),
+                     .traced = f.mode == kAoTraced};
     if (!DrawAoPass(f, occlusion)) return;
     Transition(ao_[0].Get(), ao_state_[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     Transition(ao_[1].Get(), ao_state_[1], D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -2190,8 +2263,7 @@ void D3D12Backend::Occlusion(const State& s, const float p[kOcclusionParams]) {
         CapStep(s.rt);
         fprintf(cap_, "%04u occlusion rt %08X ds %08X\n", cap_i_++, s.rt.data, s.zs.data);
     }
-    LOG_FIRST(1, "d3d12: ambient occlusion %s %ux%u, %u samples, projection %.4f %.4f, view z %.6f / (depth - %.8f)",
-              p[9] ? "GTAO" : "SSAO", rt->w, rt->h, ds->samples, 1 / p[0], 1 / p[1], p[4], p[5]);
+    AoMode mode = AoMode(p[9]);
     float rect_w = float(rect.right - rect.left);
     float rect_h = float(rect.bottom - rect.top);
     // kAoHlsl's proj, zp, vp, opt and fog; each pass sets its blur step in opt.zw
@@ -2201,8 +2273,165 @@ void D3D12Backend::Occlusion(const State& s, const float p[kOcclusionParams]) {
               .rect = rect,
               .vp = {0, 0, float(rt->w), float(rt->h), 0, 1},
               .depth_samples = ds->samples,
-              .gtao = p[9] != 0};
+              .mode = mode};
+    if (mode == kAoTraced) ray_seen_ = true;
+    // no triangles yet or no ray tracing: GTAO, the nearest look
+    if (mode == kAoTraced && !BuildSceneStructure(f, *rt)) f.mode = kAoGtao;
+    ao_drawn_ = true;
+    LOG_FIRST(1, "d3d12: ambient occlusion %s %ux%u, %u samples, projection %.4f %.4f, view z %.6f / (depth - %.8f)",
+              kAoModeNames[f.mode], rt->w, rt->h, ds->samples, 1 / p[0], 1 / p[1], p[4], p[5]);
     DrawOcclusionPasses(*rt, *ds, f);
+}
+
+// SV_Position's clip x, y and w to the view space kAoHlsl's View() rebuilds from depth: x and y through the occlusion
+// viewport and the projection's scale and centre, w is view z
+D3D12_RAYTRACING_INSTANCE_DESC ViewInstance(const float (&c)[20], const Target& rt, D3D12_GPU_VIRTUAL_ADDRESS blas) {
+    const float* proj = c + kAoProj;
+    const float* vp = c + kAoViewport;
+    float ax = rt.w / vp[2];
+    float bx = (rt.w - 2 * vp[0]) / vp[2] - 1;
+    float ay = rt.h / vp[3];
+    float by = 1 - (rt.h - 2 * vp[1]) / vp[3];
+    D3D12_RAYTRACING_INSTANCE_DESC d{};
+    d.Transform[0][0] = proj[0] * ax;
+    d.Transform[0][2] = proj[0] * (bx - proj[2]);
+    d.Transform[1][1] = proj[1] * ay;
+    d.Transform[1][2] = proj[1] * (by - proj[3]);
+    d.Transform[2][2] = 1;
+    d.InstanceMask = 0xFF;
+    d.AccelerationStructure = blas;
+    return d;
+}
+
+// the frame's triangles as one opaque geometry
+D3D12_RAYTRACING_GEOMETRY_DESC SceneGeometry(D3D12_GPU_VIRTUAL_ADDRESS verts, uint32_t tris) {
+    D3D12_RAYTRACING_GEOMETRY_DESC g{};
+    g.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+    g.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+    g.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+    g.Triangles.VertexCount = tris * 3;
+    g.Triangles.VertexBuffer = {verts, kRayVertexBytes};
+    return g;
+}
+
+D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS BottomInputs(const D3D12_RAYTRACING_GEOMETRY_DESC* g) {
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS in{};
+    in.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+    in.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+    in.NumDescs = 1;
+    in.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+    in.pGeometryDescs = g;
+    return in;
+}
+
+D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS TopInputs(D3D12_GPU_VIRTUAL_ADDRESS instances) {
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS in{};
+    in.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+    in.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+    in.NumDescs = 1;
+    in.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+    in.InstanceDescs = instances;
+    return in;
+}
+
+// rebuilt each frame over the frame's streamed out triangles; false with none
+bool D3D12Backend::BuildSceneStructure(const AoFrame& f, const Target& rt) {
+    if (!ray_tris_ || ray_state_ != RayState::Ready) return false;
+    // built from, then read by the traced pass for its triangles' planes
+    Transition(ray_verts_.Get(), ray_verts_state_, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+    // last frame's rays and builds are done with both structures and the scratch
+    UavBarrier(nullptr);
+    D3D12_RAYTRACING_GEOMETRY_DESC g = SceneGeometry(ray_verts_->GetGPUVirtualAddress(), ray_tris_);
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC bottom{};
+    bottom.Inputs = BottomInputs(&g);
+    bottom.DestAccelerationStructureData = ray_blas_->GetGPUVirtualAddress();
+    bottom.ScratchAccelerationStructureData = ray_scratch_->GetGPUVirtualAddress();
+    cl4_->BuildRaytracingAccelerationStructure(&bottom, 0, nullptr);
+    UavBarrier(ray_blas_.Get());
+    D3D12_RAYTRACING_INSTANCE_DESC instance = ViewInstance(f.c, rt, ray_blas_->GetGPUVirtualAddress());
+    Alloc inst = Upload(sizeof(instance), D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT);
+    std::memcpy(inst.cpu, &instance, sizeof(instance));
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC top{};
+    top.Inputs = TopInputs(inst.gpu);
+    top.DestAccelerationStructureData = ray_tlas_->GetGPUVirtualAddress();
+    top.ScratchAccelerationStructureData = ray_scratch_->GetGPUVirtualAddress() + ray_top_scratch_;
+    cl4_->BuildRaytracingAccelerationStructure(&top, 0, nullptr);
+    UavBarrier(ray_tlas_.Get());
+    return true;
+}
+
+ComPtr<ID3DBlob> BytecodeBlob(const unsigned char* code, size_t size) {
+    ComPtr<ID3DBlob> b;
+    if (FAILED(D3DCreateBlob(size, &b))) return nullptr;
+    std::memcpy(b->GetBufferPointer(), code, size);
+    return b;
+}
+
+bool SupportsRayQueries(ID3D12Device* dev) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5{};
+    if (FAILED(dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof(o5)))) return false;
+    if (o5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1) return false;
+    D3D12_FEATURE_DATA_SHADER_MODEL sm{D3D_SHADER_MODEL_6_5};
+    if (FAILED(dev->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &sm, sizeof(sm)))) return false;
+    return sm.HighestShaderModel >= D3D_SHADER_MODEL_6_5;
+}
+
+bool D3D12Backend::EnsureRayTracing() {
+    if (ray_state_ != RayState::Unchecked) return ray_state_ == RayState::Ready;
+    ray_state_ = RayState::Unsupported;
+    if (!SupportsRayQueries(dev_.Get()) || FAILED(dev_.As(&dev5_)) || FAILED(cl_.As(&cl4_))) {
+        LOGW("d3d12: no DXR 1.1 with shader model 6.5, ray traced ambient occlusion draws GTAO");
+        return false;
+    }
+    ray_vs_ = BytecodeBlob(kRtaoVs, sizeof(kRtaoVs));
+    ray_ps_[0] = BytecodeBlob(kRtaoPs, sizeof(kRtaoPs));
+    ray_ps_[1] = BytecodeBlob(kRtaoPsMs, sizeof(kRtaoPsMs));
+    if (!ray_vs_ || !ray_ps_[0] || !ray_ps_[1] || !CreateRayBuffers()) {
+        LOGE("d3d12: ray traced ambient occlusion setup failed, it draws GTAO");
+        return false;
+    }
+    ray_state_ = RayState::Ready;
+    return true;
+}
+
+uint64_t AlignStructure(uint64_t bytes) {
+    constexpr uint64_t kAlign = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT;
+    return (bytes + kAlign - 1) & ~(kAlign - 1);
+}
+
+// the stream and its byte count, then both structures and one scratch for both builds, at kRayTriangles
+bool D3D12Backend::CreateRayBuffers() {
+    constexpr auto kCommon = D3D12_RESOURCE_STATE_COMMON;
+    constexpr auto kStructure = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+    if (!CreateRayBuffer(ray_verts_, uint64_t(kRayTriangles) * 3 * kRayVertexBytes, kCommon)) return false;
+    if (!CreateRayBuffer(ray_filled_size_, sizeof(uint64_t), kCommon)) return false;
+    D3D12_RAYTRACING_GEOMETRY_DESC g = SceneGeometry(0, kRayTriangles);
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS bottom = BottomInputs(&g);
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS top = TopInputs(0);
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO b{};
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO t{};
+    dev5_->GetRaytracingAccelerationStructurePrebuildInfo(&bottom, &b);
+    dev5_->GetRaytracingAccelerationStructurePrebuildInfo(&top, &t);
+    ray_top_scratch_ = AlignStructure(b.ScratchDataSizeInBytes);
+    uint64_t scratch = ray_top_scratch_ + AlignStructure(t.ScratchDataSizeInBytes);
+    if (!CreateRayBuffer(ray_blas_, AlignStructure(b.ResultDataMaxSizeInBytes), kStructure)) return false;
+    if (!CreateRayBuffer(ray_tlas_, AlignStructure(t.ResultDataMaxSizeInBytes), kStructure)) return false;
+    return CreateRayBuffer(ray_scratch_, scratch, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
+bool D3D12Backend::CreateRayBuffer(ComPtr<ID3D12Resource>& r, uint64_t bytes, D3D12_RESOURCE_STATES st) {
+    D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC bd = BufferDesc(bytes);
+    bd.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    return SUCCEEDED(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, st, nullptr, IID_PPV_ARGS(&r)));
+}
+
+// r null: every unordered access
+void D3D12Backend::UavBarrier(ID3D12Resource* r) {
+    D3D12_RESOURCE_BARRIER b{};
+    b.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    b.UAV.pResource = r;
+    cl_->ResourceBarrier(1, &b);
 }
 
 void D3D12Backend::TakeBuilt() {
@@ -3135,10 +3364,127 @@ void D3D12Backend::DrawGeometry(const Assembled& a) {
         std::memcpy(ib.cpu, a.index_src, ibytes);
         D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, a.index16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT};
         cl_->IASetIndexBuffer(&ibv);
+    }
+    IssueDraw(a);
+}
+
+void D3D12Backend::IssueDraw(const Assembled& a) {
+    if (a.index_count) {
         cl_->DrawIndexedInstanced(a.index_count, 1, 0, a.base_vertex, 0);
     } else {
         cl_->DrawInstanced(a.draw_count, 1, 0, 0);
     }
+}
+
+// depth written into the frame's own scene by a 3D draw before its occlusion: the opaque world
+// alpha tested and blended surfaces (foliage, fences, glass) are left out rather than traced as solid quads
+bool D3D12Backend::IsSceneGeometry(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) const {
+    if (!ray_ao_ || !ray_seen_ || ao_drawn_ || ray_state_ == RayState::Unsupported) return false;
+    if (a.pretransformed || sh.quad || a.topology != Topology::Triangles) return false;
+    if (!k.zen || !k.zwrite || k.blend || SimpleState(s, kMAlphaTestEnable)) return false;
+    if (!bound_rt_ || !bound_ds_) return false;
+    bool scene = bound_rt_->gw == guest_w_ && bound_rt_->gh == guest_h_;
+    return scene && bound_ds_->w == bound_rt_->w && bound_ds_->h == bound_rt_->h;
+}
+
+uint32_t TriangleCount(const Assembled& a) {
+    uint32_t verts = a.index_count ? a.index_count : a.draw_count;
+    if (a.strip) return verts > 2 ? verts - 2 : 0;
+    return verts / 3;
+}
+
+// the draw once more, its inputs still bound, into the frame's triangle stream; the count is kept here because the
+// structure build takes it from the CPU
+void D3D12Backend::StreamOutTriangles(const Assembled& a, const PsoKey& k) {
+    uint32_t tris = TriangleCount(a);
+    if (!tris || ray_tris_ + tris > kRayTriangles || !EnsureRayTracing()) return;
+    ID3D12PipelineState* pso = EnsureStreamOutPipeline(k);
+    if (!pso) return;
+    if (!ray_tris_) StartTriangleStream();
+    D3D12_STREAM_OUTPUT_BUFFER_VIEW so{ray_verts_->GetGPUVirtualAddress(), ray_verts_->GetDesc().Width,
+                                       ray_filled_size_->GetGPUVirtualAddress()};
+    cl_->SOSetTargets(0, 1, &so);
+    cl_->SetPipelineState(pso);
+    IssueDraw(a);
+    cl_->SOSetTargets(0, 1, nullptr);
+    ray_tris_ += tris;
+}
+
+// ps 0 marks it; the draw's targets stay bound, so their formats and samples are the draw's
+PsoKey StreamOutKey(const PsoKey& draw) {
+    PsoKey k;
+    std::memset(&k, 0, sizeof(k));
+    k.vs = draw.vs;
+    k.regs = draw.regs;
+    std::memcpy(k.elements, draw.elements, sizeof(k.elements));
+    k.topo = draw.topo;
+    k.has_rt = draw.has_rt;
+    k.has_ds = draw.has_ds;
+    k.rtfmt = draw.rtfmt;
+    k.msaa = draw.msaa;
+    return k;
+}
+
+// the draw's vertex shader streaming out clip x, y and w; made on a build thread, null until it is back
+ID3D12PipelineState* D3D12Backend::EnsureStreamOutPipeline(const PsoKey& draw) {
+    PsoKey k = StreamOutKey(draw);
+    uint64_t h = Hash(&k, sizeof(k));
+    auto it = psos_.find(h);
+    if (it != psos_.end()) return it->second.Get();
+    if (!building_.insert(h).second) return nullptr;
+    cache::Post([this, k, h] {
+        bool unused = false;
+        ID3DBlob* vs = EnsureShaderCode(k.vs, true, unused);
+        ComPtr<ID3D12PipelineState> pso;
+        if (vs) pso = CreateStreamOutPipeline(k, h, vs);
+        std::lock_guard lock(built_lock_);
+        built_.emplace_back(h, std::move(pso));
+        built_ready_.store(true, std::memory_order_release);
+    });
+    return nullptr;
+}
+
+// clip x and y, then w: a linear image of view space, which ViewInstance maps back
+const D3D12_SO_DECLARATION_ENTRY kClipXyw[2] = {{0, "SV_Position", 0, 0, 2, 0}, {0, "SV_Position", 0, 3, 1, 0}};
+const UINT kClipXywStride = kRayVertexBytes;
+
+// nothing rasterized: no pixel shader, depth or blend
+ComPtr<ID3D12PipelineState> D3D12Backend::CreateStreamOutPipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs) {
+    D3D12_INPUT_ELEMENT_DESC el[16];
+    uint32_t n = FillInputLayout(k, el);
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC d{};
+    d.InputLayout = {el, n};
+    d.pRootSignature = root_.Get();
+    d.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
+    d.StreamOutput = {kClipXyw, 2, &kClipXywStride, 1, D3D12_SO_NO_RASTERIZED_STREAM};
+    d.SampleMask = UINT_MAX;
+    d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    d.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    d.RasterizerState.DepthClipEnable = TRUE;
+    d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    d.NumRenderTargets = k.has_rt ? 1 : 0;
+    d.RTVFormats[0] = k.has_rt ? DXGI_FORMAT(k.rtfmt) : DXGI_FORMAT_UNKNOWN;
+    d.DSVFormat = k.has_ds ? DXGI_FORMAT_D24_UNORM_S8_UINT : DXGI_FORMAT_UNKNOWN;
+    d.SampleDesc.Count = std::max(k.msaa, 1u);
+    uint64_t name = Hash(&h, sizeof(h), Hash(static_cast<const uint8_t*>(vs->GetBufferPointer()) + 4, 16));
+    ComPtr<ID3D12PipelineState> pso = cache::LoadPipeline(name, d);
+    if (pso) return pso;
+    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) {
+        LOGE("d3d12: stream output pipeline creation failed");
+        return nullptr;
+    }
+    cache::StorePipeline(name, pso.Get());
+    return pso;
+}
+
+// the stream's byte count back to 0, both buffers ready for stream output
+void D3D12Backend::StartTriangleStream() {
+    Alloc zero = Upload(sizeof(uint64_t), sizeof(uint64_t));
+    std::memset(zero.cpu, 0, sizeof(uint64_t));
+    Transition(ray_filled_size_.Get(), ray_filled_size_size_state_, D3D12_RESOURCE_STATE_COPY_DEST);
+    cl_->CopyBufferRegion(ray_filled_size_.Get(), 0, zero.res, zero.off, sizeof(uint64_t));
+    Transition(ray_filled_size_.Get(), ray_filled_size_size_state_, D3D12_RESOURCE_STATE_STREAM_OUT);
+    Transition(ray_verts_.Get(), ray_verts_state_, D3D12_RESOURCE_STATE_STREAM_OUT);
 }
 
 void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
@@ -3191,8 +3537,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     SetViewportScissor(s, size.w);
     SetBlendFactorStencilRef(s);
 
-    // geometry
+    // geometry, and again into ray traced ambient occlusion's scene
     DrawGeometry(a);
+    if (IsSceneGeometry(s, a, sh, k)) StreamOutTriangles(a, k);
 }
 
 // a guest rect scaled to the target and clamped to it
@@ -3444,7 +3791,8 @@ void D3D12Backend::DetectHdr() {
     DXGI_OUTPUT_DESC1 desc{};
     bool found = FindOutput(factory_.Get(), mon, desc);
     hdr_display_ = found && desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-    peak_nits_ = found && desc.MaxLuminance > 0 ? desc.MaxLuminance : kDefaultPeakNits;
+    bool known_peak = found && desc.MaxLuminance > 0 && desc.MaxLuminance <= kMaxPeakNits;
+    peak_nits_ = known_peak ? desc.MaxLuminance : kDefaultPeakNits;
     paper_nits_ = SdrWhiteNits(mon);
     app::g_hdr_display = hdr_display_;
     LOGR("Display HDR: %s, peak %.0f nits, SDR white %.0f nits", hdr_display_ ? "on" : "off", peak_nits_,
@@ -3698,6 +4046,8 @@ void D3D12Backend::Present(const Surface& front, bool pillarbox) {
     presents_++;
     presents_seen_.store(presents_);
     frame_++;
+    ao_drawn_ = false;
+    ray_tris_ = 0;
     ReleaseOldTextures();
     ResetFrame();
     CountFps();

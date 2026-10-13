@@ -7,8 +7,8 @@ namespace d3d {
 
 gpu::State& State();
 std::recursive_mutex& Lock();
-// ambient occlusion over the scene drawn so far; m: its D3D perspective projection; gtao: GTAO, else SSAO
-void Occlusion(const float* m, bool gtao);
+// ambient occlusion over the scene drawn so far; m: its D3D perspective projection; mode: a gpu::AoMode
+void Occlusion(const float* m, uint32_t mode);
 // draws from here on are magnified about the viewport's centre, 1 for none
 void ViewScale(float xy);
 

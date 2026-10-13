@@ -44,7 +44,7 @@ struct Settings {
     uint32_t shader_model = 1;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
     bool hdr_rendering = false;
     bool tone_mapping = false;
-    uint32_t ambient_occlusion = 0;  // screen space, from the scene's depth: 0 off, 1 SSAO, 2 GTAO
+    uint32_t ambient_occlusion = 0;  // 0 off, 1 SSAO, 2 GTAO from the scene's depth, 3 ray traced against its triangles
     bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;

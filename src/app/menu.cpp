@@ -40,8 +40,8 @@ constexpr uint32_t kAnisoValues[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"OFF", "2x", "4x", "8x", "16x"};
 constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
 const char* const kMsaaNames[] = {"OFF", "2x", "4x", "8x"};
-constexpr uint32_t kAoValues[] = {0, 1, 2};
-const char* const kAoNames[] = {"OFF", "SSAO", "GTAO"};
+constexpr uint32_t kAoValues[] = {0, 1, 2, 3};
+const char* const kAoNames[] = {"OFF", "SSAO", "GTAO", "RTAO"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
