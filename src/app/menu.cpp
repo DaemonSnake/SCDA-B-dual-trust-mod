@@ -298,7 +298,7 @@ enum RowId {
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
-    kAudioOutput
+    kAudioOutput, kHdrOutput
 };
 
 using rows::Kind;
@@ -322,6 +322,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
     {Kind::Value, kFov, "FIELD OF VIEW"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
+    {Kind::Value, kHdrOutput, "HDR OUTPUT"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
     {Kind::Heading, -1, "GRAPHICS"},
@@ -376,8 +377,11 @@ const std::vector<Row>& PadRows() {
 // shader model 3.0 features
 bool ShaderModel3Row(int id) { return id == kHdr || id == kToneMapping; }
 
-// shown dimmed and left as it is: a shader model 3.0 feature at 1.1
-bool Greyed(int id) { return ShaderModel3Row(id) && Get().shader_model < 3; }
+// shown dimmed and left as it is: a shader model 3.0 feature at 1.1, HDR output without an HDR display
+bool Greyed(int id) {
+    if (id == kHdrOutput) return !g_hdr_display;
+    return ShaderModel3Row(id) && Get().shader_model < 3;
+}
 
 // the setting an ON / OFF row flips, nullptr for any other row
 bool* ToggleFlag(Settings& s, int id) {
@@ -385,6 +389,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kVsync: return &s.vsync;
         case kFpsCounter: return &s.fps_counter;
         case kHdr: return &s.hdr_rendering;
+        case kHdrOutput: return &s.hdr_output;
         case kToneMapping: return &s.tone_mapping;
         case kSmaa: return &s.smaa;
         case kSkipIntros: return &s.skip_intros;
@@ -577,6 +582,7 @@ std::string RowText(int id, int step, Settings& s = Get()) {
     if (id == kMicrophone) return s.microphone.empty() ? "SYSTEM DEFAULT" : s.microphone;
     // shader model 3.0 features, off at 1.1
     if (ShaderModel3Row(id) && s.shader_model < 3) return "OFF";
+    if (id == kHdrOutput && !g_hdr_display) return "NOT SUPPORTED";
     char text[64] = "";
     if (bool* on = ToggleFlag(s, id)) {
         Flip(*on, step);

@@ -72,6 +72,7 @@ void Load() {
     s.fov = std::clamp(t["fov"].value_or(s.fov), 45u, 140u);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
+    s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.msaa = t["msaa"].value_or(s.msaa);
     s.smaa = t["smaa"].value_or(s.smaa);
@@ -128,6 +129,7 @@ toml::table Table() {
                   {"fov", int64_t(s.fov)},
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
+                  {"hdr_output", s.hdr_output},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"msaa", int64_t(s.msaa)},
                   {"smaa", s.smaa},

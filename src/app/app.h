@@ -35,6 +35,7 @@ struct Settings {
     uint32_t fov = 75;               // horizontal degrees on a 4:3 frame, 75 is the game's
     bool fps_counter = false;
     bool vsync = true;
+    bool hdr_output = true;          // HDR10 on a display with Windows HDR on
     uint32_t aniso = 0;              // 0 as the game asks
     uint32_t msaa = 0;               // samples a pixel of the scene, 0 off
     bool smaa = false;               // over the finished frame, HUD included; combines with msaa
@@ -124,6 +125,8 @@ bool Capturing();  // a key binding waits for a key
 void ToggleMenu();
 void DrawUi();
 
+// the window's display has Windows HDR on, from the renderer
+inline std::atomic<bool> g_hdr_display{false};
 // frames shown a second, from the renderer
 inline std::atomic<float> g_fps{0};
 // the frame rate in the game's font, from the image's Magma frame hook
@@ -151,7 +154,8 @@ std::vector<std::string> Choices(const Row& row, int* current);
 void Choose(const Row& row, int index);
 // false for a row the game menu leaves out: the microphone and push to talk (F10 only)
 bool Shown(const Row& row);
-// false for a row shown greyed that takes no change: the shader model 3.0 features at 1.1
+// false for a row shown greyed that takes no change: the shader model 3.0 features at 1.1, HDR output without
+// an HDR display
 bool Enabled(const Row& row);
 }  // namespace rows
 
