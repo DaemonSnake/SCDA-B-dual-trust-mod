@@ -15,9 +15,10 @@ namespace {
 
 constexpr uint32_t kJoyR = 0xE3, kJoyU = 0xE8, kMouseX = 0xE4, kMouseY = 0xE5;
 // UInput: +0xEEC engine; it records instead of acting while +0xECC and +0xEDC are set and +0xED0 is clear.
-// Engine: +0xCC or +0xDC in a synced session.
+// Engine: +0xC8 and +0xCC, or +0xDC, in a synced session; split screen sets +0xCC alone, and there the triggers
+// must stay triggers.
 constexpr uint32_t kEngine = 0xEEC, kRecordA = 0xECC, kRecordB = 0xEDC, kReplaying = 0xED0;
-constexpr uint32_t kSessionA = 0xCC, kSessionB = 0xDC;
+constexpr uint32_t kSessionNet = 0xC8, kSessionA = 0xCC, kSessionB = 0xDC;
 
 float g_dy = 0.0f;  // game thread: UpdateInput sends IK_JoyR, then IK_JoyU
 
@@ -36,7 +37,8 @@ X86_EXTERN_FUNC(__imp__sub_00246AD6);
 X86_FUNC(sub_00246AD6) {
     uint32_t self = ctx.ecx, key = R32(ctx.esp + 4);
     uint32_t engine = R32(self + kEngine);
-    if ((key == kJoyR || key == kJoyU) && engine && (R32(engine + kSessionA) || R32(engine + kSessionB))) {
+    if ((key == kJoyR || key == kJoyU) && engine &&
+        ((R32(engine + kSessionNet) && R32(engine + kSessionA)) || R32(engine + kSessionB))) {
         if (R32(self + kRecordA) && R32(self + kRecordB) && !R32(self + kReplaying)) {
             float value = Mouse(key);
             std::memcpy(HostPtr(ctx.esp + 8), &value, 4);
