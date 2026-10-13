@@ -93,6 +93,9 @@ std::unordered_map<uint32_t, std::array<uint8_t, kXnAddrSize>> g_peers;
 thread_local uint32_t t_error = 0;
 
 std::atomic<uint32_t> g_remote{0};  // the last public address a packet came from
+// a session: the game sent another machine a packet this recently (lockstep and PRUDP keep sending)
+constexpr uint64_t kSessionHoldMs = 10000;
+std::atomic<uint64_t> g_peer_sent{0};  // GetTickCount64 of the last one
 std::mutex g_nat_lock;
 std::unordered_map<uint64_t, uint16_t> g_nat;  // (peer address, our port) -> the port its packets come from
 std::vector<uint32_t> g_public;                // public addresses packets came from, the latest last
@@ -318,6 +321,8 @@ int SendOnce(SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
 
 int Send(uint32_t sock, SOCKET s, const uint8_t* data, int len, const sockaddr_in* to) {
     int n = SendOnce(s, data, len, to);
+    bool unicast = !to || (to->sin_addr.s_addr != INADDR_BROADCAST && to->sin_addr.s_addr != g_local);
+    if (n >= 0 && unicast) g_peer_sent = GetTickCount64();
     if (n >= 0 && to && to->sin_addr.s_addr != INADDR_BROADCAST && Find(sock).port == htons(kPrudpPort)) {
         std::lock_guard<std::mutex> lock(g_coop_lock);
         g_coop_peers[to->sin_addr.s_addr] = {sock, to->sin_port, GetTickCount64()};
@@ -461,6 +466,11 @@ bool SendVoiceLink(uint32_t address, const void* data, int len) {
     to.sin_port = route.port;
     to.sin_addr.s_addr = address;
     return SendOnce(k.s, static_cast<const uint8_t*>(data), len, &to) >= 0;
+}
+
+bool InSession() {
+    uint64_t sent = g_peer_sent;
+    return sent && GetTickCount64() - sent < kSessionHoldMs;
 }
 
 void SetCoopHost(bool (*host)(uint32_t& rate, uint32_t& floor)) { g_coop_host = host; }
@@ -796,7 +806,10 @@ HLE_STDCALL(send, 4) {
         Socket k = Find(a[0]);
         if (k.s == INVALID_SOCKET) return Fail(WSAENOTSOCK);
         int n = ::send(k.s, static_cast<const char*>(HostPtr(a[1])), int(a[2]), int(a[3]));
-        if (n >= 0) return uint32_t(n);
+        if (n >= 0) {
+            g_peer_sent = GetTickCount64();
+            return uint32_t(n);
+        }
         int e = WSAGetLastError();
         if (e != WSAEWOULDBLOCK || k.nonblocking) return Fail(e);
         Wait(k.s, true, 50);

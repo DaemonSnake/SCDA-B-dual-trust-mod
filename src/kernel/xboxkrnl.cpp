@@ -49,7 +49,43 @@ uint8_t& Irql() { return G<uint8_t>(Current()->kpcr + 0x24); }
 
 int64_t TimeoutArg(uint32_t ptr) { return ptr ? int64_t(R64(ptr)) : INT64_MAX; }
 
+// guest time is steady time less the holds so far; a seqlock: the version is odd while a hold starts or ends
+std::atomic<uint32_t> g_time_version{0};
+std::atomic<int64_t> g_held_at{-1};   // guest ns the clocks stopped at, -1 running
+std::atomic<int64_t> g_held_total{0};  // steady ns spent held
+std::mutex g_hold_lock;                // one writer: the loading progress thread swaps too
+
+int64_t SteadyNs() {
+    using namespace std::chrono;
+    return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 }  // namespace
+
+std::chrono::steady_clock::time_point GuestNow() {
+    using namespace std::chrono;
+    for (;;) {
+        uint32_t version = g_time_version;
+        int64_t held = g_held_at;
+        int64_t ns = held >= 0 ? held : SteadyNs() - g_held_total;
+        if (!(version & 1) && version == g_time_version)
+            return steady_clock::time_point(duration_cast<steady_clock::duration>(nanoseconds(ns)));
+    }
+}
+
+void HoldGuestTime(bool held) {
+    std::lock_guard lock(g_hold_lock);
+    if (held == (g_held_at >= 0)) return;
+    g_time_version++;
+    int64_t now = SteadyNs();
+    if (held) {
+        g_held_at = now - g_held_total;
+    } else {
+        g_held_total = now - g_held_at;
+        g_held_at = -1;
+    }
+    g_time_version++;
+}
 
 uint32_t g_tick_count_va = 0;
 uint32_t g_launch_data_page_va = 0;
@@ -78,9 +114,9 @@ void InitKernelData() {
     W32(queue + 4, queue);
     // the start of the clock
     std::thread([] {
-        auto start = std::chrono::steady_clock::now();
+        auto start = GuestNow();
         for (;;) {
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(GuestNow() - start).count();
             W32(g_tick_count_va, uint32_t(ms));
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -172,8 +208,8 @@ constexpr uint64_t kPerfFrequency = 3375000;
 
 KERNEL_EXPORT(126, KeQueryPerformanceCounter, 0) {
     using namespace std::chrono;
-    static const auto start = steady_clock::now();
-    uint64_t ns = uint64_t(duration_cast<nanoseconds>(steady_clock::now() - start).count());
+    static const auto start = GuestNow();
+    uint64_t ns = uint64_t(duration_cast<nanoseconds>(GuestNow() - start).count());
     uint64_t v = ns / 1000000000ull * kPerfFrequency + ns % 1000000000ull * kPerfFrequency / 1000000000ull;
     ctx.edx = uint32_t(v >> 32);
     return uint32_t(v);
