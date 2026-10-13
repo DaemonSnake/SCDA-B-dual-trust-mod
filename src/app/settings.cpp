@@ -93,6 +93,7 @@ void Load() {
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     std::string language = t["language"].value_or(s.language);
     if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
@@ -149,6 +150,7 @@ toml::table Table() {
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},
+                  {"pause_on_focus_loss", s.pause_on_focus_loss},
                   {"language", s.language},
                   {"audio_output", int64_t(s.audio_output)},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},

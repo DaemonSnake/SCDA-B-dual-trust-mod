@@ -298,7 +298,7 @@ enum RowId {
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
-    kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast
+    kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kPauseOnFocusLoss
 };
 
 using rows::Kind;
@@ -340,6 +340,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kShadowFilter, "SHADOW FILTER"},
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
+    {Kind::Value, kPauseOnFocusLoss, "PAUSE ON FOCUS LOSS"},
     {Kind::Value, kLanguage, "LANGUAGE"},
     {Kind::Value, kAudioOutput, "AUDIO OUTPUT"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
@@ -396,6 +397,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kToneMapping: return &s.tone_mapping;
         case kSmaa: return &s.smaa;
         case kSkipIntros: return &s.skip_intros;
+        case kPauseOnFocusLoss: return &s.pause_on_focus_loss;
         case kPushToTalk: return &s.push_to_talk;
         case kInvertMouse: return &s.invert_mouse;
         default: return nullptr;
