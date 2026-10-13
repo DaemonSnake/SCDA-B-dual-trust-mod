@@ -548,6 +548,7 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
         if (s.tss[size_t(i)][kTssAlphaKill] == 4) k.alphakill |= 1u << i;
     }
     k.flat = s.simple[kMShadeMode >> 2] == 0x1D00;
+    k.alphatest = s.simple[kMAlphaTestEnable >> 2] != 0;
     k.two_sided = s.rs[kRsTwoSidedLighting] != 0;
     if (s.ps) {
         const uint32_t* d = s.ps->def;
@@ -846,7 +847,8 @@ std::string PixelHlsl(const PixelKey& k) {
         body += "float4 outc = float4(lerp(pFog.rgb, cur.rgb, pFog.a), cur.a);\n";
     }
     // HDR targets keep colour divided by their headroom, the console's per pass clamp stays
-    body += "alphatest(outc.a);\noutc.rgb = saturate(outc.rgb) * hdr.x;\nreturn outc;\n}\n";
+    if (k.alphatest) body += "alphatest(outc.a);\n";
+    body += "outc.rgb = saturate(outc.rgb) * hdr.x;\nreturn outc;\n}\n";
     s += body;
     return k.quad ? QuadHlsl(std::move(s)) : s;
 }
