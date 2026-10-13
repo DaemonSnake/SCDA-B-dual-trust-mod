@@ -41,6 +41,7 @@ struct Settings {
     bool smaa = false;               // over the finished frame, HUD included; combines with msaa
     uint32_t shadow_resolution = 512;  // shadow map edge, 0 follows the render scale; 512 is the console's, edge blur included
     uint32_t shadow_distance = 1;    // lights and their shadows turn off this many times further away, 1 to 8
+    uint32_t shadow_filter = 1;      // 1 the console's shadow edge blur, 3 Chaos Theory's shader model 3 soft filter
     uint32_t shader_model = 1;       // 3 turns on the Chaos Theory PC style features below, 1 is the console's look
     bool hdr_rendering = false;
     bool tone_mapping = false;

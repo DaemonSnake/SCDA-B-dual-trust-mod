@@ -80,6 +80,7 @@ void Load() {
     // 0 was the old UNLIMITED, now the furthest
     uint32_t shadow_distance = t["shadow_distance"].value_or(s.shadow_distance);
     s.shadow_distance = shadow_distance ? std::min(shadow_distance, 8u) : 8u;
+    s.shadow_filter = t["shadow_filter"].value_or(s.shadow_filter) >= 3 ? 3u : 1u;
     s.shader_model = t["shader_model"].value_or(s.shader_model) >= 3 ? 3u : 1u;
     s.hdr_rendering = t["hdr_rendering"].value_or(s.hdr_rendering);
     s.tone_mapping = t["tone_mapping"].value_or(s.tone_mapping);
@@ -135,6 +136,7 @@ toml::table Table() {
                   {"smaa", s.smaa},
                   {"shadow_resolution", int64_t(s.shadow_resolution)},
                   {"shadow_distance", int64_t(s.shadow_distance)},
+                  {"shadow_filter", int64_t(s.shadow_filter)},
                   {"shader_model", int64_t(s.shader_model)},
                   {"hdr_rendering", s.hdr_rendering},
                   {"tone_mapping", s.tone_mapping},

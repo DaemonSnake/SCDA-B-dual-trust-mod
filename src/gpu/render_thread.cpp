@@ -40,7 +40,9 @@ constexpr uint32_t kHeaderRing = 1u << 20;  // guest memory for header copies; a
 
 enum class WaitFor : uint8_t { ReadBack, Resource, Fence, Flush, Copy, Frame, Count };
 
-enum class Op : uint8_t { State, Draw, Clear, Copy, Present, Sync, RecordLate, Flush, Gamma, Occlusion };
+enum class Op : uint8_t {
+    State, Draw, Clear, Copy, Present, Sync, RecordLate, Flush, Gamma, Occlusion, FilterShadows, ApplyShadows
+};
 
 struct Cmd {
     Op op;
@@ -218,6 +220,22 @@ public:
         cur_->cmds.push_back(c);
         Use(s.rt.header);
         Use(s.zs.header);
+        Written(s.rt);
+    }
+
+    void FilterShadows(const State& s, const float p[kShadowFilterParams]) override {
+        SendState(s);
+        Cmd c{Op::FilterShadows};
+        c.data = Put(p, kShadowFilterParams * sizeof(float));
+        cur_->cmds.push_back(c);
+        Use(s.rt.header);
+        Use(s.zs.header);
+    }
+
+    void ApplyShadows(const State& s) override {
+        SendState(s);
+        cur_->cmds.push_back(Cmd{Op::ApplyShadows});
+        Use(s.rt.header);
         Written(s.rt);
     }
 
@@ -434,6 +452,13 @@ private:
                 inner_->Occlusion(state_, p);
                 break;
             }
+            case Op::FilterShadows: {
+                float p[kShadowFilterParams];
+                std::memcpy(p, data, sizeof(p));
+                inner_->FilterShadows(state_, p);
+                break;
+            }
+            case Op::ApplyShadows: inner_->ApplyShadows(state_); break;
         }
     }
 

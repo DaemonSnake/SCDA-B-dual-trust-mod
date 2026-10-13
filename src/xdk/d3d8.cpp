@@ -180,6 +180,18 @@ void Occlusion(const float* m, uint32_t mode) {
     g_backend->Occlusion(g_state, p);
 }
 
+void FilterShadows(const float* m) {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (!g_backend || m[11] != 1.0f || m[15] != 0.0f) return;
+    const float p[gpu::kShadowFilterParams] = {m[14], m[10]};
+    g_backend->FilterShadows(g_state, p);
+}
+
+void ApplyShadows() {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (g_backend) g_backend->ApplyShadows(g_state);
+}
+
 }  // namespace d3d
 
 using namespace d3d;

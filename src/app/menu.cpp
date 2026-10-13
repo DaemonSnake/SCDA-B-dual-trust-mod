@@ -298,7 +298,7 @@ enum RowId {
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
-    kAudioOutput, kHdrOutput
+    kAudioOutput, kHdrOutput, kShadowFilter
 };
 
 using rows::Kind;
@@ -310,8 +310,8 @@ constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 bool VersusHides(int id) {
     if (!kVersus) return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kAmbientOcclusion ||
-           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kMaxFps || id == kTickRate ||
-           id == kInputDelay;
+           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kShadowFilter || id == kMaxFps ||
+           id == kTickRate || id == kInputDelay;
 }
 
 constexpr Row kSettingsRows[] = {
@@ -335,6 +335,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kShadowResolution, "SHADOW RESOLUTION"},
     {Kind::Value, kShadowDistance, "SHADOW DISTANCE"},
+    {Kind::Value, kShadowFilter, "SHADOW FILTER"},
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
     {Kind::Value, kLanguage, "LANGUAGE"},
@@ -525,6 +526,10 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
             std::snprintf(text, sizeof(text), scale == 1 ? "%ux (DEFAULT)" : "%ux", scale);
             return true;
         }
+        case kShadowFilter:
+            if (step) s.shadow_filter = StepIndex(s.shadow_filter >= 3, step, 2) ? 3 : 1;
+            std::snprintf(text, sizeof(text), "%s", s.shadow_filter >= 3 ? "SM3 SOFT" : "SM1 (DEFAULT)");
+            return true;
         default:
             return false;
     }

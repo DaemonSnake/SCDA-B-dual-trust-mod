@@ -62,13 +62,16 @@ constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024;
 constexpr uint32_t kDsvCount = 256;
 // post pass views after the back buffers': bloom pair, exposure, ambient occlusion pair, SMAA's three, HDR10
-// output's frame and panel
+// output's frame and panel, the soft shadow targets
 constexpr uint32_t kBloomRtv = 0;
 constexpr uint32_t kExposureRtv = 2;
 constexpr uint32_t kAoRtv = 3;
 constexpr uint32_t kSmaaRtv = 5;
 constexpr uint32_t kOutRtv = 8;
-constexpr uint32_t kPostRtvs = 10;
+constexpr uint32_t kSoftShadowRtv = 10;
+constexpr uint32_t kPostRtvs = 14;
+// Chaos Theory's soft shadows' targets
+enum SoftShadowTarget { kSoftSmall, kSoftQuarter, kSoftPenumbra, kSoftFiltered, kSoftShadowTargets };
 constexpr uint32_t kConsoleShadows = 512;  // the shadow resolution setting that keeps the console's look
 constexpr DXGI_FORMAT kBgra = DXGI_FORMAT_B8G8R8A8_UNORM;
 // Shader model 3.0 HDR: the scene target holds colour over kHeadroom so lights add past 1 while alpha, which the
@@ -740,6 +743,8 @@ public:
     void Flush() override;
     void SetGamma(const uint8_t* ramp) override;
     void Occlusion(const State& s, const float p[kOcclusionParams]) override;
+    void FilterShadows(const State& s, const float p[kShadowFilterParams]) override;
+    void ApplyShadows(const State& s) override;
     void WaitGpuFrame(uint64_t n) override;
 
 private:
@@ -850,6 +855,32 @@ private:
     bool CreateRayBuffers();
     bool CreateRayBuffer(ComPtr<ID3D12Resource>& r, uint64_t bytes, D3D12_RESOURCE_STATES st);
     void UavBarrier(ID3D12Resource* r);
+    // a soft shadow pass: its target and size, the scene's sample count when drawing onto it, and what it reads at t0
+    // to t3: depth, the scene or the filtered shadow, the 256x256 copy, a 128x128 target
+    struct SoftShadowPass {
+        const char* entry;
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv{};
+        DXGI_FORMAT out = DXGI_FORMAT_UNKNOWN;
+        uint32_t w = 0;
+        uint32_t h = 0;
+        uint32_t samples = 1;
+        bool alpha_only = false;
+        bool in_viewport = false;  // inside the scene's viewport, not over the whole target
+        ID3D12Resource* reads[4] = {};
+        DXGI_FORMAT read1_fmt = kBgra;  // the format of reads[1]
+    };
+    // what the passes share: kSoftShadowHlsl's constants, the scene's viewport in its pixels, its depth's samples
+    struct SoftShadowFrame {
+        float c[8];
+        D3D12_RECT rect;
+        uint32_t depth_samples;
+    };
+    // FilterShadows, in order, each callee right after its caller
+    bool EnsureSoftShadowTargets(uint32_t w, uint32_t h);
+    bool DrawSoftShadowPasses(Target& rt, Target& ds, const SoftShadowFrame& f);
+    bool DrawSoftShadowPass(const SoftShadowFrame& f, const SoftShadowPass& pass);
+    ID3D12PipelineState* EnsureSoftShadowPipeline(const SoftShadowPass& pass, bool ms);
+    void CreateSoftShadowViews(uint32_t slot, const SoftShadowPass& pass, bool ms);
     // Draw, in call order, each callee right after its caller
     bool BindTargets(const State& s);
     bool EnterHdrForScene(const State& s, const Assembled& a);
@@ -1076,6 +1107,13 @@ private:
     D3D12_RESOURCE_STATES ao_state_[2] = {};
     uint32_t ao_w_ = 0;
     uint32_t ao_h_ = 0;
+    // Chaos Theory's soft shadows: the targets, the scene size they were made for, and what ApplyShadows writes back
+    ComPtr<ID3D12Resource> soft_[kSoftShadowTargets];
+    D3D12_RESOURCE_STATES soft_state_[kSoftShadowTargets] = {};
+    uint32_t soft_w_ = 0;
+    uint32_t soft_h_ = 0;
+    uint32_t soft_rt_ = 0;  // surface data of the scene FilterShadows filtered, 0 when none is pending
+    SoftShadowFrame soft_frame_{};
     // ray traced ambient occlusion: the opaque triangles drawn before the frame's occlusion, streamed out with their
     // byte count, then a bottom level structure over them and a top level one placing it in view space
     enum class RayState : uint8_t { Unchecked, Ready, Unsupported };
@@ -2127,6 +2165,251 @@ D3D12_RECT ScaledViewportRect(const Viewport& v, const Target& rt) {
     float sc = float(rt.w) / rt.gw;
     return {std::clamp<LONG>(LONG(v.x * sc), 0, rt.w), std::clamp<LONG>(LONG(v.y * sc), 0, rt.h),
             std::clamp<LONG>(LONG((v.x + v.w) * sc), 0, rt.w), std::clamp<LONG>(LONG((v.y + v.h) * sc), 0, rt.h)};
+}
+
+// Chaos Theory's shader model 3 soft shadows, over the shadow the scene's alpha holds: a 256x256 copy of view depth
+// and shadow, a 128x128 mask of the penumbra, the masked pixels filtered by a depth aware disk of 8 taps, then the
+// result written back over the alpha. The tuning is a Chaos Theory level's SM3Shadows
+const char* kSoftShadowHlsl = R"(
+cbuffer F : register(b1) { float4 zp; float4 vp; };
+#ifdef MS
+Texture2DMS<float> depth : register(t0);
+float RawDepth(int2 p) { return depth.Load(p, 0); }
+#else
+Texture2D<float> depth : register(t0);
+float RawDepth(int2 p) { return depth.Load(int3(p, 0)); }
+#endif
+Texture2D scene : register(t1);    // or for the last pass the filtered shadow
+Texture2D small : register(t2);    // 256x256: view depth over kDepthRadius, shadow
+Texture2D quarter : register(t3);  // 128x128: shadow, or the penumbra mask
+SamplerState bilinear : register(s0);
+static const float kDepthRadius = 0.02;
+static const float kDiskRadius = 3.2;  // 256x256 texels
+static const float kDiskDepthScale = 0.6;
+static const float kDiskDepthBias = -0.4;
+static const float kBlendDepthScale = 1.2;
+static const float kBlendDepthBias = -0.3;
+static const float kNearOffset = 0.1;
+static const float kCentreWeight = 0.001;
+static const float kPenumbraLow = 0.000784;
+static const float kPenumbraHigh = 0.99922;
+static const float2 kDisk[8] = {{0, 0}, {0.527837, -0.085868}, {-0.040088, 0.536087}, {-0.670445, -0.179949},
+                                {-0.419418, -0.616039}, {0.440453, -0.639399}, {-0.757088, 0.349334},
+                                {0.574619, 0.685879}};
+static const float2 kCorners[4] = {{-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+static const float kDiskWeight[8] = {1, 0.7140148, 0.7110037, 0.5181218, 0.4445845, 0.3971701, 0.3047835, 0.1993830};
+float4 vs(uint id : SV_VertexID) : SV_Position { return float4(float2((id << 1) & 2, id & 2) * float2(2, -2) + float2(-1, 1), 0, 1); }
+// zp: view z = zp.x / (depth - zp.y); vp: the scene's viewport in pixels
+int2 Inside(int2 p) { return clamp(p, int2(vp.xy), int2(vp.xy + vp.zw) - 1); }
+// view z from 0.1 to 1000 units as 0..1, clamped as Chaos Theory's 8 bit copy held it
+float ViewDepth(int2 p) {
+    float z = zp.x / (RawDepth(Inside(p)) - zp.y);
+    return saturate(z * 0.0010001 - 0.00010001);
+}
+float2 DepthShadow(int2 p) { return float2(ViewDepth(p), scene.Load(int3(Inside(p), 0)).a); }
+// depth and shadow between pixel centres
+float2 Bilinear(float2 at) {
+    float2 f = at - 0.5;
+    int2 i = int2(floor(f));
+    float2 t = f - i;
+    float2 top = lerp(DepthShadow(i), DepthShadow(i + int2(1, 0)), t.x);
+    float2 bottom = lerp(DepthShadow(i + int2(0, 1)), DepthShadow(i + int2(1, 1)), t.x);
+    return lerp(top, bottom, t.y);
+}
+// 256x256: four bilinear reads a pixel off each diagonal
+float4 shadow_small(float4 pos : SV_Position) : SV_Target {
+    float2 at = vp.xy + pos.xy / 256 * vp.zw;
+    float2 sum = 0;
+    [unroll] for (int i = 0; i < 4; i++) sum += Bilinear(at + kCorners[i]);
+    float2 mean = sum * 0.25;
+    return float4(mean.x / kDepthRadius, mean.y, 0, 0);
+}
+// 128x128: the shadow, 2x2 of the copy
+float4 shadow_quarter(float4 pos : SV_Position) : SV_Target { return small.SampleLevel(bilinear, pos.xy / 128, 0).y; }
+// 128x128: 1 where the 3x3 tent around the pixel is partly in shadow
+float4 shadow_penumbra(float4 pos : SV_Position) : SV_Target {
+    float s = 0;
+    [unroll] for (int i = 0; i < 4; i++) s += quarter.SampleLevel(bilinear, (pos.xy + kCorners[i] * 0.5) / 128, 0).x;
+    s *= 0.25;
+    return s >= kPenumbraLow && s < kPenumbraHigh ? 1 : 0;
+}
+// the penumbra: the disk scaled and blended in by nearness, each tap weighed down by its depth difference
+float4 shadow_filter(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    float2 uv = (pos.xy - vp.xy) / vp.zw;
+    float lit = scene.Load(int3(p, 0)).a;
+    int2 cell = min(int2(uv * 128), 127);
+    if (quarter.Load(int3(cell, 0)).x <= 0.5) return lit * small.SampleLevel(bilinear, uv, 0).y;
+    float d = ViewDepth(p);
+    float nearness = 1 / (d + kNearOffset);
+    float radius = saturate(nearness * kDiskDepthScale + kDiskDepthBias) * kDiskRadius / 256;
+    float blend = saturate(nearness * kBlendDepthScale + kBlendDepthBias);
+    float own = d / kDepthRadius;
+    float sum = lit * kCentreWeight;
+    float weights = kCentreWeight;
+    [unroll] for (int i = 0; i < 8; i++) {
+        float2 tap = small.SampleLevel(bilinear, uv + kDisk[i] * radius, 0).xy;
+        float apart = tap.x - own;
+        float w = saturate(kDiskWeight[i] - apart * apart);
+        sum += tap.y * w;
+        weights += w;
+    }
+    return lerp(lit, sum / weights, blend);
+}
+float4 shadow_apply(float4 pos : SV_Position) : SV_Target { return float4(0, 0, 0, scene.Load(int3(pos.xy, 0)).x); }
+)";
+
+// the soft shadow targets, in SoftShadowTarget order; the filtered one is the scene's size
+constexpr uint32_t kSoftSmallSize = 256;
+constexpr uint32_t kSoftQuarterSize = 128;
+constexpr DXGI_FORMAT kDepthViewFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+constexpr DXGI_FORMAT kSoftShadowFormats[kSoftShadowTargets] = {DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16_FLOAT,
+                                                                DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT};
+
+// p: view z = p[0] / (ndc depth - p[1])
+void D3D12Backend::FilterShadows(const State& s, const float p[kShadowFilterParams]) {
+    soft_rt_ = 0;
+    Target* rt = FindTarget(s.rt, false);
+    Target* ds = FindTarget(s.zs, true);
+    // the frame's own scene only
+    if (!rt || !ds || rt->gw != guest_w_ || rt->gh != guest_h_ || ds->w != rt->w || ds->h != rt->h ||
+        ds->samples != rt->samples) {
+        return;
+    }
+    const auto& v = s.viewport;
+    float zr = v.max_z - v.min_z;
+    D3D12_RECT rect = ScaledViewportRect(v, *rt);
+    if (rect.right <= rect.left || rect.bottom <= rect.top || zr <= 0) return;
+    if (!EnsureSoftShadowTargets(rt->w, rt->h)) return;
+    if (cap_) {
+        CapStep(s.rt);
+        fprintf(cap_, "%04u soft shadows rt %08X ds %08X\n", cap_i_++, s.rt.data, s.zs.data);
+    }
+    float rect_w = float(rect.right - rect.left);
+    float rect_h = float(rect.bottom - rect.top);
+    // kSoftShadowHlsl's zp and vp
+    SoftShadowFrame f{.c = {p[0] * zr, v.min_z + p[1] * zr, 0, 0, float(rect.left), float(rect.top), rect_w, rect_h},
+                      .rect = rect,
+                      .depth_samples = ds->samples};
+    LOG_FIRST(1, "d3d12: soft shadows %ux%u, %u samples, view z %.6f / (depth - %.8f)", rt->w, rt->h, ds->samples,
+              p[0], p[1]);
+    if (!DrawSoftShadowPasses(*rt, *ds, f)) return;
+    soft_rt_ = s.rt.data;
+    soft_frame_ = f;
+}
+
+bool D3D12Backend::EnsureSoftShadowTargets(uint32_t w, uint32_t h) {
+    if (soft_[kSoftFiltered] && soft_w_ == w && soft_h_ == h) return true;
+    soft_w_ = w;
+    soft_h_ = h;
+    const uint32_t sizes[kSoftShadowTargets][2] = {
+        {kSoftSmallSize, kSoftSmallSize}, {kSoftQuarterSize, kSoftQuarterSize}, {kSoftQuarterSize, kSoftQuarterSize},
+        {w, h}};
+    for (int i = 0; i < kSoftShadowTargets; i++) {
+        uint32_t view = kSoftShadowRtv + i;
+        if (!CreatePostTarget(soft_[i], soft_state_[i], kSoftShadowFormats[i], sizes[i][0], sizes[i][1], view)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// the scene's depth and alpha to the 256x256 copy, its shadow to 128x128, the penumbra mask, the filtered shadow
+bool D3D12Backend::DrawSoftShadowPasses(Target& rt, Target& ds, const SoftShadowFrame& f) {
+    ID3D12Resource* scene = EnsureFeedbackCopy(rt);
+    if (!scene) return false;
+    bound_rt_ = bound_ds_ = nullptr;
+    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    ID3D12Resource* depth = ds.res.Get();
+    ID3D12Resource* copy = soft_[kSoftSmall].Get();
+    SoftShadowPass passes[kSoftShadowTargets] = {
+        {.entry = "shadow_small", .w = kSoftSmallSize, .h = kSoftSmallSize, .reads = {depth, scene}},
+        {.entry = "shadow_quarter", .w = kSoftQuarterSize, .h = kSoftQuarterSize, .reads = {nullptr, nullptr, copy}},
+        {.entry = "shadow_penumbra", .w = kSoftQuarterSize, .h = kSoftQuarterSize,
+         .reads = {nullptr, nullptr, nullptr, soft_[kSoftQuarter].Get()}},
+        {.entry = "shadow_filter", .w = rt.w, .h = rt.h, .in_viewport = true,
+         .reads = {depth, scene, copy, soft_[kSoftPenumbra].Get()}}};
+    for (int i = 0; i < kSoftShadowTargets; i++) {
+        SoftShadowPass& pass = passes[i];
+        pass.rtv = PostRtv(kSoftShadowRtv + i);
+        pass.out = kSoftShadowFormats[i];
+        pass.read1_fmt = rt.fmt;
+        Transition(soft_[i].Get(), soft_state_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+        if (!DrawSoftShadowPass(f, pass)) return false;
+        Transition(soft_[i].Get(), soft_state_[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
+    return true;
+}
+
+bool D3D12Backend::DrawSoftShadowPass(const SoftShadowFrame& f, const SoftShadowPass& pass) {
+    bool ms = pass.reads[0] && f.depth_samples > 1;
+    ID3D12PipelineState* pso = EnsureSoftShadowPipeline(pass, ms);
+    if (!pso) return false;
+    uint32_t slot = AllocSrvSlots(4);
+    CreateSoftShadowViews(slot, pass, ms);
+    Alloc cb = Upload(256, 256);
+    std::memcpy(cb.cpu, f.c, sizeof(f.c));
+    D3D12_RECT whole{0, 0, LONG(pass.w), LONG(pass.h)};
+    D3D12_VIEWPORT vp{0, 0, float(pass.w), float(pass.h), 0, 1};
+    cl_->OMSetRenderTargets(1, &pass.rtv, FALSE, nullptr);
+    cl_->RSSetViewports(1, &vp);
+    cl_->RSSetScissorRects(1, pass.in_viewport ? &f.rect : &whole);
+    DrawFullScreen(pso, cb.gpu, slot);
+    return true;
+}
+
+// the pass's pipeline, kept in blit_psos_; ms: the depth it reads is multisampled
+ID3D12PipelineState* D3D12Backend::EnsureSoftShadowPipeline(const SoftShadowPass& pass, bool ms) {
+    uint64_t seed = uint64_t(pass.out) | uint64_t(ms) << 32 | uint64_t(pass.samples) << 40;
+    auto& pso = blit_psos_[Hash(pass.entry, std::strlen(pass.entry), seed)];
+    if (pso) return pso.Get();
+    std::string text = std::string(ms ? "#define MS 1\n" : "") + kSoftShadowHlsl;
+    ID3DBlob* vs = Compile(text, "vs", "vs_5_0");
+    ID3DBlob* ps = Compile(text, pass.entry, "ps_5_0");
+    if (!vs || !ps) return nullptr;
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC d = FullScreenPipelineDesc(vs, ps, pass.out, pass.samples);
+    // onto the scene: its colour stays
+    if (pass.alpha_only) d.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALPHA;
+    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return nullptr;
+    return pso.Get();
+}
+
+// t0 to t3 as SoftShadowPass::reads; one not read gets a null view
+void D3D12Backend::CreateSoftShadowViews(uint32_t slot, const SoftShadowPass& pass, bool ms) {
+    const DXGI_FORMAT formats[4] = {kDepthViewFormat, pass.read1_fmt, kSoftShadowFormats[kSoftSmall],
+                                    kSoftShadowFormats[kSoftQuarter]};
+    for (int i = 0; i < 4; i++) {
+        ID3D12Resource* r = pass.reads[i];
+        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = r ? formats[i] : kBgra;
+        bool multisampled = r && ms && i == 0;
+        sv.ViewDimension = multisampled ? D3D12_SRV_DIMENSION_TEXTURE2DMS : D3D12_SRV_DIMENSION_TEXTURE2D;
+        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        if (!multisampled) sv.Texture2D.MipLevels = 1;
+        dev_->CreateShaderResourceView(r, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+    }
+}
+
+// the filtered shadow over the alpha of the scene FilterShadows read, inside its viewport
+void D3D12Backend::ApplyShadows(const State& s) {
+    Target* rt = FindTarget(s.rt, false);
+    bool pending = rt && soft_rt_ && s.rt.data == soft_rt_ && rt->w == soft_w_ && rt->h == soft_h_;
+    soft_rt_ = 0;
+    if (!pending) return;
+    bound_rt_ = bound_ds_ = nullptr;
+    Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    SoftShadowPass apply{.entry = "shadow_apply",
+                         .rtv = Cpu(rtv_heap_.Get(), rt->view, rtv_inc_),
+                         .out = rt->fmt,
+                         .w = rt->w,
+                         .h = rt->h,
+                         .samples = rt->samples,
+                         .alpha_only = true,
+                         .in_viewport = true,
+                         .reads = {nullptr, soft_[kSoftFiltered].Get()},
+                         .read1_fmt = kSoftShadowFormats[kSoftFiltered]};
+    DrawSoftShadowPass(soft_frame_, apply);
+    rt->drawn = true;
 }
 
 bool D3D12Backend::EnsureAoTargets(uint32_t w, uint32_t h) {
