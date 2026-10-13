@@ -29,12 +29,7 @@ set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 set(OPUS_STACK_PROTECTOR OFF CACHE BOOL "" FORCE)
 set(OPUS_FORTIFY_SOURCE OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(opus GIT_REPOSITORY https://github.com/xiph/opus.git GIT_TAG v1.5.2 GIT_SHALLOW TRUE)
-# dxc for the ray traced ambient occlusion shaders: shader model 6.5, past what the runtime's D3DCompile builds
-FetchContent_Declare(dxc
-    URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.8.2505.1/dxc_2025_07_14.zip
-    URL_HASH SHA256=9ad895a6b039e3a8f8c22a1009f866800b840a74b50db9218d13319e215ea8a4
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-FetchContent_MakeAvailable(zydis tomlplusplus imgui SDL3 opus dxc)
+FetchContent_MakeAvailable(zydis tomlplusplus imgui SDL3 opus)
 
 # x86 to C++ recompiler
 file(GLOB RECOMP_SOURCES CONFIGURE_DEPENDS tools/recomp/*.cpp)
@@ -70,24 +65,6 @@ add_custom_target(build_info
 set_source_files_properties(src/app/system_info.cpp src/app/version.rc PROPERTIES
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR} OBJECT_DEPENDS ${BUILD_INFO})
 
-# ray traced ambient occlusion's shaders as bytecode headers for d3d12.cpp
-set(DXC ${dxc_SOURCE_DIR}/bin/x64/dxc.exe)
-set(RTAO_HLSL ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu/occlusion_rt.hlsl)
-set(RTAO_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
-set(RTAO_HEADERS ${RTAO_DIR}/occlusion_rt_vs.h ${RTAO_DIR}/occlusion_rt_ps.h ${RTAO_DIR}/occlusion_rt_ps_ms.h)
-add_custom_command(
-    OUTPUT ${RTAO_HEADERS}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${RTAO_DIR}
-    COMMAND ${DXC} -nologo -T vs_6_5 -E vs -Vn kRtaoVs -Fh ${RTAO_DIR}/occlusion_rt_vs.h ${RTAO_HLSL}
-    COMMAND ${DXC} -nologo -T ps_6_5 -E rtao -Vn kRtaoPs -Fh ${RTAO_DIR}/occlusion_rt_ps.h ${RTAO_HLSL}
-    COMMAND ${DXC} -nologo -T ps_6_5 -E rtao -D MS=1 -Vn kRtaoPsMs -Fh ${RTAO_DIR}/occlusion_rt_ps_ms.h ${RTAO_HLSL}
-    DEPENDS ${RTAO_HLSL} ${DXC}
-    COMMENT "Compiling the ray traced ambient occlusion shaders"
-    VERBATIM)
-add_custom_target(rtao_shaders DEPENDS ${RTAO_HEADERS})
-set_source_files_properties(src/gpu/d3d12.cpp PROPERTIES
-    INCLUDE_DIRECTORIES ${RTAO_DIR} OBJECT_DEPENDS "${RTAO_HEADERS}")
-
 # One executable per recompiled image: the image's code from its config (partitions as that config sets them),
 # the shared host, and the game hooks only that image has.
 function(scda_image target xbe config partitions game_dir)
@@ -118,7 +95,7 @@ function(scda_image target xbe config partitions game_dir)
     file(CONFIGURE OUTPUT ${XBE_HASH} CONTENT "extern const char kImageSha1[] = \"${xbe_sha1}\";\n")
     add_executable(${target} WIN32 ${HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${IMGUI_SOURCES} ${XBE_HASH}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/app/version.rc)
-    add_dependencies(${target} recompile_${target} build_info rtao_shaders)
+    add_dependencies(${target} recompile_${target} build_info)
     target_include_directories(${target} PRIVATE src ${GEN})
     target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
     target_compile_options(${target} PRIVATE -fno-strict-aliasing)

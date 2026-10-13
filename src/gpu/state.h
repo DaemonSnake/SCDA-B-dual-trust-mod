@@ -180,7 +180,6 @@ struct State {
     uint32_t light_enable = 0;                         // bit per light
     float ss_offset_x = 0, ss_offset_y = 0;
     float zscale = 16777215.0f;  // depth buffer units per 1.0
-    bool sky = false;            // the sky zone's scene node is drawing, from its own camera
 };
 
 }  // namespace gpu

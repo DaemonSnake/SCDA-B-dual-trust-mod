@@ -16,8 +16,6 @@ enum : uint32_t {
 
 constexpr int kOcclusionParams = 10;
 constexpr int kShadowFilterParams = 2;
-// ambient occlusion's method, numbered as the ambient_occlusion setting
-enum AoMode : uint32_t { kAoOff, kAoSsao, kAoGtao, kAoTraced };
 
 class Backend {
 public:
@@ -45,7 +43,7 @@ public:
     virtual void SetGamma(const uint8_t* ramp /*3 x 256*/) = 0;
     // ambient occlusion from the depth of the scene so far, multiplied into its colour. p: 1 / the projection's x and y
     // scale, its x and y centre, then view z = p[4] / (ndc depth - p[5]), then the fog already drawn:
-    // amount p[8] * saturate(p[6] * view z + p[7]), then p[9]: the AoMode
+    // amount p[8] * saturate(p[6] * view z + p[7]), then p[9]: 1 for GTAO, 0 for SSAO
     virtual void Occlusion(const State&, const float /*p*/[kOcclusionParams]) {}
     // Chaos Theory's shader model 3 soft shadows: FilterShadows filters the shadow the scene's alpha holds, from its
     // depth with view z = p[0] / (ndc depth - p[1]); ApplyShadows, after the game's own edge blur, writes it back
