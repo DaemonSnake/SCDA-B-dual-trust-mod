@@ -67,7 +67,7 @@ constexpr uint32_t kOpenPopup = 0x1BF28E;
 constexpr uint32_t kOnCancel = 4;
 constexpr uint32_t kPopupList = 0x88 + 8;  // controller: +0x88 the popup, its +8 list
 constexpr uint32_t kPopupSize = 0x4000;
-constexpr uint32_t kMaxChoices = 64;
+constexpr uint32_t kMaxChoices = 128;  // brightness and contrast list 101, field of view 96
 // the options' base vtable (15 slots): the popup also calls +8 as its selection moves
 constexpr uint32_t kOptionVtable = 0x547C24;
 constexpr uint32_t kOptionSlots = 15;

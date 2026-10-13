@@ -492,6 +492,46 @@ bool Refit(float& x0, float& y0, float& x1, float& y1, float mw, float mh) {
     x0 = (w - dw) / 2, x1 = w - x0, y0 = (h - dh) / 2, y1 = h - y0;
     return true;
 }
+
+// With the HUD hidden, two interactions or more still need the box that shows which one is picked.
+// P_hud: +8 instances begin, +0xC end; instance +4 id, +8 widget, +0x18 bit 0 visible; list widget +0x60 items
+// begin, +0x64 end, 0x38 each
+constexpr uint32_t kInteractionLists[] = {game::magma::Id("List_interaction_RTN"), game::magma::Id("List_interaction_NPC")};
+constexpr uint32_t kInteractionBox[] = {game::magma::Id("List_interaction_RTN"), game::magma::Id("B_interact_RTN"),
+                                        game::magma::Id("List_interaction_NPC"), game::magma::Id("B_interact_NPC")};
+constexpr uint32_t kListItems = 0x60, kListItemsEnd = 0x64, kListItem = 0x38;
+constexpr size_t kInteractionsShown = 2;
+
+std::span<const uint32_t> Instances(uint32_t page) {
+    uint32_t begin = R32(page + 8), end = R32(page + 0xC);
+    if (!begin || end < begin || end - begin > 4 * 512) return {};
+    return {reinterpret_cast<const uint32_t*>(HostPtr(begin)), (end - begin) / 4};
+}
+
+size_t Interactions(uint32_t page) {
+    size_t most = 0;
+    for (uint32_t instance : Instances(page)) {
+        if (!instance || std::ranges::find(kInteractionLists, R32(instance + 4)) == std::end(kInteractionLists)) continue;
+        uint32_t list = R32(instance + 8);
+        uint32_t begin = list ? R32(list + kListItems) : 0, end = list ? R32(list + kListItemsEnd) : 0;
+        size_t items = begin && end > begin ? (end - begin) / kListItem : 0;
+        if (G<uint8_t>(instance + 0x18) & 1) most = std::max(most, items);
+    }
+    return most;
+}
+
+// false when there is no box to show; else hides all but the box for one draw, n of them into hidden
+bool HideAllButInteractions(uint32_t page, uint32_t (&hidden)[64], size_t& n) {
+    size_t interactions = Interactions(page);
+    if (interactions < kInteractionsShown) return false;
+    for (uint32_t instance : Instances(page)) {
+        if (!instance || n == std::size(hidden) || !(G<uint8_t>(instance + 0x18) & 1)) continue;
+        if (std::ranges::find(kInteractionBox, R32(instance + 4)) != std::end(kInteractionBox)) continue;
+        G<uint8_t>(instance + 0x18) &= ~1;
+        hidden[n++] = instance;
+    }
+    return true;
+}
 }  // namespace
 
 // Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
@@ -532,9 +572,13 @@ X86_FUNC(sub_002BE990) {
     uint32_t id = R32(ctx.ecx + 0x14);
     g_hud_seen |= id == game::magma::Id("P_hud");
     g_loading = false;
+    uint32_t hidden[64];
+    size_t hid = 0;
     if (app::g_hide_hud && g_in_level && R32(ctx.ecx + 0x1C) == 100) {
-        ctx.esp += 4;
-        return;
+        if (id != game::magma::Id("P_hud") || !HideAllButInteractions(ctx.ecx, hidden, hid)) {
+            ctx.esp += 4;
+            return;
+        }
     }
     const Page* saved = g_page;
     uint32_t drawing = std::exchange(g_drawing, ctx.ecx);
@@ -544,6 +588,7 @@ X86_FUNC(sub_002BE990) {
     Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
     g_drawing = drawing;
+    for (size_t i = 0; i < hid; i++) G<uint8_t>(hidden[i] + 0x18) |= 1;
     if (id == game::magma::Id("P_OnlineOffline")) Draw(ctx, base, Mode::Right, [](X86Context& c, uint8_t*) { app::DrawWatermark(c); });
 }
 
