@@ -1,6 +1,8 @@
 @echo off
 cd /d "%~dp0"
 set "OUT=out\build\release"
+set "D3DCOMPILER=%ProgramFiles(x86)%\Windows Kits\10\Redist\D3D\x64\d3dcompiler_47.dll"
+if not exist "%D3DCOMPILER%" (echo d3dcompiler_47.dll not found: install the Windows SDK from the Visual Studio Installer & exit /b 1)
 if not exist "%OUT%\SCDA.exe" call build.bat || exit /b 1
 rem One name for every release, so releases/latest/download/SCDA-XBERecomp.zip stays a working link
 set "ZIP=SCDA-XBERecomp.zip"
@@ -17,4 +19,4 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
     )
     mklink /J "%OUT%\shadercache" "%CD%\shadercache" >nul
 )
-7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets"
+7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets" "%D3DCOMPILER%"
