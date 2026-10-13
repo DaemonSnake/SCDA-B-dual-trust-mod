@@ -353,7 +353,7 @@ X86_FUNC(sub_0004B525) {
     float dx, dy;
     // in a synced session the mouse is recorded with the pad (coop_mouse.cpp); the axis command stores its value,
     // so each axis gets one summed event per update
-    if (!net && (!menu || page == kMap) && input::TakeMouse(dx, dy)) {
+    if (!net && input::TakeMouse(dx, dy) && (!menu || page == kMap)) {
         if (dx != 0.0f) Event(g, kMouseX, kAxis, dx);
         if (dy != 0.0f) Event(g, kMouseY, kAxis, dy);
     }
