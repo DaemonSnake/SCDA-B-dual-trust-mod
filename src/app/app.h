@@ -33,6 +33,8 @@ struct Settings {
     uint32_t render_percent = 100;   // of the output height
     uint32_t fps_cap = 60;           // 0 unlimited, kFpsCapRefresh the monitor's refresh rate
     uint32_t fov = 75;               // horizontal degrees on a 4:3 frame, 75 is the game's
+    uint32_t brightness = 50;        // 0 to 100 as SCCT PC's sliders, 50 each leaves the picture alone
+    uint32_t contrast = 50;
     bool fps_counter = false;
     bool vsync = true;
     bool hdr_output = true;          // HDR10 on a display with Windows HDR on

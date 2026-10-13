@@ -70,6 +70,8 @@ void Load() {
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
     s.fov = std::clamp(t["fov"].value_or(s.fov), 45u, 140u);
+    s.brightness = std::min(t["brightness"].value_or(s.brightness), 100u);
+    s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
@@ -128,6 +130,8 @@ toml::table Table() {
                   {"render_percent", int64_t(s.render_percent)},
                   {"fps_cap", int64_t(s.fps_cap)},
                   {"fov", int64_t(s.fov)},
+                  {"brightness", int64_t(s.brightness)},
+                  {"contrast", int64_t(s.contrast)},
                   {"fps_counter", s.fps_counter},
                   {"vsync", s.vsync},
                   {"hdr_output", s.hdr_output},

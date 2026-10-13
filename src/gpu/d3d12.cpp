@@ -929,7 +929,7 @@ private:
     void DetectHdr();
     void ResizeSwap();
     bool ResizeBackBuffers(uint32_t w, uint32_t h, DXGI_FORMAT fmt, DXGI_COLOR_SPACE_TYPE space);
-    void UploadGammaRamp();
+    void UploadGammaRamp(uint32_t brightness, uint32_t contrast);
     void DrawFrame(Target* t, bool pillarbox, uint32_t bi);
     ID3D12Resource* PrepareShownFrame(Target* t);
     void DrawSdrFrame(Target* t, ID3D12Resource* r, bool pillarbox, D3D12_CPU_DESCRIPTOR_HANDLE bb);
@@ -1120,8 +1120,7 @@ private:
     std::vector<CapTex> cap_tex_;
     ComPtr<ID3D12Resource> lut_;
     D3D12_RESOURCE_STATES lut_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
-    uint8_t ramp_[768] = {};
-    bool ramp_dirty_ = false;
+    uint32_t ramp_set_ = ~0u;  // brightness << 8 | contrast the lookup holds
     bool gamma_ = false;
     Target* bound_rt_ = nullptr;
     Target* bound_ds_ = nullptr;
@@ -3823,23 +3822,27 @@ void D3D12Backend::StartCapture() {
     cap_sh_.clear();
 }
 
-// ramp_ holds the red, green and blue ramps, 256 entries each
-constexpr int kRampRed = 0;
-constexpr int kRampGreen = 256;
-constexpr int kRampBlue = 512;
-
-void D3D12Backend::UploadGammaRamp() {
+// Brightness and contrast range from 0 to 100, 50/50 leaves the image unchanged.
+// Unreal's PC ramp offsets brightness and scales contrast linearly, graying blacks
+// and clipping both ends. Here, black and white stay fixed: contrast uses an S-curve
+// around mid-gray (slope 0.5–2), while brightness adjusts gamma from 2 to 0.5.
+// Both match Unreal's ramp at quarter gray.
+void D3D12Backend::UploadGammaRamp(uint32_t brightness, uint32_t contrast) {
     constexpr uint32_t kRampBytes = 256 * 4;  // one BGRA texel per ramp entry
-    ramp_dirty_ = false;
+    ramp_set_ = brightness << 8 | contrast;
+    float k = std::exp2((float(contrast) - 50.0f) / 50.0f);
+    float g = std::exp2((50.0f - float(brightness)) / 50.0f);
     Alloc a = Upload(kRampBytes + D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     bool identity = true;
     for (int i = 0; i < 256; i++) {
+        float x = i / 255.0f;
+        float y = x < 0.5f ? 0.5f * std::pow(2.0f * x, k) : 1.0f - 0.5f * std::pow(2.0f - 2.0f * x, k);
+        float v = std::pow(y, g);
+        uint8_t o = uint8_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
         uint8_t* p = a.cpu + i * 4;
-        p[0] = ramp_[kRampBlue + i];
-        p[1] = ramp_[kRampGreen + i];
-        p[2] = ramp_[kRampRed + i];
+        p[0] = p[1] = p[2] = o;
         p[3] = 255;
-        identity &= ramp_[kRampRed + i] == i && ramp_[kRampGreen + i] == i && ramp_[kRampBlue + i] == i;
+        identity &= o == i;
     }
     gamma_ = !identity;
     Transition(lut_.Get(), lut_state_, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -3988,7 +3991,8 @@ void D3D12Backend::Present(const Surface& front, bool pillarbox) {
     Target* t = EnsureTarget(front, false);
     if (t && LatchCpuWrite(*t)) UploadTarget(*t, front);
     if (t && t->hdr) Resolve(*t);
-    if (ramp_dirty_) UploadGammaRamp();
+    if (const app::Settings& s = app::Get(); (s.brightness << 8 | s.contrast) != ramp_set_)
+        UploadGammaRamp(s.brightness, s.contrast);
     Transition(lut_.Get(), lut_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
     // a frame missing draws still on the build threads is not shown, the last whole one stays up: otherwise a new
@@ -4304,10 +4308,8 @@ void D3D12Backend::CapStep(const Surface& rt) {
     cap_rt_ = d;
 }
 
-void D3D12Backend::SetGamma(const uint8_t* ramp) {
-    std::memcpy(ramp_, ramp, sizeof(ramp_));
-    ramp_dirty_ = true;
-}
+// the game's ramp is Shadow Calibration's, which can only brighten, the brightness and contrast settings replace it
+void D3D12Backend::SetGamma(const uint8_t*) {}
 
 }  // namespace
 

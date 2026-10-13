@@ -298,7 +298,7 @@ enum RowId {
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
-    kAudioOutput, kHdrOutput, kShadowFilter
+    kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast
 };
 
 using rows::Kind;
@@ -321,6 +321,8 @@ constexpr Row kSettingsRows[] = {
     {Kind::Value, kResolution, "RESOLUTION"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
     {Kind::Value, kFov, "FIELD OF VIEW"},
+    {Kind::Value, kBrightness, "BRIGHTNESS"},
+    {Kind::Value, kContrast, "CONTRAST"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kHdrOutput, "HDR OUTPUT"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
@@ -487,6 +489,13 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
             if (step) s.fov = uint32_t(StepRange(int(s.fov), 45, 140, 1, step));
             std::snprintf(text, sizeof(text), s.fov == 75 ? "%u (DEFAULT)" : "%u", s.fov);
             return true;
+        case kBrightness:
+        case kContrast: {
+            uint32_t& v = id == kBrightness ? s.brightness : s.contrast;
+            if (step) v = uint32_t(StepRange(int(v), 0, 100, 1, step));
+            std::snprintf(text, sizeof(text), v == 50 ? "%u (DEFAULT)" : "%u", v);
+            return true;
+        }
         case kMaxFps: {
             uint32_t cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
             if (cap == kFpsCapRefresh) std::snprintf(text, sizeof(text), "REFRESH RATE");
