@@ -174,8 +174,11 @@ public:
         cur_->cmds.push_back(c);
         Use(front.header);
         uint64_t id = Submit();
-        // the title records one frame while the one before it draws
+        // the title records one frame while the one before it draws, on the GPU too: a GPU bound frame rate then paces
+        // the game like a frame rate cap, and the frame times the game measures match the frames shown
         Wait(last_present_, WaitFor::Frame, nullptr);
+        if (presents_) inner_->WaitGpuFrame(presents_ - 1);
+        presents_++;
         last_present_ = id;
     }
 
@@ -454,6 +457,7 @@ private:
     std::unordered_map<uint32_t, uint64_t> last_use_;
     std::unordered_set<uint32_t> written_;  // surfaces drawn since their last read-back, by data address
     uint64_t next_id_ = 0, last_present_ = 0;
+    uint64_t presents_ = 0;
 
     // the render thread
     State state_;
