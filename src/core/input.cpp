@@ -177,6 +177,14 @@ std::atomic<bool> g_net{false};
 std::atomic<bool> g_interact_reloads{false};
 std::atomic<bool> g_carrying{false};
 std::atomic<bool> g_hanging{false};
+// Narrow ladder, as SCCT PC: the back key steps down, and at the top walking speed slides once a step has begun. v2
+// itself slides at once past -0.9 and steps past -0.3. A pipe climbs down, and slides at the top walking speed.
+std::atomic<bool> g_ladder{false};
+std::atomic<bool> g_ladder_step{false};  // the ladder's transition (a step) is running
+std::atomic<bool> g_pipe{false};
+constexpr float kClimbDown = 0.759f;  // axis 0.66
+bool g_ladder_slide = false;
+bool g_ladder_was_step = false;
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -643,10 +651,18 @@ void UpdateStick(Pad& p, const int (&move)[4], bool camera, bool menu, bool back
         y = ay;
         v = 1.0f;
     }
+    bool step = g_ladder_step, top = g_speed == int(std::size(kSpeeds)) - 1;
+    bool down = y < 0 && !menu && !ax && !ay;
+    if (!g_ladder || !down) g_ladder_slide = false;
+    else if (step && !g_ladder_was_step && top) g_ladder_slide = true;
+    g_ladder_was_step = step;
     // Not where the full stick is forced: a ledge climb wants aForward past 0.9.
     if (x && y && !full) v = DiagonalSpeed(v);
+    float vy = v;
+    if (down && g_ladder) vy = g_ladder_slide ? 1.0f : kClimbDown;
+    else if (down && g_pipe) vy = top ? 1.0f : kClimbDown;
     if (x) p.lx = int16_t(float(x) * v * kStickMax);
-    if (y) p.ly = int16_t(float(y) * v * kStickMax);
+    if (y) p.ly = int16_t(float(y) * vy * kStickMax);
     if (View(g_view.load()) != View::Lockpick || menu) {
         if (View(g_view.load()) != View::Lockpick) g_pick_last = -1;
         g_stick_keys = (y > 0 ? 1u : 0u) | (y < 0 ? 2u : 0u) | (x < 0 ? 4u : 0u) | (x > 0 ? 8u : 0u);
@@ -1139,6 +1155,13 @@ void SetCarrying(bool on) {
 void SetHanging(bool on) {
     g_hanging = on;
 }
+
+void SetLadder(bool on, bool stepping) {
+    g_ladder = on;
+    g_ladder_step = on && stepping;
+}
+
+void SetPipe(bool on) { g_pipe = on; }
 
 bool TakeEvent(KeyEvent event) { return g_events.fetch_and(~(1u << int(event))) >> int(event) & 1; }
 

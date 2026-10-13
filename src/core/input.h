@@ -96,6 +96,10 @@ void SetTargeting(bool on);
 void SetCarrying(bool on);
 // hanging from a ledge (s_Ledge): the move backward key, with no strafe key held, holds B (crouch) and drops, as SCCT PC
 void SetHanging(bool on);
+// on a narrow ladder, stepping while its transition runs: the back key steps down, and slides as SCCT PC's
+void SetLadder(bool on, bool stepping);
+// on a pipe: the back key climbs down, and slides at the top walking speed
+void SetPipe(bool on);
 bool TakeEvent(KeyEvent event);  // pressed since the last call
 bool EventKeyHeld(KeyEvent event);  // a key bound to that event's action is down now, with the window in front
 // the cinematic's Skip prompt was drawn (prompts.cpp): only then does Enter press Start, which elsewhere pauses

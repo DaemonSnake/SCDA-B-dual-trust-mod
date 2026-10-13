@@ -19,6 +19,8 @@ namespace unreal = game::unreal;
 namespace {
 
 constexpr uint32_t kViewportActor = 0x34;
+// controller: +0x510 bit 0x8000 bInTransition
+constexpr uint32_t kTransition = 0x510, kTransitionBit = 0x8000;
 constexpr uint16_t kLeftThumb = 1 << 6;
 // a tap the game did not act on (EEV busy scanning or hacking) drops the target
 constexpr auto kTapTimeout = std::chrono::milliseconds(400);
@@ -159,6 +161,8 @@ void UpdateView(uint32_t viewport) {
     input::SetTargeting(Targeting(state) || GentleMove(state));
     input::SetCarrying(state == unreal::Name("s_Carry"));
     input::SetHanging(state == unreal::Name("s_Ledge"));
+    input::SetLadder(state == unreal::Name("s_NarrowLadder"), R32(pc + kTransition) & kTransitionBit);
+    input::SetPipe(state == unreal::Name("s_Pipe"));
     if (view == input::View::Eev && sniping) Sniper(pc);
     else if (view == input::View::Eev) Eev(pc);
     else g_zoomer = 0;
