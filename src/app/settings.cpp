@@ -18,6 +18,7 @@
 #include <toml++/toml.hpp>
 
 #include "app/app.h"
+#include "audio/output.h"
 #include "core/log.h"
 
 namespace app {
@@ -90,6 +91,8 @@ void Load() {
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     std::string language = t["language"].value_or(s.language);
     if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
+    s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
+    audio::SetOutputMode(s.audio_output);
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
     s.coop_input_delay_floor = t["coop_input_delay_floor_ms"].value_or(s.coop_input_delay_floor);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
@@ -139,6 +142,7 @@ toml::table Table() {
                   {"invert_mouse", s.invert_mouse},
                   {"skip_intros", s.skip_intros},
                   {"language", s.language},
+                  {"audio_output", int64_t(s.audio_output)},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},
                   {"coop_input_delay_floor_ms", int64_t(s.coop_input_delay_floor)},
                   {"join_ip", s.join_ip},

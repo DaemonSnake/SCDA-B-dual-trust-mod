@@ -42,6 +42,9 @@ constexpr uint32_t kMsaaValues[] = {0, 2, 4, 8};
 const char* const kMsaaNames[] = {"OFF", "2x", "4x", "8x"};
 constexpr uint32_t kAoValues[] = {0, 1, 2};
 const char* const kAoNames[] = {"OFF", "SSAO", "GTAO"};
+constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
+                                      audio::kOutputSurround};
+const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCapRefresh, 0};
@@ -285,6 +288,7 @@ std::atomic<uint32_t> g_revision{0};
 
 void Changed(bool display) {
     if (display) ApplyDisplay();
+    audio::SetOutputMode(Get().audio_output);
     Save();
     g_revision++;
 }
@@ -293,7 +297,8 @@ enum RowId {
     kDisplayMode, kResolution, kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kShadowResolution,
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
-    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor
+    kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
+    kAudioOutput
 };
 
 using rows::Kind;
@@ -332,6 +337,7 @@ constexpr Row kSettingsRows[] = {
     {Kind::Heading, -1, "GENERAL"},
     {Kind::Value, kSkipIntros, "SKIP INTROS"},
     {Kind::Value, kLanguage, "LANGUAGE"},
+    {Kind::Value, kAudioOutput, "AUDIO OUTPUT"},
     {Kind::Value, kTickRate, "COOP TICK RATE"},
     {Kind::Value, kInputDelay, "COOP MIN INPUT DELAY"},
     {Kind::Text, kJoinIp, kVersus ? "VERSUS JOIN IP" : "COOP JOIN IP"},
@@ -530,6 +536,9 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
             std::snprintf(text, sizeof(text), s.language == BootLanguage() ? "%s" : "%s (RESTART)", kLanguageNames[i]);
             break;
         }
+        case kAudioOutput:
+            std::snprintf(text, sizeof(text), "%s", kAudioOutputNames[StepTable(kAudioOutputs, s.audio_output, step)]);
+            break;
         case kTickRate: {
             uint32_t rate = kTickRates[StepTable(kTickRates, s.coop_tick_rate, step)];
             if (rate) std::snprintf(text, sizeof(text), "%u HZ", rate);

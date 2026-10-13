@@ -49,6 +49,7 @@ struct Settings {
     bool invert_mouse = false;
     bool skip_intros = false;        // logos video and rating screen at boot
     std::string language = "int";    // one of kLanguages
+    uint32_t audio_output = 0;       // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
     uint32_t coop_input_delay_floor = 20;  // ms, the game's 50
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks

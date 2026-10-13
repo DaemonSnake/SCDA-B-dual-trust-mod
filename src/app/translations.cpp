@@ -47,6 +47,7 @@ constexpr Entry kEntries[] = {
     {"SHADOW DISTANCE", {u"Distance des ombres", u"Schattendistanz", u"Distanza delle ombre", u"Distancia de sombras"}},
     {"SKIP INTROS", {u"Passer les intros", u"Intros überspringen", u"Salta introduzione", u"Saltar introducción"}},
     {"LANGUAGE", {u"Langue", u"Sprache", u"Lingua", u"Idioma"}},
+    {"AUDIO OUTPUT", {u"Sortie audio", u"Audioausgabe", u"Uscita audio", u"Salida de audio"}},
     {"COOP TICK RATE", {u"Fréquence de mise à jour co-op", u"Koop-Tickrate", u"Frequenza di aggiornamento cooperativa", u"Tasa de actualización coop."}},
     {"COOP MIN INPUT DELAY", {u"Délai d'entrée min. co-op", u"Min. Koop-Eingabeverzögerung", u"Ritardo input min. cooperativa", u"Retardo de entrada mín. coop."}},
 
@@ -59,6 +60,9 @@ constexpr Entry kEntries[] = {
     {"UNLIMITED", {u"Illimité", u"Unbegrenzt", u"Illimitato", u"Ilimitado"}},
     {"REFRESH RATE", {u"Fréquence de rafraîchissement", u"Bildwiederholfrequenz", u"Frequenza di aggiornamento", u"Frecuencia de actualización"}},
     {"AUTOMATIC", {u"Automatique", u"Automatisch", u"Automatico", u"Automático"}},
+    {"MONO", {u"Mono", u"Mono", u"Mono", u"Mono"}},
+    {"2.0 STEREO", {u"2.0 Stéréo", u"2.0 Stereo", u"2.0 Stereo", u"2.0 Estéreo"}},
+    {"5.1 SURROUND", {u"5.1 Surround", u"5.1 Surround", u"5.1 Surround", u"5.1 Envolvente"}},
     {"(DEFAULT)", {u"(par défaut)", u"(Standard)", u"(predefinito)", u"(por defecto)"}},
     {"(RESTART)", {u"(redémarrage)", u"(Neustart)", u"(riavvio)", u"(reinicio)"}},
     {"(PRIMARY)", {u"(principal)", u"(primär)", u"(principale)", u"(principal)"}},
