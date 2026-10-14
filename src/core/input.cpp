@@ -241,6 +241,9 @@ constexpr Target kVersusActions[] = {
     {{"versus_interact", "INTERACT", "Shift"}, 0},
     {{"versus_jump", "JUMP", "Space"}, 3},
     {{"crouch", "CROUCH", "C"}, 1},
+    // a press is a wheel notch, run or walk, or the scope's zoom
+    {{"versus_zoom_in", "ZOOM IN / ACCELERATE", "Wheel Up"}, -1, false, KeyEvent::ZoomIn},
+    {{"versus_zoom_out", "ZOOM OUT / DECELERATE", "Wheel Down"}, -1, false, KeyEvent::ZoomOut},
     {{"versus_scope", "USE / EQUIP", "E"}, 2},
     // the pad's Y jumps or reloads as the state allows; the key reloads alone (versus/mouse.cpp)
     {{"reload", "RELOAD", "R"}, -1, true, KeyEvent::Reload},
@@ -1046,16 +1049,13 @@ void OnRawInput(void* handle) {
         g_dy += m.lLastY;
     }
     if (!notch) return;
-    // the map, menus and the interaction list keep the wheel whatever it is bound to, as the arrows; versus has no
-    // zoom actions, its wheel picks walk or run
+    // the map, menus and the interaction list keep the wheel whatever it is bound to, as the arrows
     if (g_map) {
         Notch(notch);
     } else if (g_menu || g_list) {
         g_menu_wheel += SHORT(m.usButtonData);
-    } else if (kVersus) {
-        Notch(notch);
     }
-    if (g_map || g_menu || g_list || kVersus) return;
+    if (g_map || g_menu || g_list) return;
     int vk = notch > 0 ? kWheelUp : kWheelDown;
     std::lock_guard lock(g_bind_lock);
     for (size_t i = 0; i < kCount; i++) {
