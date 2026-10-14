@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include "core/input.h"
@@ -222,13 +223,30 @@ uint32_t Ansi(uint32_t at, std::string_view text) {
     return at;
 }
 
-// false past the last slot
-bool Slot(X86Context& ctx, uint32_t box, uint32_t text_name, uint32_t image_name, bool menu, uint32_t page_id) {
+// captions moved left to start where their icon did: their own left and the one given, put back for the pad
+struct Moved {
+    int16_t left;
+    int16_t moved;
+};
+std::unordered_map<uint32_t, Moved> g_moved;  // by text widget (game thread)
+
+// false past the last slot. On the keyboard the caption leads with the key and starts where the icon did; on the pad
+// a caption moved for the keyboard goes back
+bool Slot(X86Context& ctx, uint32_t box, uint32_t text_name, uint32_t image_name, bool menu, uint32_t page_id,
+          bool keyboard) {
     uint32_t ti = CallGuest(ctx, kFind, {box, text_name});
     uint32_t ii = CallGuest(ctx, kFind, {box, image_name});
     if (!ii) return false;
     uint32_t text = ti ? R32(ti + kInstanceWidget) : 0;
     uint32_t image = R32(ii + kInstanceWidget);
+    if (!keyboard) {
+        auto it = text ? g_moved.find(text) : g_moved.end();
+        if (it != g_moved.end()) {
+            if (int16_t(R16(text + kRect)) == it->second.moved) W16(text + kRect, uint16_t(it->second.left));
+            g_moved.erase(it);
+        }
+        return true;
+    }
     uint32_t material = image ? R32(image + kImageMaterial) : 0;
     if (!text || !material) return true;
     std::string key = Label(R32(material + kMaterialId), menu, page_id);
@@ -246,12 +264,18 @@ bool Slot(X86Context& ctx, uint32_t box, uint32_t text_name, uint32_t image_name
     W32(image + kImageMaterial, 0);
     ctx.ecx = text + kTextString;
     CallGuest(ctx, kSetText, {g_block + kBlockText});
+    int16_t left = int16_t(R16(text + kRect));
+    int16_t icon = int16_t(R16(image + kRect));
+    if (icon < left) {
+        if (!g_moved.contains(text)) g_moved[text] = {left, icon};
+        W16(text + kRect, uint16_t(icon));
+    }
     return true;
 }
 
 constexpr int kMaxSlots = 16;
 
-void Relabel(X86Context& ctx, uint32_t page, uint32_t type) {
+void Relabel(X86Context& ctx, uint32_t page, uint32_t type, bool keyboard) {
     if (type > 2 || !Block()) return;
     uint32_t instance = CallGuest(ctx, kFind, {page, kPanels[type]});
     uint32_t panel = instance ? R32(instance + kInstanceWidget) : 0;
@@ -264,14 +288,14 @@ void Relabel(X86Context& ctx, uint32_t page, uint32_t type) {
             uint32_t button = CallGuest(ctx, kFind, {box, name});
             uint32_t element = button ? R32(button + kInstanceWidget) : 0;
             uint32_t inner = element ? R32(element + kChildren) : 0;
-            if (inner) Slot(ctx, inner, kBarText, kBarImage, menu, page_id);
+            if (inner) Slot(ctx, inner, kBarText, kBarImage, menu, page_id, keyboard);
         }
         return;
     }
     for (int i = 0; i < kMaxSlots; i++) {
         uint32_t text = Ansi(g_block + kBlockTextName, std::to_string(i) + "_Text");
         uint32_t image = Ansi(g_block + kBlockImageName, std::to_string(i) + "_Image");
-        if (!Slot(ctx, box, text, image, menu, page_id)) break;
+        if (!Slot(ctx, box, text, image, menu, page_id, keyboard)) break;
     }
 }
 
@@ -681,8 +705,8 @@ X86_FUNC(sub_002915C1) {
     if (page && actions && R32(page + kPageId) == kNameEntry && Keyboard(page) && Block())
         W32(ctx.esp + 8, WithoutY(actions));
     __imp__sub_002915C1(ctx, base);
-    if (!page || !Keyboard(page)) return;
+    if (!page || (!Keyboard(page) && g_moved.empty())) return;
     uint32_t eax = ctx.eax;
-    Relabel(ctx, page, type);
+    Relabel(ctx, page, type, Keyboard(page));
     ctx.eax = eax;
 }
