@@ -417,6 +417,9 @@ struct Held {
     uint32_t material = 0;
     std::u16string text;
     std::u16string shown;
+    bool moved = false;  // the caption's side next to the icon, moved to the icon's far side
+    int16_t side = 0;
+    int16_t placed = 0;
 };
 Held g_held[std::size(kEventPrompts)];  // game thread
 
@@ -469,12 +472,16 @@ void EventPrompt(X86Context& ctx, uint32_t box, size_t i, bool keyboard) {
     if (image != h.image) h = {image};
     std::u16string now = ReadText(text);
     uint32_t material = R32(image + kImageMaterial);
+    // the caption's side against the icon
+    uint32_t edge = p.before ? kRect : kRectRight;
     if (!keyboard) {
-        // back on the pad: the icon and the game's text return
+        // back on the pad: the icon, the game's text and the caption's side return
         if (!h.material) return;
         if (!material) W32(image + kImageMaterial, h.material);
         if (now == h.shown) WriteText(ctx, text, h.text);
+        if (h.moved && int16_t(R16(text + edge)) == h.placed) W16(text + edge, uint16_t(h.side));
         h.material = 0;
+        h.moved = false;
         return;
     }
     if (!material && (!h.material || now == h.shown)) return;
@@ -490,6 +497,13 @@ void EventPrompt(X86Context& ctx, uint32_t box, size_t i, bool keyboard) {
     h.material = icon;
     W32(image + kImageMaterial, 0);
     WriteText(ctx, text, h.shown);
+    // the caption takes the icon's place too: it ends where the icon did, or starts there
+    if (!h.moved) {
+        h.side = int16_t(R16(text + edge));
+        h.placed = int16_t(R16(image + edge));
+        h.moved = true;
+        W16(text + edge, uint16_t(h.placed));
+    }
 }
 
 }  // namespace
