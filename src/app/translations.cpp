@@ -81,6 +81,9 @@ constexpr Entry kEntries[] = {
     // MOUSE AND KEYBOARD and CONTROLLER rows
     {"MOUSE SENSITIVITY", {u"Sensibilité de la souris", u"Mausempfindlichkeit", u"Sensibilità del mouse", u"Sensibilidad del ratón"}},
     {"INVERT MOUSE", {u"Inversion de la souris", u"Maus umkehren", u"Inversione mouse", u"Invertir ratón"}},
+    {"FREE LOOK SENSITIVITY", {u"Sensibilité vue libre", u"Empfindlichkeit freie Sicht", u"Sensibilità visuale libera", u"Sensibilidad vista libre"}},
+    {"WEAPON SENSITIVITY", {u"Sensibilité arme", u"Empfindlichkeit Waffe", u"Sensibilità arma", u"Sensibilidad arma"}},
+    {"SNIPER SENSITIVITY", {u"Sensibilité sniper", u"Empfindlichkeit Scharfschütze", u"Sensibilità cecchino", u"Sensibilidad francotirador"}},
     {"MOVE FORWARD", {u"Avancer", u"Vorwärts bewegen", u"Avanti", u"Avanzar"}},
     {"MOVE BACK", {u"Reculer", u"Rückwärts bewegen", u"Indietro", u"Retroceder"}},
     {"MOVE LEFT", {u"Déplacement à gauche", u"Nach links", u"Spostati a sinistra", u"Mover a la izquierda"}},

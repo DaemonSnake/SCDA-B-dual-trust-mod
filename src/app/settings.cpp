@@ -92,6 +92,9 @@ void Load() {
     s.async_shaders = t["async_shaders"].value_or(s.async_shaders);
     s.mouse_sensitivity = float(t["mouse_sensitivity"].value_or(double(s.mouse_sensitivity)));
     s.invert_mouse = t["invert_mouse"].value_or(s.invert_mouse);
+    s.free_look_sensitivity = float(t["free_look_sensitivity"].value_or(double(s.free_look_sensitivity)));
+    s.weapon_sensitivity = float(t["weapon_sensitivity"].value_or(double(s.weapon_sensitivity)));
+    s.sniper_sensitivity = float(t["sniper_sensitivity"].value_or(double(s.sniper_sensitivity)));
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     std::string language = t["language"].value_or(s.language);
     if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
@@ -148,6 +151,9 @@ toml::table Table() {
                   {"async_shaders", s.async_shaders},
                   {"mouse_sensitivity", double(s.mouse_sensitivity)},
                   {"invert_mouse", s.invert_mouse},
+                  {"free_look_sensitivity", double(s.free_look_sensitivity)},
+                  {"weapon_sensitivity", double(s.weapon_sensitivity)},
+                  {"sniper_sensitivity", double(s.sniper_sensitivity)},
                   {"skip_intros", s.skip_intros},
                   {"language", s.language},
                   {"audio_output", int64_t(s.audio_output)},

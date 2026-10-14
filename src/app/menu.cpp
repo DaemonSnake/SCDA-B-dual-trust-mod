@@ -356,11 +356,13 @@ constexpr Row kSettingsRows[] = {
 
 const std::vector<Row>& InputRows() {
     static const std::vector<Row> list = [] {
-        std::vector<Row> out = {{Kind::Heading, -1, "MOUSE"}, {Kind::Value, kSensitivity, "MOUSE SENSITIVITY"}};
+        std::vector<Row> out = {{Kind::Heading, -1, "MOUSE"}};
         if (kVersus)
             out.insert(out.end(), {{Kind::Value, kFreeLookSensitivity, "FREE LOOK SENSITIVITY"},
                                    {Kind::Value, kWeaponSensitivity, "WEAPON SENSITIVITY"},
                                    {Kind::Value, kSniperSensitivity, "SNIPER SENSITIVITY"}});
+        else
+            out.push_back({Kind::Value, kSensitivity, "MOUSE SENSITIVITY"});
         out.insert(out.end(), {{Kind::Value, kInvertMouse, "INVERT MOUSE"}, {Kind::Heading, -1, "KEYBOARD"}});
         size_t count = 0;
         const input::Action* actions = input::Actions(&count);

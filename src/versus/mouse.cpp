@@ -61,6 +61,21 @@ constexpr uint32_t kLookGateFlags = 0x34;
 constexpr float kFullStick = 1000.0f;
 // full stick for one second is this many counts
 constexpr float kCountsPerStickSecond = 1500.0f;
+// object +0xC its state frame, frame +0x18 the state, object +0x20 its name (an FName index of FNames.txt)
+constexpr uint32_t kStateFrame = 0x0C, kStateNode = 0x18, kName = 0x20;
+// the player controller's states with the weapon raised, and the draw into them
+constexpr uint32_t kWeaponStates[] = {
+    1612493,  // s_PlayerWalkingSt2H
+    1612491,  // s_PlayerWalkingCr2H
+    1614465,  // s_PlayerWalkingWeapon
+    1612606,  // s_PlayerWalkingMario_T_0HTo2H
+    1612926,  // s_PlayerWalkingWeapon_T_CrToSt
+    1612974,  // s_PlayerWalkingWeapon_T_StToCr
+    1612737,  // VandammeWeapon (split jump, gun out)
+    1614290,  // VandammeWaitForWeapon
+};
+// controller +0x9A8 its EPlayerCam (vtable 0x328868): +0x19B0 yaw speed 40000, +0x19B4 pitch speed 25000 (floats)
+constexpr uint32_t kCamera = 0x9A8, kCameraVtable = 0x328868, kYawSpeed = 0x19B0, kPitchSpeed = 0x19B4;
 // the binoculars slow the look down with the zoom; the mouse gets some of it back
 constexpr float kBinocularSpeed = 1.5f;
 
@@ -70,6 +85,8 @@ float g_dx = 0.0f;
 float g_dy = 0.0f;
 bool g_binoculars = false;
 bool g_reload = false;
+uint32_t g_pitch_camera = 0;  // the camera given the yaw speed to pitch with, and its own pitch speed
+uint32_t g_pitch_speed = 0;
 int g_zoom = 0;  // wheel notches not pressed yet, up positive
 std::chrono::steady_clock::time_point g_zoom_next;
 
@@ -106,11 +123,35 @@ float Rate(float counts, float seconds) {
     return g_binoculars ? rate * kBinocularSpeed : rate;
 }
 
+// the sensitivity of the player's view: the sniper scope, the weapon raised, else free look
+float ViewSensitivity(uint32_t controller) {
+    const app::Settings& s = app::Get();
+    if (g_binoculars) return s.sniper_sensitivity;
+    uint32_t frame = R32(controller + kStateFrame);
+    uint32_t state = frame ? R32(frame + kStateNode) : 0;
+    uint32_t name = state ? R32(state + kName) : 0;
+    bool weapon = std::find(std::begin(kWeaponStates), std::end(kWeaponStates), name) != std::end(kWeaponStates);
+    return weapon ? s.weapon_sensitivity : s.free_look_sensitivity;
+}
+
 // the rate, and the axis it would have come from
 void Look(uint32_t rate, uint32_t axis, uint32_t max, float r, bool invert) {
     float m = std::bit_cast<float>(R32(max));
     WriteFloat(rate, invert ? -r : r);
     WriteFloat(axis, m > 0.0f ? r * m / kFullStick : r);
+}
+
+// The camera pitches by the look rate times its pitch speed, 0.625x its yaw speed, as story's EPlayerCam. While the
+// mouse looks, the camera pitches at the yaw speed too.
+void PitchSpeed(uint32_t controller, bool mouse) {
+    uint32_t cam = controller ? R32(controller + kCamera) : 0;
+    if (cam && R32(cam) != kCameraVtable) cam = 0;
+    if (g_pitch_camera && g_pitch_camera == cam && !mouse) W32(cam + kPitchSpeed, g_pitch_speed);
+    if (!mouse || g_pitch_camera != cam) g_pitch_camera = 0;
+    if (!mouse || !cam || g_pitch_camera) return;
+    g_pitch_camera = cam;
+    g_pitch_speed = R32(cam + kPitchSpeed);
+    W32(cam + kPitchSpeed, R32(cam + kYawSpeed));
 }
 
 // Menus, as in story: the cursor focuses the control under it and selects a list's row, a click presses A or
@@ -530,15 +571,20 @@ X86_FUNC(sub_0003FB80) {
     uint32_t controller = ctx.ecx;
     float seconds = std::bit_cast<float>(R32(ctx.esp + 4));
     __imp__sub_0003FB80(ctx, base);
-    if (controller != g_player || (g_dx == 0.0f && g_dy == 0.0f) || !(seconds > 0.0f) || !Looking(controller))
-        return;
+    if (controller != g_player) return;
+    bool mouse = (g_dx != 0.0f || g_dy != 0.0f) && seconds > 0.0f && Looking(controller);
+    PitchSpeed(controller, mouse);
+    if (!mouse) return;
     // the stick's up is positive, the mouse's is negative
     bool invert = R32(controller + kOptions) & kInvertLook;
-    float turn = Rate(g_dx, seconds);
-    float up = Rate(-g_dy, seconds);
+    float view = ViewSensitivity(controller);
+    float turn = Rate(g_dx, seconds) * view;
+    float up = Rate(-g_dy, seconds) * view;
     if (turn != 0.0f) Look(controller + kTurnRate, controller + kTurn, controller + kTurnMax, turn, false);
     if (up != 0.0f) Look(controller + kLookRate, controller + kLookUp, controller + kLookMax, up, invert);
-    float magnitude = std::min(1.0f, std::sqrt(turn * turn + up * up) / kFullStick);
+    // the binoculars turn by the rates' direction times this magnitude, so it is left above full stick there
+    float magnitude = std::sqrt(turn * turn + up * up) / kFullStick;
+    if (!g_binoculars) magnitude = std::min(1.0f, magnitude);
     WriteFloat(controller + kMagnitude, magnitude);
     WriteFloat(controller + kSmoothMagnitude, magnitude);
 }

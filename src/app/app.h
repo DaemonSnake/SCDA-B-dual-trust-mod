@@ -53,6 +53,10 @@ struct Settings {
     bool async_shaders = true;       // a draw whose pipeline needs compiling is skipped until the build threads have it; scda.toml only
     float mouse_sensitivity = 1.0f;
     bool invert_mouse = false;
+    // versus only, in place of mouse_sensitivity: third person, weapon raised, sniper scope
+    float free_look_sensitivity = 1.0f;
+    float weapon_sensitivity = 1.0f;
+    float sniper_sensitivity = 1.0f;
     bool skip_intros = false;        // logos video and rating screen at boot
     std::string language = "int";    // one of kLanguages
     uint32_t audio_output = 0;       // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono

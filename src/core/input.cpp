@@ -1020,8 +1020,10 @@ bool TakeMouse(float& dx, float& dy) {
     int y = g_dy.exchange(0);
     if ((!x && !y) || !Active() || (Pointing() && !MapDrag())) return false;
     const app::Settings& s = app::Get();
-    dx = float(x) * s.mouse_sensitivity;
-    dy = float(s.invert_mouse ? -y : y) * s.mouse_sensitivity;
+    // versus has a sensitivity per view instead (versus/mouse.cpp)
+    float sensitivity = kVersus ? 1.0f : s.mouse_sensitivity;
+    dx = float(x) * sensitivity;
+    dy = float(s.invert_mouse ? -y : y) * sensitivity;
     return true;
 }
 
