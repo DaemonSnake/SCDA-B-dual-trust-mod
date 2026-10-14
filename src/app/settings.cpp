@@ -96,6 +96,7 @@ void Load() {
     s.weapon_sensitivity = float(t["weapon_sensitivity"].value_or(double(s.weapon_sensitivity)));
     s.sniper_sensitivity = float(t["sniper_sensitivity"].value_or(double(s.sniper_sensitivity)));
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
+    s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     std::string language = t["language"].value_or(s.language);
     if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
@@ -155,6 +156,7 @@ toml::table Table() {
                   {"weapon_sensitivity", double(s.weapon_sensitivity)},
                   {"sniper_sensitivity", double(s.sniper_sensitivity)},
                   {"skip_intros", s.skip_intros},
+                  {"pause_on_focus_loss", s.pause_on_focus_loss},
                   {"language", s.language},
                   {"audio_output", int64_t(s.audio_output)},
                   {"coop_tick_rate", int64_t(s.coop_tick_rate)},

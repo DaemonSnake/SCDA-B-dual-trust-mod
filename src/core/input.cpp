@@ -381,6 +381,22 @@ constexpr Name kNames[] = {
     {VK_OEM_COMMA, "Comma"}, {VK_OEM_PERIOD, "Period"}, {VK_OEM_2, "Slash"},
 };
 
+// US layout scan codes of the keys that move with the layout: a bind names the US key at that position
+struct Position {
+    int vk;
+    UINT scan;
+};
+constexpr Position kPositions[] = {
+    {'1', 0x02}, {'2', 0x03}, {'3', 0x04}, {'4', 0x05}, {'5', 0x06}, {'6', 0x07}, {'7', 0x08}, {'8', 0x09},
+    {'9', 0x0A}, {'0', 0x0B}, {VK_OEM_MINUS, 0x0C}, {VK_OEM_PLUS, 0x0D},
+    {'Q', 0x10}, {'W', 0x11}, {'E', 0x12}, {'R', 0x13}, {'T', 0x14}, {'Y', 0x15}, {'U', 0x16}, {'I', 0x17},
+    {'O', 0x18}, {'P', 0x19}, {VK_OEM_4, 0x1A}, {VK_OEM_6, 0x1B},
+    {'A', 0x1E}, {'S', 0x1F}, {'D', 0x20}, {'F', 0x21}, {'G', 0x22}, {'H', 0x23}, {'J', 0x24}, {'K', 0x25},
+    {'L', 0x26}, {VK_OEM_1, 0x27}, {VK_OEM_7, 0x28}, {VK_OEM_3, 0x29}, {VK_OEM_5, 0x2B},
+    {'Z', 0x2C}, {'X', 0x2D}, {'C', 0x2E}, {'V', 0x2F}, {'B', 0x30}, {'N', 0x31}, {'M', 0x32},
+    {VK_OEM_COMMA, 0x33}, {VK_OEM_PERIOD, 0x34}, {VK_OEM_2, 0x35},
+};
+
 // arrows move at full tilt so menus always see a press, Backspace backs out of a menu but deletes in a name
 constexpr int kArrows[] = {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT};
 
@@ -401,6 +417,48 @@ const char* NameOf(int vk) {
     return nullptr;
 }
 
+UINT ScanOf(int vk) {
+    for (const Position& p : kPositions) {
+        if (p.vk == vk) return p.scan;
+    }
+    return 0;
+}
+
+// the keyboard layout the player types with, switched per window thread
+HKL Layout() { return GetKeyboardLayout(GetWindowThreadProcessId(g_hwnd, nullptr)); }
+
+// the key the current layout has at the bind's position
+int LiveVk(int vk) {
+    UINT scan = ScanOf(vk);
+    if (!scan) return vk;
+    UINT live = MapVirtualKeyExW(scan, MAPVK_VSC_TO_VK_EX, Layout());
+    return live ? int(live) : vk;
+}
+
+// a key the window was sent, as the position bound to it
+int PositionVk(int live) {
+    if (NameOf(live) && !ScanOf(live)) return live;
+    UINT scan = MapVirtualKeyExW(UINT(live), MAPVK_VK_TO_VSC, Layout());
+    for (const Position& p : kPositions) {
+        if (p.scan == scan) return p.vk;
+    }
+    return live;
+}
+
+// the key as the player's keyboard labels it
+std::string Label(int vk) {
+    int live = LiveVk(vk);
+    if (live == vk) return NameOf(vk);
+    bool alnum = (live >= 'A' && live <= 'Z') || (live >= '0' && live <= '9');
+    if (alnum) return std::string(1, char(live));
+    // the top bit flags a dead key
+    UINT c = MapVirtualKeyExW(UINT(live), MAPVK_VK_TO_CHAR, Layout()) & 0x7FFF;
+    // a comma would split the key list
+    if (c == ',') return NameOf(VK_OEM_COMMA);
+    if (c > ' ' && c < 0x7F) return std::string(1, char(c));
+    return NameOf(vk);
+}
+
 std::vector<int> Parse(const std::string& list) {
     std::vector<int> out;
     size_t start = 0;
@@ -413,11 +471,12 @@ std::vector<int> Parse(const std::string& list) {
     return out;
 }
 
-std::string Join(const std::vector<int>& vks) {
+// the saved names, or the player's labels for the menus
+std::string Join(const std::vector<int>& vks, bool labels = false) {
     std::string s;
     for (int vk : vks) {
         if (!s.empty()) s += ',';
-        s += NameOf(vk);
+        s += labels ? Label(vk) : NameOf(vk);
     }
     return s;
 }
@@ -425,7 +484,7 @@ std::string Join(const std::vector<int>& vks) {
 bool Active() { return g_hwnd && GetForegroundWindow() == g_hwnd && !g_blocked; }
 bool Down(int vk) {
     if (vk == kWheelUp || vk == kWheelDown) return NowMs() - g_wheel_ms[vk == kWheelDown] < kWheelTapMs;
-    return GetAsyncKeyState(vk) < 0;
+    return GetAsyncKeyState(LiveVk(vk)) < 0;
 }
 bool HeldKeys(KeyEvent event) {
     std::vector<int> keys;
@@ -437,7 +496,9 @@ bool HeldKeys(KeyEvent event) {
     }
     return std::any_of(keys.begin(), keys.end(), Down);
 }
+// vk as the window sends it, on the player's layout
 bool Bound(KeyEvent event, int vk) {
+    vk = PositionVk(vk);
     std::lock_guard lock(g_bind_lock);
     for (size_t i = 0; i < kCount; i++) {
         if (kActions[i].event != event) continue;
@@ -1217,7 +1278,8 @@ bool AnswerKey(int vk) {
                              (vk >= 0x88 && vk <= 0x9F) || (vk >= 0xC1 && vk <= 0xDA);
     if (media_or_reserved) return false;
     if (ConsoleKey(vk) || Bound(KeyEvent::HideHud, vk) || Bound(KeyEvent::SettingsPanel, vk)) return false;
-    return Down(vk);
+    // vk is the layout's own key here, not a bind position
+    return GetAsyncKeyState(vk) < 0;
 }
 
 // the key (virtual key code) or pad button (0x100 + port * 16 + bit) that went down, 0 for none. Away from the
@@ -1318,7 +1380,7 @@ const Action* Actions(size_t* count) {
 
 std::string Binding(size_t action) {
     std::lock_guard lock(g_bind_lock);
-    return action < kCount ? Join(g_binds[action]) : std::string();
+    return action < kCount ? Join(g_binds[action], true) : std::string();
 }
 
 // the settings panel with no key would leave a keyboard player no way back into it
@@ -1363,6 +1425,7 @@ bool TakeDeletePress() {
 }
 
 bool ConsoleKey(int vk) {
+    vk = PositionVk(vk);
     std::lock_guard lock(g_bind_lock);
     if (kConsoleAction >= kCount) return false;
     const auto& b = g_binds[kConsoleAction];
@@ -1377,7 +1440,7 @@ bool ConsoleChar(unsigned c) {
     if (kConsoleAction >= kCount) return false;
     for (int vk : g_binds[kConsoleAction]) {
         // MapVirtualKey's top bit flags a dead key
-        unsigned k = MapVirtualKeyW(UINT(vk), MAPVK_VK_TO_CHAR) & 0x7FFF;
+        unsigned k = MapVirtualKeyExW(UINT(LiveVk(vk)), MAPVK_VK_TO_CHAR, Layout()) & 0x7FFF;
         if (k && towupper(wint_t(c)) == towupper(wint_t(k))) return true;
     }
     return false;

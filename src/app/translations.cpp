@@ -50,6 +50,7 @@ constexpr Entry kEntries[] = {
     {"SHADOW DISTANCE", {u"Distance des ombres", u"Schattendistanz", u"Distanza delle ombre", u"Distancia de sombras"}},
     {"SHADOW FILTER", {u"Filtre des ombres", u"Schattenfilter", u"Filtro delle ombre", u"Filtro de sombras"}},
     {"SKIP INTROS", {u"Passer les intros", u"Intros überspringen", u"Salta introduzione", u"Saltar introducción"}},
+    {"PAUSE ON FOCUS LOSS", {u"Pause en arrière-plan", u"Pause im Hintergrund", u"Pausa in background", u"Pausa en segundo plano"}},
     {"LANGUAGE", {u"Langue", u"Sprache", u"Lingua", u"Idioma"}},
     {"AUDIO OUTPUT", {u"Sortie audio", u"Audioausgabe", u"Uscita audio", u"Salida de audio"}},
     {"COOP TICK RATE", {u"Fréquence de mise à jour co-op", u"Koop-Tickrate", u"Frequenza di aggiornamento cooperativa", u"Tasa de actualización coop."}},

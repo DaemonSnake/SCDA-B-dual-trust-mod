@@ -124,6 +124,7 @@ uint32_t Clicks();
 bool Pressing();
 
 // actions the keyboard and mouse can be bound to, key names comma separated
+// letter, digit and symbol keys bind by position as the US key there; Binding shows the player's labels
 struct Action {
     const char* id;
     const char* label;

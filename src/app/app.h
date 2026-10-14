@@ -58,6 +58,7 @@ struct Settings {
     float weapon_sensitivity = 1.0f;
     float sniper_sensitivity = 1.0f;
     bool skip_intros = false;        // logos video and rating screen at boot
+    bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
     std::string language = "int";    // one of kLanguages
     uint32_t audio_output = 0;       // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
@@ -175,5 +176,7 @@ void DrawConsole();
 
 // sleeps out the rest of the frame for the fps cap
 void Pace();
+// pause on focus loss (focus_pause.cpp): any thread that swaps, before the present
+void WaitWhileUnfocused();
 
 }  // namespace app
