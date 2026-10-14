@@ -54,6 +54,8 @@ struct Quad {
     uint32_t util;
     float corners[12];
     uint32_t args[12];
+    std::vector<uint32_t> path;  // the instances it was drawn inside, below the captured one
+    Mode mode = Mode::Centre;
 };
 
 bool g_hud = false;      // a HUD page is being drawn
@@ -64,6 +66,7 @@ bool g_projected = false;  // Enhanced Reality icons are being drawn
 bool g_picture = false;    // the loading page is being drawn: as the game draws it, shown 4:3
 Mode g_mode = Mode::Centre;
 std::vector<Quad> g_quads;
+std::vector<uint32_t> g_path;
 // the side each HUD instance was placed on: one reaching past the middle for a while (the weapon box showing a
 // picked up gadget) keeps it instead of going back to its 4:3 place
 std::unordered_map<uint32_t, Mode> g_sides;
@@ -157,6 +160,44 @@ Mode SideOf(float lo, float hi, float w) {
     return Mode::Centre;
 }
 
+// An instance on one side of the screen goes there whole. One across it (a page's frame with a letterbox inside) is
+// split into the instances drawn inside it, each placed by where it sits; its own quads go together.
+void Assign(const std::vector<Quad*>& group, size_t depth, uint32_t id, float w) {
+    float lo = w;
+    float hi = 0.0f;
+    for (const Quad* q : group) {
+        for (int i = 0; i < 12; i += 3) {
+            lo = std::min(lo, q->corners[i]);
+            hi = std::max(hi, q->corners[i]);
+        }
+    }
+    Mode mode = SideOf(lo, hi, w);
+    // inside a screen-wide instance, a piece about the middle stays centred (the respawn countdown's digit)
+    if (depth > 0 && mode != Mode::Stretch && std::fabs((lo + hi) / 2 - w / 2) < w / 6) mode = Mode::Centre;
+    else if (mode == Mode::Left || mode == Mode::Right) g_sides[id] = mode;
+    else if (auto side = g_sides.find(id); mode == Mode::Centre && side != g_sides.end()) mode = side->second;
+    if (mode == Mode::Stretch) {
+        std::vector<std::pair<uint32_t, std::vector<Quad*>>> inner;
+        std::vector<Quad*> own;
+        for (Quad* q : group) {
+            if (q->path.size() <= depth) {
+                own.push_back(q);
+                continue;
+            }
+            uint32_t child = q->path[depth];
+            auto it = std::find_if(inner.begin(), inner.end(), [&](const auto& c) { return c.first == child; });
+            if (it == inner.end()) inner.push_back({child, {q}});
+            else it->second.push_back(q);
+        }
+        if (!inner.empty()) {
+            for (auto& [child, quads] : inner) Assign(quads, depth + 1, child, w);
+            if (!own.empty()) Assign(own, depth, id, w);
+            return;
+        }
+    }
+    for (Quad* q : group) q->mode = mode;
+}
+
 }  // namespace
 
 // FPerspectiveMatrix(fov x, fov y, x scale, y scale, near, far), thiscall ret 0x18: M[0][0] = x scale / tan(fov x).
@@ -207,8 +248,14 @@ X86_FUNC(sub_0025A3F0) {
 // half of the screen it covers and replayed; children come back through here inside their parent's list.
 X86_EXTERN_FUNC(__imp__sub_002620A0);
 X86_FUNC(sub_002620A0) {
-    if (!g_hud || g_capture || !app::Widescreen()) return __imp__sub_002620A0(ctx, base);
+    if (!g_hud || !app::Widescreen()) return __imp__sub_002620A0(ctx, base);
     uint32_t id = R32(ctx.ecx + kInstanceId);
+    if (g_capture) {
+        g_path.push_back(id);
+        __imp__sub_002620A0(ctx, base);
+        g_path.pop_back();
+        return;
+    }
     g_capture = true;
     __imp__sub_002620A0(ctx, base);
     g_capture = false;
@@ -225,15 +272,16 @@ X86_FUNC(sub_002620A0) {
         }
     }
     Mode mode = SideOf(lo, hi, w);
-    if (mode == Mode::Left || mode == Mode::Right) g_sides[id] = mode;
-    else if (auto side = g_sides.find(id); mode == Mode::Centre && side != g_sides.end()) mode = side->second;
+    std::vector<Quad*> group;
+    for (auto& q : quads) group.push_back(&q);
+    Assign(group, 0, id, w);
     LOG_FIRST(100, "versus widescreen: instance %08X x %.0f..%.0f mode %d", id, lo, hi, int(mode));
     uint32_t esp = ctx.esp;
     uint32_t corners = (esp - 0x40) & ~0xFu;
     ctx.esp = corners;
     g_replay = true;
-    g_mode = mode;
     for (auto& q : quads) {
+        g_mode = q.mode;
         std::memcpy(&G<float>(corners), q.corners, sizeof q.corners);
         ctx.ecx = q.util;
         const uint32_t* a = q.args;
@@ -275,6 +323,7 @@ X86_FUNC(sub_001231E0) {
     std::memcpy(c, &G<float>(corners), sizeof c);
     if (g_capture) {
         Quad q{ctx.ecx};
+        q.path = g_path;
         std::memcpy(q.corners, c, sizeof c);
         for (int i = 0; i < 12; i++) q.args[i] = R32(ctx.esp + 8 + i * 4);
         g_quads.push_back(q);
