@@ -48,6 +48,7 @@ const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1
 constexpr uint32_t kShadowSizes[] = {0, 512, 1024, 2048, 4096, 8192};
 constexpr uint32_t kShadowDistances[] = {1, 2, 4, 8};
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCapRefresh, 0};
+constexpr uint32_t kVersusFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, kVersusMaxFps, kFpsCapRefresh};
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
@@ -298,7 +299,8 @@ enum RowId {
     kShaderModel, kHdr, kToneMapping, kSkipIntros, kTickRate, kInputDelay, kJoinIp, kMicrophone,
     kPushToTalk, kSensitivity, kInvertMouse,
     kPlayer1, kPlayer2, kShadowDistance, kMsaa, kFov, kAmbientOcclusion, kSmaa, kLanguage, kMonitor,
-    kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast
+    kAudioOutput, kHdrOutput, kShadowFilter, kBrightness, kContrast, kFreeLookSensitivity, kWeaponSensitivity,
+    kSniperSensitivity
 };
 
 using rows::Kind;
@@ -310,7 +312,7 @@ constexpr bool kVersus = std::string_view(IMAGE_XBE) == "sc4_adv.xbe";
 bool VersusHides(int id) {
     if (!kVersus) return false;
     return id == kShaderModel || id == kHdr || id == kToneMapping || id == kAmbientOcclusion ||
-           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kShadowFilter || id == kMaxFps ||
+           id == kMsaa || id == kShadowResolution || id == kShadowDistance || id == kShadowFilter ||
            id == kTickRate || id == kInputDelay;
 }
 
@@ -354,10 +356,12 @@ constexpr Row kSettingsRows[] = {
 
 const std::vector<Row>& InputRows() {
     static const std::vector<Row> list = [] {
-        std::vector<Row> out = {{Kind::Heading, -1, "MOUSE"},
-                                {Kind::Value, kSensitivity, "MOUSE SENSITIVITY"},
-                                {Kind::Value, kInvertMouse, "INVERT MOUSE"},
-                                {Kind::Heading, -1, "KEYBOARD"}};
+        std::vector<Row> out = {{Kind::Heading, -1, "MOUSE"}, {Kind::Value, kSensitivity, "MOUSE SENSITIVITY"}};
+        if (kVersus)
+            out.insert(out.end(), {{Kind::Value, kFreeLookSensitivity, "FREE LOOK SENSITIVITY"},
+                                   {Kind::Value, kWeaponSensitivity, "WEAPON SENSITIVITY"},
+                                   {Kind::Value, kSniperSensitivity, "SNIPER SENSITIVITY"}});
+        out.insert(out.end(), {{Kind::Value, kInvertMouse, "INVERT MOUSE"}, {Kind::Heading, -1, "KEYBOARD"}});
         size_t count = 0;
         const input::Action* actions = input::Actions(&count);
         for (size_t i = 0; i < count; i++) out.push_back({Kind::Bind, int(i), actions[i].label});
@@ -497,7 +501,15 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
             return true;
         }
         case kMaxFps: {
-            uint32_t cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
+            uint32_t cap;
+            if (kVersus) {
+                // scda.toml is shared with story: its UNLIMITED or a cap over versus's top shows as that top
+                uint32_t v = s.fps_cap && s.fps_cap <= kVersusMaxFps ? s.fps_cap : kVersusMaxFps;
+                cap = kVersusFpsCaps[StepTable(kVersusFpsCaps, v, step)];
+                if (step) s.fps_cap = v;
+            } else {
+                cap = kFpsCaps[StepTable(kFpsCaps, s.fps_cap, step)];
+            }
             if (cap == kFpsCapRefresh) std::snprintf(text, sizeof(text), "REFRESH RATE");
             else if (cap) std::snprintf(text, sizeof(text), "%u", cap);
             else std::snprintf(text, sizeof(text), "UNLIMITED");
@@ -580,13 +592,18 @@ void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
             break;
         }
         case kSensitivity:
+        case kFreeLookSensitivity:
+        case kWeaponSensitivity:
+        case kSniperSensitivity: {
+            float& v = id == kSensitivity          ? s.mouse_sensitivity
+                       : id == kFreeLookSensitivity ? s.free_look_sensitivity
+                       : id == kWeaponSensitivity   ? s.weapon_sensitivity
+                                                    : s.sniper_sensitivity;
             // 0.1 to 5.0 in steps of 0.1
-            if (step) {
-                int tenths = StepRange(int(std::lround(s.mouse_sensitivity * 10.0f)), 1, 50, 1, step);
-                s.mouse_sensitivity = float(tenths) / 10.0f;
-            }
-            std::snprintf(text, sizeof(text), "%.1f", s.mouse_sensitivity);
+            if (step) v = float(StepRange(int(std::lround(v * 10.0f)), 1, 50, 1, step)) / 10.0f;
+            std::snprintf(text, sizeof(text), "%.1f", v);
             break;
+        }
     }
 }
 
@@ -628,6 +645,7 @@ void RestoreDefaults(int page) {
     if (page == kKeyboardPage) {
         Settings& s = Get();
         s.mouse_sensitivity = Settings{}.mouse_sensitivity;
+        s.free_look_sensitivity = s.weapon_sensitivity = s.sniper_sensitivity = 1.0f;
         s.invert_mouse = false;
         input::ResetBindings();
         return;
@@ -635,6 +653,9 @@ void RestoreDefaults(int page) {
     Settings keep = Get();
     Get() = Settings{};
     Get().mouse_sensitivity = keep.mouse_sensitivity;
+    Get().free_look_sensitivity = keep.free_look_sensitivity;
+    Get().weapon_sensitivity = keep.weapon_sensitivity;
+    Get().sniper_sensitivity = keep.sniper_sensitivity;
     Get().invert_mouse = keep.invert_mouse;
     Get().keys = keep.keys;
     Get().pad_buttons = keep.pad_buttons;

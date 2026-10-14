@@ -13,6 +13,7 @@
 #include <chrono>
 #include <csignal>
 #include <cwchar>
+#include <string_view>
 #include <thread>
 
 #include <imgui.h>
@@ -275,6 +276,7 @@ void Pace() {
     // refresh
     constexpr uint32_t kRefreshMargin = 3;
     if (cap == kFpsCapRefresh) cap = RefreshRate() > kRefreshMargin ? RefreshRate() - kRefreshMargin : 0;
+    if (std::string_view(IMAGE_XBE) == "sc4_adv.xbe" && (!cap || cap > kVersusMaxFps)) cap = kVersusMaxFps;
     auto now = clock::now();
     if (!cap) {
         next = now;
