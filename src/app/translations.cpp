@@ -42,6 +42,8 @@ constexpr Entry kEntries[] = {
     {"FPS COUNTER", {u"Compteur d'images par seconde", u"FPS-Anzeige", u"Contatore FPS", u"Contador de FPS"}},
     {"SHADER MODEL", {u"Modèle de shader", u"Shader Model", u"Modello di shader", u"Modelo de shader"}},
     {"HDR RENDERING", {u"Rendu HDR", u"HDR-Rendering", u"Rendering HDR", u"Renderizado HDR"}},
+    {"FMV SCALE", {u"Échelle des cinématiques", u"Videoskalierung", u"Scala dei filmati", u"Escala de vídeos"}},
+    {"FILL", {u"Remplir", u"Füllen", u"Riempi", u"Rellenar"}},
     {"HDR OUTPUT", {u"Sortie HDR", u"HDR-Ausgabe", u"Uscita HDR", u"Salida HDR"}},
     {"TONE MAPPING", {u"Assignation des teintes", u"Tone Mapping", u"Tone mapping", u"Mapeado por tonos"}},
     {"AMBIENT OCCLUSION", {u"Occlusion ambiante", u"Ambient Occlusion", u"Occlusione ambientale", u"Oclusión ambiental"}},

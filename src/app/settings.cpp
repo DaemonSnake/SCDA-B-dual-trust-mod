@@ -73,6 +73,7 @@ void Load() {
     s.brightness = std::min(t["brightness"].value_or(s.brightness), 100u);
     s.contrast = std::min(t["contrast"].value_or(s.contrast), 100u);
     s.fps_counter = t["fps_counter"].value_or(s.fps_counter);
+    s.fmv_scale = std::min(t["fmv_scale"].value_or(s.fmv_scale), 1u);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
@@ -137,6 +138,7 @@ toml::table Table() {
                   {"brightness", int64_t(s.brightness)},
                   {"contrast", int64_t(s.contrast)},
                   {"fps_counter", s.fps_counter},
+                  {"fmv_scale", int64_t(s.fmv_scale)},
                   {"vsync", s.vsync},
                   {"hdr_output", s.hdr_output},
                   {"anisotropic_filtering", int64_t(s.aniso)},
