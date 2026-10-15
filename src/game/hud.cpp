@@ -482,12 +482,21 @@ bool g_fade = false;     // ShowScreen fades between a 4:3 frame and a full widt
 bool g_new_43 = false;   // the frame it fades to is 4:3
 bool g_old_43 = false;   // the frame it fades from is 4:3, until the fade draws over its memory
 
-// a full screen movie is fitted for a 16:9 frame (pixel aspect 4/3) about the centre: redone for the frame's shape
+// the menu's 4:3 background movie is fitted to the whole viewport, so shown stretched: no wider than 16:9
+void StretchNoWider(float& x0, float& x1, float w) {
+    float shown = std::min(1.0f, 16.0f / 9.0f / app::Aspect());
+    x0 = w * (1 - shown) / 2;
+    x1 = w - x0;
+}
+
+// a full screen movie is fitted for a 16:9 frame (pixel aspect 4/3) about the centre: redone for the frame's shape,
+// or for a 4:3 frame in the middle when FMV SCALE is 4:3
 bool Refit(float& x0, float& y0, float& x1, float& y1, float mw, float mh) {
     float w = x0 + x1, h = y0 + y1, dw = x1 - x0, dh = y1 - y0;
     if (std::min(x0, y0) != 0 || dw <= 0 || dh <= 0 || std::fabs(mw * dh / (mh * dw) - 4.0f / 3.0f) > 0.02f) return false;
     float fit = mw / mh * app::Narrow() * h;
-    dw = std::min(w, fit);
+    float frame = app::Get().fmv_scale == 0 ? w : w * app::Narrow();
+    dw = std::min(frame, fit);
     dh = dw / fit * h;
     x0 = (w - dw) / 2, x1 = w - x0, y0 = (h - dh) / 2, y1 = h - y0;
     return true;
@@ -537,9 +546,10 @@ bool HideAllButInteractions(uint32_t page, uint32_t (&hidden)[64], size_t& n) {
 // Render interface screen quad setup (sub_002E3011, thiscall(ri, x0, y0, x1, y1, u0, v0, u1, v1), ret 0x24): corners
 // in viewport pixels (ri +0x4B84 width), turned into clip space for a textured quad, which the canvas flush never
 // sees. Bink movies inside a Magma placeholder (training videos, PH_Video) come through it and are narrowed into the
-// centred 4:3 like the page around it. A quad the full viewport wide (full screen movies, post effects) is left as
-// it is, and so is the loading bar over a loading picture, which is pillarboxed with the frame. The ESRB notice keeps
-// its 4:3 proportions: the spare width more on each side (clamped, so the edge columns reach the screen sides).
+// centred 4:3 like the page around it. A quad the full viewport wide (post effects) is left as it is, and so is the
+// loading bar over a loading picture, which is pillarboxed with the frame; a full width movie is shown no wider
+// than 16:9. The ESRB notice keeps its 4:3 proportions: the spare width more on each side (clamped, so the edge
+// columns reach the screen sides).
 // The movie fits read ri +0x4D04, widescreen, set once at boot: kept to the output here.
 X86_EXTERN_FUNC(__imp__sub_002E3011);
 X86_FUNC(sub_002E3011) {
@@ -557,6 +567,10 @@ X86_FUNC(sub_002E3011) {
             u1 += d;
         } else if (game::loading::g_movie && !u0 && !GF(ctx.esp + 0x1C) &&
                    Refit(x0, G<float>(ctx.esp + 0xC), x1, G<float>(ctx.esp + 0x14), u1 + 1, GF(ctx.esp + 0x24) + 1)) {
+            // the movie is drawn first; the fullscreen player never clears, so its bars kept older frames
+            CallGuest(ctx, SYM(D3DDevice_Clear), {0, 0, gpu::kClearTarget, 0, 0, 0});
+        } else if (game::loading::g_movie && !x0 && std::fabs(x1 - w) < kSlack) {
+            StretchNoWider(x0, x1, w);
         } else if (!g_loading && w > 0 && (std::min(x0, x1) > kSlack || std::max(x0, x1) < w - kSlack)) {
             x0 = x0 * k + kCentre * (1 - k) * w;
             x1 = x1 * k + kCentre * (1 - k) * w;

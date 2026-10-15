@@ -38,6 +38,7 @@ struct Settings {
     uint32_t brightness = 50;        // 0 to 100 as SCCT PC's sliders, 50 each leaves the picture alone
     uint32_t contrast = 50;
     bool fps_counter = false;
+    uint32_t fmv_scale = 0;          // full screen movies on a wider screen: 0 fill it, 1 in a 4:3 frame
     bool vsync = true;
     bool hdr_output = true;          // HDR10 on a display with Windows HDR on
     uint32_t aniso = 0;              // 0 as the game asks
