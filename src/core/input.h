@@ -87,6 +87,8 @@ enum class KeyEvent {
 // sidekick key holds the black button (co-op action) and whistle is off.
 void SetNetSession(bool net);
 bool NetSession();
+// the training video page: its prompts wait for pad actions by name
+void SetTrainingVideo(bool on);
 // aiming with nothing to interact with, where the pad's A reloads: the keyboard's interact key leaves A alone, the
 // reload key reloads (in a synced session it holds A, as the pad would)
 void SetInteractReloads(bool on);

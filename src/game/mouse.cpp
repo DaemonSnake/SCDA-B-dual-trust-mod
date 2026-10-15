@@ -73,6 +73,7 @@ constexpr uint32_t kQuickInventory = game::magma::Id("P_QuickInventory_New");
 // the message box, among others "Controller Disconnected ... press START": up while a player has lost its port,
 // which only a Start press on a free port claims back, and "choose another controller" when split screen starts
 constexpr uint32_t kMsgBox = game::magma::Id("P_MsgBox");
+constexpr uint32_t kVideoData = game::magma::Id("P_VideoData");
 // first viewport: +0x1EC player 1's port, +0x1F0 player 2's, -1 for none; any viewport: +0x1F4 the port it reads;
 // client +0x34 viewport count
 constexpr uint32_t kPlayer1Port = 0x1EC, kPlayer2Port = 0x1F0, kReadPort = 0x1F4, kViewportCount = 0x34;
@@ -345,6 +346,7 @@ X86_FUNC(sub_0004B525) {
     input::SetMap(page == kMap);
     input::SetOpsat(page && (std::ranges::find(kOpsatPages, page) != std::end(kOpsatPages) || page == kComputer ||
                              page == kHacking));
+    input::SetTrainingVideo(page == kVideoData);
     game::UpdateView(viewport);
     game::MenuTick(ctx);
     game::PromptsTick(ctx);

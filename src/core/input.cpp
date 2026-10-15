@@ -174,6 +174,7 @@ std::atomic<bool> g_targeting{false};
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
 
 std::atomic<bool> g_net{false};
+std::atomic<bool> g_video{false};  // SetTrainingVideo
 std::atomic<bool> g_interact_reloads{false};
 std::atomic<bool> g_carrying{false};
 std::atomic<bool> g_hanging{false};
@@ -564,6 +565,12 @@ bool ActionHeld(size_t i, const std::vector<int>& vks, bool no_mouse, bool menu)
 void ApplyEventKey(size_t i, Pad& p) {
     if (int zoom = ZoomOf(i)) {
         if (!g_down_as[i]) Notch(zoom);
+        g_down_as[i] = 1;
+        return;
+    }
+    KeyEvent e = kActions[i].event;
+    if (g_video && (e == KeyEvent::SidekickCommand || e == KeyEvent::Whistle)) {
+        p.analog[kBlack] = 0xFF;
         g_down_as[i] = 1;
         return;
     }
@@ -1201,6 +1208,10 @@ bool NetSession() { return g_net; }
 
 void SetNetSession(bool net) {
     if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
+}
+
+void SetTrainingVideo(bool on) {
+    g_video = on;
 }
 
 void SetInteractReloads(bool on) {
