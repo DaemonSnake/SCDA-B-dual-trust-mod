@@ -5,6 +5,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct X86Context;
@@ -12,7 +13,7 @@ struct X86Context;
 // the host side: window, settings, options menu
 namespace app {
 
-inline constexpr int kVersion = 1;  // release number, the GitHub release tag is V<number>
+inline constexpr int kVersion = 2;  // release number, the GitHub release tag is V<number>
 inline constexpr uint32_t kFpsCapRefresh = 1;  // fps_cap: just under the monitor's refresh rate
 // versus tops out here whatever fps_cap says, as SCCT PC versus, so a player's net traffic stays bounded
 inline constexpr uint32_t kVersusMaxFps = 240;
@@ -142,8 +143,10 @@ inline std::atomic<bool> g_hdr_display{false};
 inline std::atomic<float> g_fps{0};
 // the frame rate in the game's font, from the image's Magma frame hook
 void DrawFps(X86Context& ctx);
-// "XBE Recomp V1" bottom right, from the game mode page draw
+// "XBE Recomp V<kVersion>" bottom right, from the game mode page draw
 void DrawWatermark(X86Context& ctx);
+// a line of text in the game's font at a page position (left, top, line height), colour 0xAARRGGBB
+void DrawPageText(X86Context& ctx, std::u16string_view text, int x, int top, int height, uint32_t colour);
 // the hide HUD key: the HUD layer's Magma pages are not drawn in a level
 inline std::atomic<bool> g_hide_hud{false};
 
