@@ -14,6 +14,8 @@ struct Pad {
 };
 
 void Init(void* hwnd);
+void StartControllers();  // Init starts them too; the game code window reads them before it
+uint16_t HeldOnAnyController();  // XINPUT_GAMEPAD masks of every controller, binds left out
 // Ports 0 and 1 have what F10 > PLAYER 1 / PLAYER 2 plugs in; 2 and 3 are empty. The keyboard and mouse buttons
 // merge into the pad of the port they share, which is connected as long as the keyboard is on it.
 Pad Poll(int port);

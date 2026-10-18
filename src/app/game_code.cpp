@@ -9,6 +9,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <xinput.h>
 
 #include <algorithm>
 #include <atomic>
@@ -20,6 +21,7 @@
 #include <toml++/toml.hpp>
 
 #include "app/app.h"
+#include "core/input.h"
 #include "core/log.h"
 #include "image_symbols.h"
 #include "kernel/disc.h"
@@ -79,6 +81,8 @@ Progress g_progress;
 std::wstring g_failure;  // the step that failed, written by the build thread before it ends
 HWND g_window = nullptr;
 bool g_start = false;  // the player picked Start once the game was ready
+bool g_delete_compiler = false;  // ticked on the ready page
+uint64_t g_compiler_bytes = 0;
 constexpr UINT kBuildDone = WM_APP + 1;
 
 int64_t NowMs() {
@@ -465,6 +469,7 @@ struct Layout {
     RECT bottom;
     RECT start;
     RECT exit;
+    RECT delete_toggle;
 };
 
 Layout Arrange(const RECT& client, int unit) {
@@ -476,7 +481,25 @@ Layout Arrange(const RECT& client, int unit) {
     l.bottom = {l.bar.left, l.bar.bottom + unit / 2, l.bar.right, l.bar.bottom + unit / 2 + unit * 2};
     l.exit = {l.bottom.right - unit * 8, l.bottom.top, l.bottom.right, l.bottom.bottom};
     l.start = {l.exit.left - unit * 9, l.bottom.top, l.exit.left - unit, l.bottom.bottom};
+    l.delete_toggle = {l.bottom.left, l.bottom.top, l.start.left - unit, l.bottom.bottom};
     return l;
+}
+
+// the ready page's buttons, with the controller button that presses each
+void PaintChoices(HDC dc, const Layout& l, int unit) {
+    FillBox(dc, l.start, kBarFull);
+    DrawLine(dc, l.start, L"Start (A)", kBackground, DT_CENTER);
+    FillBox(dc, l.exit, kBarEmpty);
+    DrawLine(dc, l.exit, L"Exit (B)", kText, DT_CENTER);
+    int middle = (l.delete_toggle.top + l.delete_toggle.bottom) / 2;
+    RECT box{l.delete_toggle.left, middle - unit / 2, l.delete_toggle.left + unit, middle + unit / 2};
+    FillBox(dc, box, kBarEmpty);
+    if (g_delete_compiler) InflateRect(&box, -unit / 4, -unit / 4);
+    if (g_delete_compiler) FillBox(dc, box, kBarFull);
+    RECT label = l.delete_toggle;
+    label.left += unit * 3 / 2;
+    std::wstring megabytes = std::to_wstring(g_compiler_bytes >> 20);
+    DrawLine(dc, label, L"Delete the compiler files, " + megabytes + L" MB (X)", kText, DT_LEFT);
 }
 
 void Paint(HDC dc, const RECT& client, int unit) {
@@ -492,10 +515,7 @@ void Paint(HDC dc, const RECT& client, int unit) {
     filled.right = l.bar.left + LONG(float(l.bar.right - l.bar.left) * Fraction());
     FillBox(dc, filled, kBarFull);
     if (ready) {
-        FillBox(dc, l.start, kBarFull);
-        DrawLine(dc, l.start, L"Start", kBackground, DT_CENTER);
-        FillBox(dc, l.exit, kBarEmpty);
-        DrawLine(dc, l.exit, L"Exit", kText, DT_CENTER);
+        PaintChoices(dc, l, unit);
         return;
     }
     DrawLine(dc, l.bottom, std::to_wstring(int(Fraction() * 100.0f)) + L"%", kDim, DT_LEFT);
@@ -523,13 +543,31 @@ void PaintWindow(HWND hwnd) {
     EndPaint(hwnd, &ps);
 }
 
+// what the compiler folder holds, shown beside the delete box
+uint64_t CompilerBytes() {
+    uint64_t bytes = 0;
+    std::error_code ec;
+    for (auto& e : fs::recursive_directory_iterator(CompilerDir(), ec))
+        if (e.is_regular_file(ec)) bytes += e.file_size(ec);
+    return bytes;
+}
+
+// the game runs from the DLLs alone; a later release brings the compiler again
+void DeleteCompiler() {
+    std::error_code ec;
+    fs::remove_all(CompilerDir(), ec);
+    if (ec) LOGE("Game code: deleting the compiler folder failed: %s", ec.message().c_str());
+    else LOGR("Game code: compiler folder deleted");
+}
+
 void CloseWindowWith(HWND hwnd, bool start) {
     g_start = start;
+    if (g_progress.stage == Stage::Ready && g_delete_compiler) DeleteCompiler();
     DeleteObject(reinterpret_cast<HFONT>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)));
     DestroyWindow(hwnd);
 }
 
-// once ready: Start or Enter starts the game, Exit, Escape or the close button leaves
+// once ready: Start or Enter starts the game, Exit, Escape or the close button leaves, Space ticks the delete box
 void OnClick(HWND hwnd, LPARAM lp) {
     if (g_progress.stage != Stage::Ready) return;
     RECT client;
@@ -538,6 +576,19 @@ void OnClick(HWND hwnd, LPARAM lp) {
     POINT at{short(LOWORD(lp)), short(HIWORD(lp))};
     if (PtInRect(&l.start, at)) CloseWindowWith(hwnd, true);
     else if (PtInRect(&l.exit, at)) CloseWindowWith(hwnd, false);
+    else if (PtInRect(&l.delete_toggle, at)) g_delete_compiler = !g_delete_compiler;
+}
+
+// a controller's A starts, B leaves and X ticks the delete box, once ready; on the press, not the hold
+void PollController(HWND hwnd) {
+    static uint16_t held = 0;
+    uint16_t now = input::HeldOnAnyController();
+    uint16_t pressed = now & ~held;
+    held = now;
+    if (g_progress.stage != Stage::Ready) return;
+    if (pressed & XINPUT_GAMEPAD_X) g_delete_compiler = !g_delete_compiler;
+    if (pressed & XINPUT_GAMEPAD_A) CloseWindowWith(hwnd, true);
+    else if (pressed & XINPUT_GAMEPAD_B) CloseWindowWith(hwnd, false);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -550,12 +601,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 1;
         case WM_TIMER:
             InvalidateRect(hwnd, nullptr, FALSE);
+            PollController(hwnd);
             return 0;
         case WM_LBUTTONUP:
             OnClick(hwnd, lp);
             return 0;
         case WM_KEYDOWN:
+            if (ready && wp == VK_SPACE) g_delete_compiler = !g_delete_compiler;
             if (ready && (wp == VK_RETURN || wp == VK_ESCAPE)) CloseWindowWith(hwnd, wp == VK_RETURN);
+            InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         case WM_CLOSE: {
             if (ready) {
@@ -567,8 +621,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case kBuildDone:
-            if (!wp) CloseWindowWith(hwnd, false);  // failed or stopped; ready stays up for the player's pick
-            else FlashWindow(hwnd, TRUE);
+            if (!wp) {
+                CloseWindowWith(hwnd, false);  // failed or stopped; ready stays up for the player's pick
+                return 0;
+            }
+            g_compiler_bytes = CompilerBytes();
+            FlashWindow(hwnd, TRUE);
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -596,7 +654,7 @@ HWND OpenWindow() {
     NONCLIENTMETRICSW metrics{sizeof(metrics)};
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0, dpi);
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, LONG_PTR(CreateFontIndirectW(&metrics.lfMessageFont)));
-    SetTimer(hwnd, 1, 250, nullptr);
+    SetTimer(hwnd, 1, 50, nullptr);  // the controller is read with each repaint
     ShowWindow(hwnd, SW_SHOW);
     return hwnd;
 }
@@ -632,6 +690,7 @@ bool BuildWithWindow(std::vector<Target>& targets) {
         return false;
     }
     SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);  // no sleep while it works
+    input::StartControllers();
     g_window = OpenWindow();
     bool ok = false;
     std::thread worker([&] {

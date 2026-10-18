@@ -838,6 +838,7 @@ void UpdatePads() {
 }
 
 void StartPads() {
+    if (g_sdl) return;  // started already for the game code window
     // WGI reads the triggers apart and HIDAPI takes PlayStation and Switch pads. Reads come from the guest's threads,
     // so SDL's own thread takes the device notices.
     SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");
@@ -1026,6 +1027,17 @@ void SetBlocked(bool b) {
         for (auto& settle : g_pad_settle) settle = true;
     }
     if (b) ReleaseCursor();
+}
+
+void StartControllers() { StartPads(); }
+
+uint16_t HeldOnAnyController() {
+    uint16_t held = 0;
+    for (int slot = 0; slot < 4; slot++) {
+        XINPUT_GAMEPAD g;
+        if (ReadPad(slot, g)) held |= g.wButtons;
+    }
+    return held;
 }
 
 void Init(void* hwnd) {
