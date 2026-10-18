@@ -61,7 +61,7 @@ constexpr COLORREF kDim = RGB(145, 153, 138);
 constexpr COLORREF kBarEmpty = RGB(28, 33, 26);
 constexpr COLORREF kBarFull = RGB(145, 158, 130);
 
-enum class Stage { Translating, Compiling, Linking };
+enum class Stage { Translating, Compiling, Linking, Ready };
 
 // written by the build thread, read by the window
 struct Progress {
@@ -78,6 +78,7 @@ struct Progress {
 Progress g_progress;
 std::wstring g_failure;  // the step that failed, written by the build thread before it ends
 HWND g_window = nullptr;
+bool g_start = false;  // the player picked Start once the game was ready
 constexpr UINT kBuildDone = WM_APP + 1;
 
 int64_t NowMs() {
@@ -415,8 +416,10 @@ std::wstring StageText() {
             return L"Compiling the game's code, file " +
                    std::to_wstring(std::min(g_progress.files_done + 1, g_progress.files_total.load())) + L" of " +
                    std::to_wstring(g_progress.files_total);
-        default:
+        case Stage::Linking:
             return L"Linking the game's code";
+        default:
+            return L"Start the game now?";
     }
 }
 
@@ -448,31 +451,58 @@ void DrawLine(HDC dc, RECT row, const std::wstring& text, COLORREF color, UINT a
     DrawTextW(dc, text.c_str(), int(text.size()), &row, align | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
 }
 
-// a heading, the stage, the bar, then the percentage and the time left under it
-void Paint(HDC dc, const RECT& client, int unit) {
-    HBRUSH background = CreateSolidBrush(kBackground);
-    FillRect(dc, &client, background);
-    DeleteObject(background);
-    SetBkMode(dc, TRANSPARENT);
-    RECT row{client.left + unit, client.top + unit, client.right - unit, client.top + unit * 3};
-    DrawLine(dc, row, L"Preparing the game for this PC. This only happens once.", kText, DT_LEFT);
-    OffsetRect(&row, 0, unit * 2);
-    DrawLine(dc, row, StageText(), kDim, DT_LEFT);
-
-    RECT bar{row.left, row.bottom + unit / 2, row.right, row.bottom + unit / 2 + unit};
-    HBRUSH empty = CreateSolidBrush(kBarEmpty);
-    FillRect(dc, &bar, empty);
-    DeleteObject(empty);
-    RECT filled = bar;
-    filled.right = bar.left + LONG(float(bar.right - bar.left) * Fraction());
-    HBRUSH full = CreateSolidBrush(kBarFull);
-    FillRect(dc, &filled, full);
-    DeleteObject(full);
-
-    row = {bar.left, bar.bottom + unit / 2, bar.right, bar.bottom + unit / 2 + unit * 2};
-    DrawLine(dc, row, std::to_wstring(int(Fraction() * 100.0f)) + L"%", kDim, DT_LEFT);
-    DrawLine(dc, row, TimeLeftText(), kDim, DT_RIGHT);
+void FillBox(HDC dc, const RECT& box, COLORREF color) {
+    HBRUSH brush = CreateSolidBrush(color);
+    FillRect(dc, &box, brush);
+    DeleteObject(brush);
 }
+
+// top to bottom: a heading, the stage, the bar, then the percentage and time left, or the buttons once ready
+struct Layout {
+    RECT heading;
+    RECT stage;
+    RECT bar;
+    RECT bottom;
+    RECT start;
+    RECT exit;
+};
+
+Layout Arrange(const RECT& client, int unit) {
+    Layout l;
+    l.heading = {client.left + unit, client.top + unit, client.right - unit, client.top + unit * 3};
+    l.stage = l.heading;
+    OffsetRect(&l.stage, 0, unit * 2);
+    l.bar = {l.stage.left, l.stage.bottom + unit / 2, l.stage.right, l.stage.bottom + unit / 2 + unit};
+    l.bottom = {l.bar.left, l.bar.bottom + unit / 2, l.bar.right, l.bar.bottom + unit / 2 + unit * 2};
+    l.exit = {l.bottom.right - unit * 8, l.bottom.top, l.bottom.right, l.bottom.bottom};
+    l.start = {l.exit.left - unit * 9, l.bottom.top, l.exit.left - unit, l.bottom.bottom};
+    return l;
+}
+
+void Paint(HDC dc, const RECT& client, int unit) {
+    Layout l = Arrange(client, unit);
+    bool ready = g_progress.stage == Stage::Ready;
+    FillBox(dc, client, kBackground);
+    SetBkMode(dc, TRANSPARENT);
+    const wchar_t* heading = ready ? L"The game is ready." : L"Preparing the game for this PC. This only happens once.";
+    DrawLine(dc, l.heading, heading, kText, DT_LEFT);
+    DrawLine(dc, l.stage, StageText(), kDim, DT_LEFT);
+    FillBox(dc, l.bar, kBarEmpty);
+    RECT filled = l.bar;
+    filled.right = l.bar.left + LONG(float(l.bar.right - l.bar.left) * Fraction());
+    FillBox(dc, filled, kBarFull);
+    if (ready) {
+        FillBox(dc, l.start, kBarFull);
+        DrawLine(dc, l.start, L"Start", kBackground, DT_CENTER);
+        FillBox(dc, l.exit, kBarEmpty);
+        DrawLine(dc, l.exit, L"Exit", kText, DT_CENTER);
+        return;
+    }
+    DrawLine(dc, l.bottom, std::to_wstring(int(Fraction() * 100.0f)) + L"%", kDim, DT_LEFT);
+    DrawLine(dc, l.bottom, TimeLeftText(), kDim, DT_RIGHT);
+}
+
+int Unit(HWND hwnd) { return MulDiv(10, GetDpiForWindow(hwnd), 96); }
 
 // painted off screen, then copied, so the bar does not flicker
 void PaintWindow(HWND hwnd) {
@@ -484,7 +514,7 @@ void PaintWindow(HWND hwnd) {
     HBITMAP bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
     HGDIOBJ old_bitmap = SelectObject(memory, bitmap);
     HGDIOBJ old_font = SelectObject(memory, reinterpret_cast<HFONT>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)));
-    Paint(memory, client, MulDiv(10, GetDpiForWindow(hwnd), 96));
+    Paint(memory, client, Unit(hwnd));
     BitBlt(dc, 0, 0, client.right, client.bottom, memory, 0, 0, SRCCOPY);
     SelectObject(memory, old_font);
     SelectObject(memory, old_bitmap);
@@ -493,7 +523,25 @@ void PaintWindow(HWND hwnd) {
     EndPaint(hwnd, &ps);
 }
 
+void CloseWindowWith(HWND hwnd, bool start) {
+    g_start = start;
+    DeleteObject(reinterpret_cast<HFONT>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)));
+    DestroyWindow(hwnd);
+}
+
+// once ready: Start or Enter starts the game, Exit, Escape or the close button leaves
+void OnClick(HWND hwnd, LPARAM lp) {
+    if (g_progress.stage != Stage::Ready) return;
+    RECT client;
+    GetClientRect(hwnd, &client);
+    Layout l = Arrange(client, Unit(hwnd));
+    POINT at{short(LOWORD(lp)), short(HIWORD(lp))};
+    if (PtInRect(&l.start, at)) CloseWindowWith(hwnd, true);
+    else if (PtInRect(&l.exit, at)) CloseWindowWith(hwnd, false);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    bool ready = g_progress.stage == Stage::Ready;
     switch (msg) {
         case WM_PAINT:
             PaintWindow(hwnd);
@@ -503,14 +551,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
+        case WM_LBUTTONUP:
+            OnClick(hwnd, lp);
+            return 0;
+        case WM_KEYDOWN:
+            if (ready && (wp == VK_RETURN || wp == VK_ESCAPE)) CloseWindowWith(hwnd, wp == VK_RETURN);
+            return 0;
         case WM_CLOSE: {
+            if (ready) {
+                CloseWindowWith(hwnd, false);
+                return 0;
+            }
             const wchar_t* question = L"Stop preparing the game? What is done so far is kept, and the next start carries on.";
             if (MessageBoxW(hwnd, question, kTitle, MB_YESNO | MB_ICONQUESTION) == IDYES) g_progress.cancel = true;
             return 0;
         }
         case kBuildDone:
-            DeleteObject(reinterpret_cast<HFONT>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)));
-            DestroyWindow(hwnd);
+            if (!wp) CloseWindowWith(hwnd, false);  // failed or stopped; ready stays up for the player's pick
+            else FlashWindow(hwnd, TRUE);
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -567,7 +625,7 @@ void ShowFailure() {
     MessageBoxW(nullptr, text.c_str(), kTitle, MB_ICONERROR);
 }
 
-// the build on its own thread, the window on this one; false when it failed or the player stopped it
+// the build on its own thread, the window on this one; false when it failed, the player stopped it, or chose Exit
 bool BuildWithWindow(std::vector<Target>& targets) {
     if (std::wstring blocker = Blocker(targets); !blocker.empty()) {
         MessageBoxW(nullptr, blocker.c_str(), kTitle, MB_ICONERROR);
@@ -578,7 +636,8 @@ bool BuildWithWindow(std::vector<Target>& targets) {
     bool ok = false;
     std::thread worker([&] {
         ok = Build(targets);
-        PostMessageW(g_window, kBuildDone, 0, 0);
+        if (ok) g_progress.stage = Stage::Ready;
+        PostMessageW(g_window, kBuildDone, ok, 0);
     });
     MSG msg;
     while (IsWindow(g_window) && GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -588,7 +647,7 @@ bool BuildWithWindow(std::vector<Target>& targets) {
     worker.join();
     SetThreadExecutionState(ES_CONTINUOUS);
     if (!ok && !g_progress.cancel) ShowFailure();
-    return ok;
+    return ok && g_start;
 }
 
 }  // namespace
@@ -603,8 +662,6 @@ bool PrepareGameCode(const GameFiles& game) {
     ReleaseMutex(lock);
     CloseHandle(lock);
     if (!built) return false;
-    const wchar_t* question = L"The game is ready. Start the game now?";
-    if (!stale.empty() && MessageBoxW(nullptr, question, kTitle, MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
     for (const Image& image : kImages)
         if (std::string_view(image.xbe) == IMAGE_XBE && dispatch::Load(CodeDll(image))) return true;
     MessageBoxW(nullptr, L"The game's code could not be loaded, see the log in the logs folder.", kTitle, MB_ICONERROR);
