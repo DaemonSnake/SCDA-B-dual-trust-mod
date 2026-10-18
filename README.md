@@ -203,5 +203,5 @@ Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) and 
 > `build.bat` offers to install the Clang and CMake components for you if they're missing.
 
 ### 4. Build the Project
-- Run `build.bat`. The first build recompiles the entire game and can take 10 to 40 minutes on weaker systems.
+- Run `build.bat`. The first build recompiles the entire game and can take 30 to 90 minutes on weaker systems.
 - When it finishes, run `out\build\release\SCDA.exe`.

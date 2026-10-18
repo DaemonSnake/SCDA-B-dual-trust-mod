@@ -13,7 +13,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cwchar>
 #include <fstream>
 #include <string_view>
 #include <thread>
@@ -46,7 +45,7 @@ constexpr Image kImages[] = {
     {L"SCDA_Versus", "sc4_adv.xbe", "sc4_adv.toml"},
 };
 
-// as CMakePresets.json and CMakeLists.txt compiled this code when it was linked into the executables
+// as CMakePresets.json and CMakeLists.txt compile it for build.bat
 constexpr wchar_t kClangFlags[] =
     L"-target x86_64-pc-windows-msvc -fms-compatibility-version=19.40 -std=c++20 -O2 -march=x86-64-v2 "
     L"-fno-strict-aliasing -DNDEBUG -DX86_GAME_CODE -nostdinc -nostdinc++ -w";
@@ -118,10 +117,13 @@ bool StampFor(const Image& image, const std::vector<uint8_t>& xbe, std::string& 
     return true;
 }
 
+// build.bat's DLL has no stamp: it is current when newer than the executable it was linked against
 bool Current(const Target& target) {
     std::error_code ec;
-    if (!fs::exists(CodeDll(*target.image), ec)) return false;
+    fs::file_time_type built = fs::last_write_time(CodeDll(*target.image), ec);
+    if (ec) return false;
     std::ifstream f(StampFile(*target.image));
+    if (!f) return built > fs::last_write_time(ExeDir() / (std::wstring(target.image->exe) + L".exe"), ec);
     std::string line;
     return std::getline(f, line) && line == target.stamp;
 }
@@ -216,8 +218,8 @@ public:
         SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &limit, sizeof(limit));
         SECURITY_ATTRIBUTES inherit{sizeof(inherit), nullptr, TRUE};
         DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE;
-        log_ = CreateFileW(CompileLog().c_str(), FILE_APPEND_DATA, share, &inherit, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                           nullptr);
+        DWORD attributes = FILE_ATTRIBUTE_NORMAL;
+        log_ = CreateFileW(CompileLog().c_str(), FILE_APPEND_DATA, share, &inherit, CREATE_ALWAYS, attributes, nullptr);
     }
     ~Processes() {
         CloseHandle(job_);
@@ -601,10 +603,8 @@ bool PrepareGameCode(const GameFiles& game) {
     ReleaseMutex(lock);
     CloseHandle(lock);
     if (!built) return false;
-    // build.bat asks itself, after a --compile run
-    bool asks = !stale.empty() && !std::wcsstr(GetCommandLineW(), L"--compile");
     const wchar_t* question = L"The game is ready. Start the game now?";
-    if (asks && MessageBoxW(nullptr, question, kTitle, MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
+    if (!stale.empty() && MessageBoxW(nullptr, question, kTitle, MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
     for (const Image& image : kImages)
         if (std::string_view(image.xbe) == IMAGE_XBE && dispatch::Load(CodeDll(image))) return true;
     MessageBoxW(nullptr, L"The game's code could not be loaded, see the log in the logs folder.", kTitle, MB_ICONERROR);

@@ -82,14 +82,21 @@ add_custom_target(build_info
 set_source_files_properties(src/app/system_info.cpp src/app/version.rc PROPERTIES
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR} OBJECT_DEPENDS ${BUILD_INFO})
 
-# One executable per recompiled image: the shared host and the game hooks only that image has. The image's code is
-# not in it: the executable builds <target>.dll from the player's xbe and delay loads it. The recompiler runs
-# here for the symbol addresses the host is built with and the DLL's export list it links against.
-function(scda_image target xbe config game_dir)
+# One executable per recompiled image: the shared host and the game hooks only that image has. The image's code goes
+# to <target>.dll beside it, which the executable delay loads: built here from the image's config (partitions as that
+# config sets them), while a release leaves it out and the executable builds it from the player's xbe
+# (src/app/game_code.cpp, which compiles with the same flags).
+function(scda_image target xbe config partitions game_dir)
     set(GEN ${CMAKE_CURRENT_SOURCE_DIR}/generated/${game_dir})
+    set(GEN_SOURCES ${GEN}/x86_func_mapping.cpp)
+    math(EXPR last "${partitions} - 1")
+    foreach(i RANGE ${last})
+        list(APPEND GEN_SOURCES ${GEN}/x86_recomp.${i}.cpp)
+    endforeach()
     add_custom_command(
         OUTPUT ${GEN}/codegen.stamp
-        BYPRODUCTS ${GEN}/image_symbols.h ${GEN}/imports.def ${GEN}/code.lib
+        BYPRODUCTS ${GEN_SOURCES} ${GEN}/x86_recomp_shared.h ${GEN}/image_symbols.h ${GEN}/exports.def
+                   ${GEN}/imports.def ${GEN}/code.lib
         COMMAND xbe_recomp config/${config}
         COMMAND ${LLVM_BIN}/lld-link.exe /lib /machine:x64 /def:${GEN}/imports.def /out:${GEN}/code.lib
         COMMAND ${CMAKE_COMMAND} -E touch ${GEN}/codegen.stamp
@@ -117,7 +124,23 @@ function(scda_image target xbe config game_dir)
     target_link_libraries(${target} PRIVATE tomlplusplus::tomlplusplus $<LINK_ONLY:SDL3::SDL3-static> $<LINK_ONLY:opus> d3d12 dxgi dxguid d3dcompiler xaudio2 ole32 windowscodecs dbghelp winmm dwmapi ws2_32)
     target_link_libraries(${target} PRIVATE ${GEN}/code.lib delayimp)
     target_link_options(${target} PRIVATE -fuse-ld=lld -g -Wl,/delayload:${target}.dll)
+
+    # without a C runtime: the executable passes on what the code calls
+    add_library(${target}_code SHARED ${GEN_SOURCES})
+    set_target_properties(${target}_code PROPERTIES OUTPUT_NAME ${target} CXX_EXTENSIONS OFF)
+    add_dependencies(${target}_code recompile_${target})
+    target_include_directories(${target}_code PRIVATE src ${GEN})
+    target_include_directories(${target}_code SYSTEM PRIVATE src/cpu/freestanding)
+    target_compile_definitions(${target}_code PRIVATE X86_GAME_CODE)
+    target_compile_options(${target}_code PRIVATE -fms-compatibility-version=19.40 -O2 -fno-strict-aliasing -nostdinc
+        -nostdinc++ -w)
+    target_link_libraries(${target}_code PRIVATE ${target})
+    target_link_options(${target}_code PRIVATE -fuse-ld=lld -Wl,/noentry,/nodefaultlib,/opt:noicf
+        -Wl,/def:${GEN}/exports.def)
+    # a stamp from an earlier build on the executable's first start would outrank this DLL
+    add_custom_command(TARGET ${target}_code POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${COMPILER_DIR}/work/${target}/built.txt)
 endfunction()
 
-scda_image(SCDA default.xbe scda_v2.toml game)        # solo and co-op
-scda_image(SCDA_Versus sc4_adv.xbe sc4_adv.toml versus)  # versus
+scda_image(SCDA default.xbe scda_v2.toml 128 game)        # solo and co-op
+scda_image(SCDA_Versus sc4_adv.xbe sc4_adv.toml 64 versus)  # versus

@@ -312,7 +312,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     app::GameFiles game;
     if (!app::FindGame(game)) return 1;
     if (!app::PrepareGameCode(game)) return 1;
-    if (std::wcsstr(GetCommandLineW(), L"--compile")) return 0;  // build.bat: build the game code, then stop
 
     bool splash = app::OpenSplash(), handover = app::StartHandover();
 
