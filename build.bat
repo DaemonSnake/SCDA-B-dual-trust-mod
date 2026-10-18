@@ -59,7 +59,7 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.
-echo   out\build\%PRESET%\SCDA.exe         story and co-op
+echo   out\build\%PRESET%\SCDA.exe         solo and co-op
 echo   out\build\%PRESET%\SCDA_Versus.exe  versus, started from the main menu
 echo.
 if defined CI exit /b 0

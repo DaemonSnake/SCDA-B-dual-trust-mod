@@ -46,6 +46,17 @@ Port ParsePort(const std::string& name, Port fallback) {
 
 std::filesystem::path File() { return ExeDir() / "scda.toml"; }
 
+// the Windows display language when the game has it, else English
+std::string SystemLanguage() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case LANG_FRENCH: return "fra";
+        case LANG_GERMAN: return "deu";
+        case LANG_ITALIAN: return "ita";
+        case LANG_SPANISH: return "esp";
+        default: return "int";
+    }
+}
+
 }  // namespace
 
 Settings& Get() {
@@ -55,6 +66,8 @@ Settings& Get() {
 
 void Load() {
     Settings& s = Get();
+    // stands until a saved scda.toml names one
+    s.language = SystemLanguage();
     toml::table t;
     try {
         t = toml::parse_file(File().string());

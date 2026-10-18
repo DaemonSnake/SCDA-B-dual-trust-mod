@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "app/app.h"
@@ -28,6 +29,7 @@ namespace {
 // the interaction prompt (p_interatt) is one centred widget with fades at its sides: it stays 4:3 like a menu
 constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("p_spectatormode")};
 constexpr uint32_t kLoadingPage = game::magma::Id("p_loading");
+constexpr uint32_t kMainMenu = game::magma::Id("p_mainmenu");
 static_assert(kLoadingPage == 0x50A0D1DB);
 constexpr uint32_t kMagma = 0x3D8D74;  // manager: +0x38 viewport (+0x9C width, +0xA0 height in pixels)
 constexpr uint32_t kMagmaViewport = 0x38;
@@ -242,6 +244,12 @@ X86_FUNC(sub_0025A3F0) {
     g_picture = picture;
     versus::LeavePage();
     g_hud = saved;
+    if (id == kMainMenu) {
+        bool replay = std::exchange(g_replay, true);
+        g_mode = Mode::Right;
+        app::DrawWatermark(ctx);
+        g_replay = replay;
+    }
 }
 
 // Magma instance draw (thiscall, +8 id). On a HUD page each instance is drawn into a list, then placed by the

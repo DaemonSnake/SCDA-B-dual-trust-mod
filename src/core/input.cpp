@@ -174,6 +174,7 @@ std::atomic<bool> g_targeting{false};
 std::atomic<uint32_t> g_events{0};  // key events pressed in play and not yet taken
 
 std::atomic<bool> g_net{false};
+std::atomic<bool> g_video{false};  // SetTrainingVideo
 std::atomic<bool> g_interact_reloads{false};
 std::atomic<bool> g_carrying{false};
 std::atomic<bool> g_hanging{false};
@@ -184,7 +185,6 @@ std::atomic<bool> g_ladder_step{false};  // the ladder's transition (a step) is 
 std::atomic<bool> g_pipe{false};
 constexpr float kClimbDown = 0.759f;  // axis 0.66
 bool g_ladder_slide = false;
-bool g_ladder_was_step = false;
 
 // what an action presses: 0-7 analog A B X Y black white LT RT, 8-15 the buttons bits, 16-19 the move keys;
 // or, with an event, no pad button: the game side acts on it once per press (KeyEvent)
@@ -567,6 +567,12 @@ void ApplyEventKey(size_t i, Pad& p) {
         g_down_as[i] = 1;
         return;
     }
+    KeyEvent e = kActions[i].event;
+    if (g_video && (e == KeyEvent::SidekickCommand || e == KeyEvent::Whistle)) {
+        p.analog[kBlack] = 0xFF;
+        g_down_as[i] = 1;
+        return;
+    }
     if (g_net) {
         if (kActions[i].event == KeyEvent::SidekickCommand) p.analog[kBlack] = 0xFF;
         if (kActions[i].event == KeyEvent::Reload && g_interact_reloads) p.analog[kAnalogA] = 0xFF;
@@ -717,9 +723,9 @@ void UpdateStick(Pad& p, const int (&move)[4], bool camera, bool menu, bool back
     }
     bool step = g_ladder_step, top = g_speed == int(std::size(kSpeeds)) - 1;
     bool down = y < 0 && !menu && !ax && !ay;
+    // held steps chain without the transition dropping between them, so reaching the top speed during any step counts
     if (!g_ladder || !down) g_ladder_slide = false;
-    else if (step && !g_ladder_was_step && top) g_ladder_slide = true;
-    g_ladder_was_step = step;
+    else if (step && top) g_ladder_slide = true;
     // Not where the full stick is forced: a ledge climb wants aForward past 0.9.
     if (x && y && !full) v = DiagonalSpeed(v);
     float vy = v;
@@ -1201,6 +1207,10 @@ bool NetSession() { return g_net; }
 
 void SetNetSession(bool net) {
     if (g_net.exchange(net) != net) LOGI("input: %s a synced co-op session", net ? "in" : "out of");
+}
+
+void SetTrainingVideo(bool on) {
+    g_video = on;
 }
 
 void SetInteractReloads(bool on) {

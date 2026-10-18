@@ -105,5 +105,5 @@ function(scda_image target xbe config partitions game_dir)
     target_link_options(${target} PRIVATE -fuse-ld=lld -g)
 endfunction()
 
-scda_image(SCDA default.xbe scda_v2.toml 128 game)        # story and co-op
+scda_image(SCDA default.xbe scda_v2.toml 128 game)        # solo and co-op
 scda_image(SCDA_Versus sc4_adv.xbe sc4_adv.toml 64 versus)  # versus

@@ -45,7 +45,7 @@ bool CanvasUp() {
     return viewport && R32(viewport + kCanvas);
 }
 
-// y: baseline from the bottom; right: x is the text's end (solo only)
+// y: baseline from the bottom; right: x is the text's end
 void Text(X86Context& ctx, const char* text, int x, int y, int size, uint32_t colour, bool shadow, bool right) {
     static const uint32_t block = mem::AllocSystem(0x60);
     uint32_t font = Font();
@@ -79,9 +79,11 @@ void app::DrawFps(X86Context& ctx) {
     Text(ctx, text, kLeft + kMargin, int16_t(R16(screen + kPageHeight)) - kMargin - kSize, kSize, 0xFFFFFFFFu, true, false);
 }
 
-// mirrors the button legend: its text starts 80 in on baseline 46, size 16, grey B0
+// solo mirrors the button legend: its text starts 80 in on baseline 46, size 16, grey B0. Versus pages are drawn
+// 1.1 wide, so its numbers keep the size; its legend reaches the right side, so the text sits a line above it
 void app::DrawWatermark(X86Context& ctx) {
+    constexpr int kEnd = kVersus ? 544 : 560, kBaseline = kVersus ? 64 : 46, kTextSize = kVersus ? 15 : 16;
     char text[32];
     std::snprintf(text, sizeof text, "XBE Recomp V%d", kVersion);
-    Text(ctx, text, 560, 46, 16, 0xFFB0B0B0u, false, true);
+    Text(ctx, text, kEnd, kBaseline, kTextSize, 0xFFB0B0B0u, false, true);
 }
