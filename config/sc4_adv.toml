@@ -4,6 +4,7 @@ includes = ["xdk_symbols_adv.toml"]
 [xbe]
 path = "assets/sc4_adv.xbe"
 out = "generated/versus"
+library = "SCDA_Versus.dll"  # <exe>.dll, which the executable delay loads
 partitions = 64
 code_sections = [".text", "D3D", "D3DX", "XGRPH", "DSOUND", "XNET", "XONLINE", "XPP"]
 

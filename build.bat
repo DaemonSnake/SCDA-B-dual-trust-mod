@@ -19,7 +19,7 @@ if not exist assets\default.xbe goto :nogame
 if not exist assets\sc4_adv.xbe goto :nogame
 
 rem toolchain
-echo [1/2] Toolchain
+echo [1/3] Toolchain
 for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
 if not defined VSDIR (
     echo       Visual Studio with the C++ workload was not found.
@@ -42,9 +42,8 @@ if not defined TOOLS_OK (
 )
 for /f "tokens=*" %%v in ('clang++ --version ^| findstr /i version') do echo       %%v
 
-rem game
-echo [2/2] Game code
-echo       the first build recompiles default.xbe and sc4_adv.xbe: 30 to 90 minutes on weaker systems ...
+rem executables
+echo [2/3] Executables
 cmake --preset %PRESET% >nul || goto :fail
 cmake --build "%OUT%" || goto :fail
 rem the game's shadercache\ is a link to the one at the top (not in git): deleting out loses no shaders
@@ -56,6 +55,11 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
     )
     mklink /J "%OUT%\shadercache" "%CD%\shadercache" >nul
 )
+
+rem game code, built as a player's first start builds it
+echo [3/3] Game code
+echo       the first build compiles default.xbe and sc4_adv.xbe: 10 to 40 minutes on weaker systems ...
+"%OUT%\SCDA.exe" --compile || goto :fail
 
 echo.
 echo   Tom Clancy's Splinter Cell: Double Agent - XBE Recomp built.

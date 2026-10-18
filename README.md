@@ -8,7 +8,7 @@ An unofficial native PC port of the original Xbox version of Splinter Cell: Doub
 The latest version of [SCDA-XBERecomp](https://github.com/TGP482/SCDA-XBERecomp/releases) can be found in the Releases page.
 
 - Place your game files in the `assets` folder. This can be an ISO, or the extracted data files.
-- Run `SCDA.exe`.
+- Run `SCDA.exe`. The first start compiles the game's code for your PC,this only happens once.
 - Recomp Settings can be adjusted in the in-game options menu while the game is running, or through the Settings overlay, which is opened with <kbd>F10</kbd> by default.
 
 <img width="1920" height="1080" alt="Recomp Settings" src="https://github.com/user-attachments/assets/d13e1fb6-ba97-4067-84e1-c2362d66d7c4"/>
@@ -178,7 +178,7 @@ As the host, you must port forward the following ports on your router so other p
 - **Memory**
   - 4 GB
 - **Storage**
-  - 5 GB for the game files, saves and shader cache
+  - 6 GB for the game files, the compiled game code, saves and shader cache
 
 ## Building
 ### 1. Clone the Repository
@@ -203,5 +203,5 @@ Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) and 
 > `build.bat` offers to install the Clang and CMake components for you if they're missing.
 
 ### 4. Build the Project
-- Run `build.bat`. The first build recompiles the entire game and can take 30 to 90 minutes on weaker systems.
+- Run `build.bat`. The first build recompiles the entire game and can take 10 to 40 minutes on weaker systems.
 - When it finishes, run `out\build\release\SCDA.exe`.

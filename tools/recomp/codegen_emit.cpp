@@ -181,6 +181,23 @@ bool CodeGen::Run() {
     }
     WriteIfChanged(out_ / "x86_func_mapping.cpp", map);
 
+    // the game code DLL exports its tables and each recompiled body (one name a function: PE allows 65535); the
+    // executable's import library also takes a function's own name, for the calls it makes where it has no override
+    std::string library = F("LIBRARY %s\nEXPORTS\n", an_.cfg.library.c_str());
+    std::string exports;
+    std::string aliases;
+    for (const char* table : {"X86FuncMappings", "X86Continuations", "X86CodeBase", "X86CodeEnd", "X86EntryPoint"})
+        exports += F("    %s DATA\n", table);
+    for (const std::vector<uint32_t>* list : {&funcs, &absent}) {
+        for (uint32_t f : *list) {
+            std::string name = FuncName(f);
+            exports += F("    __imp__%s\n", name.c_str());
+            aliases += F("    %s == __imp__%s\n", name.c_str(), name.c_str());
+        }
+    }
+    WriteIfChanged(out_ / "exports.def", library + exports);
+    WriteIfChanged(out_ / "imports.def", library + exports + aliases);
+
     std::string stats = F("functions %zu\ninstructions %zu\n", funcs.size(), insn_count_);
     for (auto& [k, v] : unimpl_) stats += F("unimplemented %s %zu\n", k.c_str(), v);
     WriteIfChanged(out_ / "x86_recomp_stats.txt", stats);

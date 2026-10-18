@@ -13,6 +13,7 @@
 struct Config {
     std::string xbe_path;
     std::string out_dir;
+    std::string library;  // the game code DLL, named in the generated exports.def
     std::vector<std::string> code_sections;
     std::vector<std::string> code_prefixes;
     uint32_t partitions = 128;

@@ -19,4 +19,5 @@ dir /AL /B "%OUT%" 2>nul | findstr /X /I shadercache >nul || (
     )
     mklink /J "%OUT%\shadercache" "%CD%\shadercache" >nul
 )
-7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets" "%D3DCOMPILER%"
+rem the compiler folder without its work folder: no game code goes in the zip, the first start builds it
+7z a "%ZIP%" ".\%OUT%\SCDA.exe" ".\%OUT%\SCDA_Versus.exe" ".\%OUT%\release\assets" ".\%OUT%\compiler" "%D3DCOMPILER%" -xr!work

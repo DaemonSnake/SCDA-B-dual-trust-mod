@@ -4,6 +4,7 @@ includes = ["xdk_symbols.toml"]
 [xbe]
 path = "assets/default.xbe"
 out = "generated/game"
+library = "SCDA.dll"  # <exe>.dll, which the executable delay loads
 partitions = 128
 code_sections = [".text", "XNET", "XONLINE", "D3D", "D3DX", "XGRPH", "DSOUND", "XPP",
     "BINK", "BINK32", "BINK32A", "BINK16", "BINK4444", "BINK5551", "BINKYUY2",
