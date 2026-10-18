@@ -52,7 +52,6 @@ struct Rule {
 };
 
 constexpr uint32_t kEventBar = 0x467FE0A7;  // P_hud's scripted event bar, name not recovered
-constexpr uint32_t kFileView = 0x4E6BBCC7;  // computer.mgm's open file page over P_Computer, name not recovered
 
 // Magma names pages and elements by crc32 of their name. The goggles' vignette, lens ring and frame lines
 // are arcs of one circle: only a uniform stretch keeps them on one curve
@@ -102,13 +101,11 @@ struct Page {
 };
 
 // pages not listed are menus: Fill. The scope's side strips hold the outer ring's left and right arcs, which
-// stretching bulges: Extend repeats their outer edge instead. The open file page draws its own comms box and legend
-// over P_Computer's, so it is placed the same way or both show. The OPSAT's backdrop has side shades fading to black at
+// stretching bulges: Extend repeats their outer edge instead. The OPSAT's backdrop has side shades fading to black at
 // its edges: stretched, the fade was drawn out and broken by the seam where they end; the sides are black past them
 constexpr Page kPages[] = {
     {"P_hud", kHud, Mode::Fill, true}, {"P_EEV", kOverlay, Mode::Spread}, {"P_Sniper", kSniper, Mode::Extend},
     {"P_Camera", kOverlay},            {"P_opticcable", kOverlay},        {"P_Computer", kOverlay},
-    {kFileView, kOverlay},
     {"P_Opsat", kMenu, Mode::Bars},           {"P_Goals", kMenu, Mode::Bars},
     {"P_Goals_details", kMenu, Mode::Bars},   {"P_Map", kMenu, Mode::Bars},
     {"P_Notes", kMenu, Mode::Bars},           {"P_DataFile", kMenu, Mode::Bars},
@@ -116,6 +113,30 @@ constexpr Page kPages[] = {
     {"P_Communications", kMenu, Mode::Bars},  {"P_PDA", kMenu, Mode::Bars},
     {"P_Trust", kMenu, Mode::Bars},           {"P_Videos", kMenu, Mode::Bars},
 };
+// P_DataFile is the OPSAT's file reader, and also a computer's open file over P_Computer, with its own comms box and
+// legend: there it is placed as P_Computer is, or both show
+constexpr Page kComputerFile{"P_DataFile", kOverlay};
+constexpr uint32_t kComputer = game::magma::Id("P_Computer");
+
+// a page with this id sits on a draw stack with the page; manager +0x3C contexts, +0x40 count; context +0x14 draw
+// stack: +4 begin, +8 end of {page, flags}
+bool SharesDrawStack(uint32_t page, uint32_t id) {
+    uint32_t m = R32(kMagma), list = m ? R32(m + 0x3C) : 0, count = m ? R32(m + 0x40) : 0;
+    if (!list || count > 16) return false;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t context = R32(list + i * 4), stack = context ? R32(context + 0x14) : 0;
+        uint32_t begin = stack ? R32(stack + 4) : 0, end = stack ? R32(stack + 8) : 0;
+        if (!begin || end < begin || end - begin > 8 * 64) continue;
+        bool has_page = false, has_id = false;
+        for (uint32_t it = begin; it < end; it += 8) {
+            uint32_t p = R32(it);
+            has_page |= p == page;
+            has_id |= p && R32(p + 0x14) == id;
+        }
+        if (has_page && has_id) return true;
+    }
+    return false;
+}
 
 constexpr int kSlack = 2, kKeep = 150, kMinWidth = 8, kFade = 32, kFullSlack = 8;  // page units
 constexpr float kInset = 1.5f, kBand = 24.0f;  // texels, taken as page units
@@ -599,6 +620,7 @@ X86_FUNC(sub_002BE990) {
     g_page = nullptr;
     for (auto& p : kPages)
         if (p.id == id) g_page = &p;
+    if (id == kComputerFile.id && SharesDrawStack(ctx.ecx, kComputer)) g_page = &kComputerFile;
     Draw(ctx, base, g_page ? Mode::Centre : Mode::Fill, __imp__sub_002BE990);
     g_page = saved;
     g_drawing = drawing;
