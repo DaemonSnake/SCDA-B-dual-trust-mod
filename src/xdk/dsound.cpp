@@ -37,6 +37,7 @@ constexpr uint32_t kBinCrosstalkBackRight = 9;
 constexpr uint32_t kBinFirstSend = 10;  // effect sends from here up
 constexpr uint32_t kBinI3dl2 = 10;
 constexpr uint32_t kSends = 1u << kBinI3dl2;  // the effects image mixes these into its reverb (state X:0x1540)
+constexpr uint32_t kLanes = kBinFirstSend;     // the mixer's lanes are bins 0 to 9, speakers then crosstalk
 
 constexpr uint32_t kEarLength = 64;  // past the longest interaural delay, 31 samples
 
@@ -72,7 +73,7 @@ struct Voice {
     float lf = 1, hf = 1;  // I3DL2 direct path: lows and highs (I3DL2Source)
     float lp[2] = {};      // its low pass, per channel
     float room = 1;        // I3DL2 reverb send of a 3D voice (lRoom)
-    float gain[2][audio::kChannels] = {};  // the last block's levels, the next block ramps from them
+    float gain[2][kLanes] = {};  // the last block's levels, the next block ramps from them
     bool has_gain = false;
     // a mono 3D voice's interaural delay in samples and its recent samples
     float itd = 0;
@@ -312,9 +313,10 @@ struct Reverb {
         l[12].Put(q.echo_lp[0].Run(ea));
         l[13].Put(q.echo_lp[1].Run(eb));
     }
-    // adds the reverb of the 48 kHz send to the front and back pairs, as the image's crosstalk bins reach them
+    // adds the reverb of the 48 kHz send to the crosstalk bins, as the image's reverb writes them
     void Run(const float* send, float* out, uint32_t frames) {
-        static const audio::Speaker kOut[4] = {audio::FrontLeft, audio::FrontRight, audio::BackLeft, audio::BackRight};
+        static const uint32_t kOut[4] = {kBinCrosstalkFrontLeft, kBinCrosstalkFrontRight, kBinCrosstalkBackLeft,
+                                         kBinCrosstalkBackRight};
         for (uint32_t i = 0; on && i < frames; i++) {
             float x = now.in_lp.Run(send[i] * 0.5f), o[4];
             if (!(tick++ & 1)) {
@@ -328,10 +330,34 @@ struct Reverb {
                 Frame(x, o);
                 for (int k = 0; k < 4; k++) held[k] = o[k] * fade;
             }
-            for (int k = 0; k < 4; k++) out[i * audio::kChannels + kOut[k]] += held[k];
+            for (int k = 0; k < 4; k++) out[i * kLanes + kOut[k]] += held[k];
         }
     }
 } g_reverb;
+
+// dsstdfx effect 4 on a pair of crosstalk bins: each side adds the other side's output of 11 samples back through a
+// one pole filter (image coefficients 0x7645A1 and 0xF88313). Headphones turn it off.
+struct CrossFeed {
+    static constexpr uint32_t kDelay = 11;
+    static constexpr float kPole = 0.924f;
+    static constexpr float kFeed = -0.0585f;
+    float s[2] = {};
+    float past[2][kDelay] = {};
+    uint32_t at = 0;
+    void Run(float& left, float& right) {
+        // the offset keeps silence out of denormals
+        s[0] = kPole * s[0] + kFeed * past[1][at] + 1e-20f;
+        s[1] = kPole * s[1] + kFeed * past[0][at] + 1e-20f;
+        left += s[0];
+        right += s[1];
+        past[0][at] = left;
+        past[1][at] = right;
+        at = (at + 1) % kDelay;
+    }
+};
+CrossFeed g_front_feed;
+CrossFeed g_back_feed;
+bool g_cross_feed = false;  // the title runs the effects image the effect was read from (UsesOwnImage)
 
 // The library's full HRTF tables (DirectSoundUseFullHRTF): a filter number per azimuth step by elevation step, and
 // the filters, 31 taps and the interaural delay in the last byte, the right ear's filter after the left's
@@ -464,32 +490,25 @@ float BinScale(const Place& at, uint32_t bin) {
     return at.att;
 }
 
-// the speaker a bin plays on: bins 0 to 5 are the speakers, the image's crosstalk effect (dsstdfx effect 4) adds
-// 6 to 9 into the front and back pairs
+// bins 0 to 5 are the speakers, the image's crosstalk effect adds 6 to 9 into the front and back pairs (AddCrosstalk)
 static_assert(kBinSub == audio::Sub && kBinCentre == audio::Centre && audio::BackRight == 5);
-uint32_t SpeakerOf(uint32_t bin) {
-    static const audio::Speaker kCrosstalk[4] = {audio::FrontLeft, audio::FrontRight, audio::BackLeft,
-                                                 audio::BackRight};
-    if (bin < kBinCrosstalkFrontLeft) return bin;
-    return kCrosstalk[bin - kBinCrosstalkFrontLeft];
-}
+static_assert(audio::kChannels == kBinCrosstalkFrontLeft);
 
 // a slot onto the speakers, effect sends on none. A voice heard through effect sends alone plays on the front pair.
-void AddToSpeakers(float g[audio::kChannels], uint32_t b, float x, bool speakers) {
+void AddToSpeakers(float g[kLanes], uint32_t b, float x, bool speakers) {
     if (!speakers) {
         g[audio::FrontLeft] = std::max(g[audio::FrontLeft], x);
         g[audio::FrontRight] = std::max(g[audio::FrontRight], x);
         return;
     }
     if (b >= kBinFirstSend) return;
-    uint32_t to = SpeakerOf(b);
-    g[to] = std::max(g[to], x);
+    g[b] = std::max(g[b], x);
 }
 
 // gain of voice channel c on each speaker, w its share for the reverb. A hardware voice holds two channels and owns
 // a run of slots, which alternate between them.
-void Levels(const Voice& v, const Place& at, float g[2][audio::kChannels], float w[2]) {
-    std::memset(g, 0, 2 * audio::kChannels * sizeof(float));
+void Levels(const Voice& v, const Place& at, float g[2][kLanes], float w[2]) {
+    std::memset(g, 0, 2 * kLanes * sizeof(float));
     w[0] = w[1] = 0;
     if (v.link_voice && audio::VoiceLinkHeard()) return;
     static const uint8_t kFront[2] = {0, 1};
@@ -515,18 +534,18 @@ void Levels(const Voice& v, const Place& at, float g[2][audio::kChannels], float
     // the game can place a sound at NaN, every frame, that voice alone goes silent, where its
     // NaN gain would turn the whole mix to NaN, which plays as silence
     for (int c = 0; c < 2; c++) {
-        for (uint32_t k = 0; k < audio::kChannels; k++)
+        for (uint32_t k = 0; k < kLanes; k++)
             if (!std::isfinite(g[c][k])) g[c][k] = 0;
         if (!std::isfinite(w[c])) w[c] = 0;
     }
 }
 
 // 3D levels follow the listener once a game frame: stepped per block, a fast turn clicks
-void UpdateRamp(Voice& v, const float g[2][audio::kChannels], uint32_t frames, float dg[2][audio::kChannels]) {
+void UpdateRamp(Voice& v, const float g[2][kLanes], uint32_t frames, float dg[2][kLanes]) {
     if (!v.has_gain) std::memcpy(v.gain, g, sizeof(v.gain));
     v.has_gain = true;
     for (int c = 0; c < 2; c++)
-        for (uint32_t k = 0; k < audio::kChannels; k++) dg[c][k] = (g[c][k] - v.gain[c][k]) / float(frames);
+        for (uint32_t k = 0; k < kLanes; k++) dg[c][k] = (g[c][k] - v.gain[c][k]) / float(frames);
 }
 
 // the 3D voice's recent samples, the ear further from the sound reads them later
@@ -625,7 +644,7 @@ void ReadFrame(Voice& v, const Cursor& at, float x[2]) {
 
 // A mono 3D voice leaves the HRTF as two ears on the left and right speakers, the far one delayed. The centre and
 // sub are not HRTF slots (0x4D45CB) and take it as it is.
-void EarFrame(Voice& v, float x, float frame[audio::kChannels]) {
+void EarFrame(Voice& v, float x, float frame[kLanes]) {
     PushEar(v, x);
     float left = EarAt(v, v.itd);
     float right = EarAt(v, -v.itd);
@@ -633,21 +652,25 @@ void EarFrame(Voice& v, float x, float frame[audio::kChannels]) {
     frame[audio::BackLeft] = left;
     frame[audio::FrontRight] = right;
     frame[audio::BackRight] = right;
+    frame[kBinCrosstalkFrontLeft] = left;
+    frame[kBinCrosstalkBackLeft] = left;
+    frame[kBinCrosstalkFrontRight] = right;
+    frame[kBinCrosstalkBackRight] = right;
     frame[audio::Centre] = x;
     frame[audio::Sub] = x;
 }
 
-// adds the voice to the speaker frames and its reverb share to the send
+// adds the voice to the lane frames and its reverb share to the send
 void MixVoice(Voice& v, float* out, float* send, uint32_t frames) {
     Place at = Locate(v);
-    float g[2][audio::kChannels];
+    float g[2][kLanes];
     float w[2];
     Levels(v, at, g, w);
     bool ears = at.on && v.channels == 1;
     float itd = Itd(at.azimuth, at.elevation, audio::IsSurround());
     if (!v.has_gain) v.itd = itd;
     float itd_step = (itd - v.itd) / float(frames);
-    float dg[2][audio::kChannels];
+    float dg[2][kLanes];
     UpdateRamp(v, g, frames, dg);
     double rate = double(v.freq ? v.freq : v.rate) / audio::kRate;
     for (uint32_t i = 0; i < frames; i++) {
@@ -656,13 +679,13 @@ void MixVoice(Voice& v, float* out, float* send, uint32_t frames) {
         float x[2];
         ReadFrame(v, *cursor, x);
         send[i] += x[0] * w[0] + x[1] * w[1];  // the send leaves before the HRTF
-        float ear[audio::kChannels];
+        float ear[kLanes];
         if (ears) {
             v.itd += itd_step;
             EarFrame(v, x[0], ear);
         }
-        float* o = out + i * audio::kChannels;
-        for (uint32_t k = 0; k < audio::kChannels; k++) {
+        float* o = out + i * kLanes;
+        for (uint32_t k = 0; k < kLanes; k++) {
             v.gain[0][k] += dg[0][k];
             v.gain[1][k] += dg[1][k];
             if (ears) o[k] += ear[k] * v.gain[0][k];
@@ -674,17 +697,42 @@ void MixVoice(Voice& v, float* out, float* send, uint32_t frames) {
     v.itd = itd;
 }
 
+// the speaker frames from the lane frames: the crosstalk bins through the image's crosstalk effect onto the front
+// and back pairs
+void AddCrosstalk(const float* lanes, float* out, uint32_t frames) {
+    for (uint32_t i = 0; i < frames; i++) {
+        const float* m = lanes + i * kLanes;
+        float* o = out + i * audio::kChannels;
+        float front_left = m[kBinCrosstalkFrontLeft];
+        float front_right = m[kBinCrosstalkFrontRight];
+        float back_left = m[kBinCrosstalkBackLeft];
+        float back_right = m[kBinCrosstalkBackRight];
+        if (g_cross_feed && !g_headphones) {
+            g_front_feed.Run(front_left, front_right);
+            g_back_feed.Run(back_left, back_right);
+        }
+        std::memcpy(o, m, audio::kChannels * sizeof(float));
+        o[audio::FrontLeft] += front_left;
+        o[audio::FrontRight] += front_right;
+        o[audio::BackLeft] += back_left;
+        o[audio::BackRight] += back_right;
+    }
+}
+
 // the device clips once, after the fold to stereo sums the speakers
 void Render(float* out, uint32_t frames) {
-    std::memset(out, 0, frames * audio::kChannels * sizeof(float));
-    static std::vector<float> send;  // the output thread alone renders
+    // the output thread alone renders
+    static std::vector<float> lanes;
+    static std::vector<float> send;
+    lanes.assign(frames * kLanes, 0.0f);
     send.assign(frames, 0.0f);
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (auto& [obj, v] : g_voices) {
         if (v.paused || (!v.stream && !v.playing)) continue;
-        MixVoice(v, out, send.data(), frames);
+        MixVoice(v, lanes.data(), send.data(), frames);
     }
-    g_reverb.Run(send.data(), out, frames);
+    g_reverb.Run(send.data(), lanes.data(), frames);
+    AddCrosstalk(lanes.data(), out, frames);
 }
 
 int64_t NowMs() {
@@ -872,8 +920,17 @@ HLE_STDCALL(DirectSoundDoWork, 0) {
     return 0;
 }
 
-// Effects run on the console's DSP and are not reproduced. The descriptor keeps the image's effect list so the
-// title finds its indices, every segment points at zeroed memory.
+// the image is the XBE's own dsstdfx section, which the disc's dsstdfx.bin repeats byte for byte
+bool UsesOwnImage(const std::vector<uint8_t>& img) {
+    for (auto& sec : g_image->sections) {
+        if (sec.name != "dsstdfx") continue;
+        return !img.empty() && img.size() <= sec.vsize && std::memcmp(img.data(), HostPtr(sec.va), img.size()) == 0;
+    }
+    return false;
+}
+
+// Effects run on the console's DSP, only the crosstalk is reproduced (AddCrosstalk). The descriptor keeps the
+// image's effect list so the title finds its indices, every segment points at zeroed memory.
 HLE_STDCALL(XAudioDownloadEffectsImage, 4) {
     std::string name = ReadCString(a[0]);
     std::vector<uint8_t> img;
@@ -887,6 +944,10 @@ HLE_STDCALL(XAudioDownloadEffectsImage, 4) {
     size_t t = 0x818 + size_t(u32(0x804) + u32(0x80C)) * 4;
     uint32_t count = std::min<uint32_t>(u32(t), 64);
     LOGI("dsound: effects image %s, %u effects", name.c_str(), count);
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_lock);
+        g_cross_feed = UsesOwnImage(img);
+    }
     uint32_t desc = mem::AllocSystem(8 + std::max(count, 1u) * 32);
     W32(desc, count);
     W32(desc + 4, u32(t + 4));
