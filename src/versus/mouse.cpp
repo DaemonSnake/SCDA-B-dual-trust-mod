@@ -446,11 +446,21 @@ void StepSlider(Ui& u, uint32_t hovered, uint32_t widget, uint32_t at) {
     }
 }
 
+// The hovered item is reached by D-pad steps, as on the pad: the page acts on the step (the session page's map and
+// game mode lists change its picture and briefing), not on a selection set from outside. A step that does not move
+// the list leaves the rest to a direct select.
 void ListClick(Ui& u, uint32_t hovered, uint32_t widget, bool clicked) {
     int32_t hit = ListItem(u, widget);
-    if (hit >= 0 && hit != int32_t(R32(widget + kListSelection))) {
-        Call(u, kListSelect, widget, {uint32_t(hit), 0});
-        Virtual(u, hovered, kFocusSlot, {0, 1});
+    int32_t steps = int32_t((R32(widget + kListItemsEnd) - R32(widget + kListItemsBegin)) / kListItemSize);
+    for (int32_t at = int32_t(R32(widget + kListSelection)); hit >= 0 && at != hit && steps-- > 0;) {
+        Tap(u, hit < at ? kKeyUp : kKeyDown);
+        int32_t now = int32_t(R32(widget + kListSelection));
+        if (now == at) {
+            Call(u, kListSelect, widget, {uint32_t(hit), 0});
+            Virtual(u, hovered, kFocusSlot, {0, 1});
+            break;
+        }
+        at = now;
     }
     if (!clicked) return;
     if (R32(widget + kListUpArrow) && Inside(u, widget + kListUpRect)) Tap(u, kKeyUp);
