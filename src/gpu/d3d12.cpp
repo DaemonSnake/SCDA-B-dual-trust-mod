@@ -652,6 +652,14 @@ struct PsoKey {
 };
 static_assert(sizeof(PsoKey) == 184);
 
+// a pipeline as the key file keeps it: the key and its shaders' source checks, which find their bytecode on disk
+struct WarmKey {
+    PsoKey key;
+    uint64_t vs_check;
+    uint64_t ps_check;
+};
+static_assert(sizeof(WarmKey) == 200);
+
 // Blit's settings past the source and its rectangle
 struct BlitOptions {
     bool gamma = false;       // through the gamma lookup
@@ -883,8 +891,12 @@ private:
     void KeyDepthStencil(const State& s, const Assembled& a, PsoKey& k);
     ID3D12PipelineState* EnsurePipeline(const PsoKey& k, bool wait = false);
     void TakeBuilt();
+    void DeliverBuilt(uint64_t h, ComPtr<ID3D12PipelineState> pso);
+    void RememberPipeline(const PsoKey& k);
+    void WarmPipelines();
     ComPtr<ID3D12PipelineState> CreatePipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs, ID3DBlob* ps, bool compile,
                                                bool& pending);
+    ComPtr<ID3D12PipelineState> BuildPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d, uint64_t key);
     void FillPipelineDesc(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps, D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) const;
     void UploadConstants(const State& s, const DrawShaders& sh, const PsoKey& k, const DrawTextures& stages,
                          GuestSize size, DrawConstants& c);
@@ -1035,7 +1047,8 @@ private:
         std::string entry;
         std::string profile;
         ComPtr<ID3DBlob> code;
-        uint8_t state = 0;  // 0 source only, 1 compiling, 2 done (no code: it failed)
+        uint64_t check = 0;  // the second source hash the disk cache keeps
+        uint8_t state = 0;   // 0 source only, 1 compiling, 2 done (no code: it failed)
     };
     std::unordered_map<uint64_t, Source> shaders_;  // build threads too, under shader_lock_
     std::mutex shader_lock_;
@@ -1170,6 +1183,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     ImGui_ImplDX12_Init(dev_.Get(), kFrames, DXGI_FORMAT_B8G8R8A8_UNORM, ui_heap_.Get(),
                         ui_heap_->GetCPUDescriptorHandleForHeapStart(), ui_heap_->GetGPUDescriptorHandleForHeapStart());
     LoadSettings();
+    WarmPipelines();
     Begin();
     LOGI("d3d12: %ux%u guest, %ux%u window, render scale %.3f", width, height, bb_w_, bb_h_, scale_);
     return true;
@@ -1723,6 +1737,7 @@ uint64_t D3D12Backend::Register(std::string src, const char* entry, const char* 
     std::lock_guard lock(shader_lock_);
     auto [it, fresh] = shaders_.try_emplace(hash);
     if (fresh) {
+        it->second.check = Hash(src.data(), src.size(), kSourceCheck);
         it->second.text = std::move(src);
         it->second.entry = entry;
         it->second.profile = profile;
@@ -1734,7 +1749,7 @@ ID3DBlob* D3D12Backend::EnsureShaderCode(uint64_t hash, bool compile, bool& pend
     std::unique_lock lock(shader_lock_);
     Source& s = shaders_[hash];
     if (s.state == 0) {
-        s.code = cache::FindShader(hash, Hash(s.text.data(), s.text.size(), kSourceCheck));
+        s.code = cache::FindShader(hash, s.check);
         if (s.code) {
             s.state = 2;
             s.text = {};
@@ -1789,7 +1804,8 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC D3D12Backend::FullScreenPipelineDesc(ID3DBlob
 }
 
 ID3D12PipelineState* D3D12Backend::EnsureBlitPipeline(DXGI_FORMAT rtv, bool over, uint32_t samples) {
-    auto& pso = blit_psos_[uint64_t(rtv) | uint64_t(over) << 32 | uint64_t(samples) << 40];
+    uint64_t key = uint64_t(rtv) | uint64_t(over) << 32 | uint64_t(samples) << 40;
+    auto& pso = blit_psos_[key];
     if (pso) return pso.Get();
     ID3DBlob* vs = Compile(kBlitHlsl, "vs", "vs_5_0");
     ID3DBlob* ps = Compile(kBlitHlsl, "psmain", "ps_5_0");
@@ -1804,7 +1820,7 @@ ID3D12PipelineState* D3D12Backend::EnsureBlitPipeline(DXGI_FORMAT rtv, bool over
         blend.DestBlendAlpha = D3D12_BLEND_ONE;
         blend.BlendOp = blend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
     }
-    dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso));
+    pso = BuildPipeline(d, key);
     return pso.Get();
 }
 
@@ -1812,7 +1828,8 @@ ID3D12PipelineState* D3D12Backend::EnsureBlitPipeline(DXGI_FORMAT rtv, bool over
 ID3D12PipelineState* D3D12Backend::EnsurePostPipeline(const char* entry, const PostTarget& out,
                                                       const PostOptions& o) {
     uint64_t seed = uint64_t(out.fmt) << 1 | (o.blend >= 0 ? 1 : 0) | uint64_t(out.samples) << 40;
-    auto& pso = blit_psos_[Hash(entry, std::strlen(entry), seed)];
+    uint64_t key = Hash(entry, std::strlen(entry), seed);
+    auto& pso = blit_psos_[key];
     if (pso) return pso.Get();
     ID3DBlob* vs = Compile(o.hlsl, o.vs_entry, "vs_5_0");
     ID3DBlob* ps = Compile(o.hlsl, entry, "ps_5_0");
@@ -1825,7 +1842,7 @@ ID3D12PipelineState* D3D12Backend::EnsurePostPipeline(const char* entry, const P
         b.DestBlend = b.DestBlendAlpha = D3D12_BLEND_INV_BLEND_FACTOR;
         b.BlendOp = b.BlendOpAlpha = D3D12_BLEND_OP_ADD;
     }
-    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return nullptr;
+    pso = BuildPipeline(d, key);
     return pso.Get();
 }
 
@@ -2328,7 +2345,8 @@ bool D3D12Backend::DrawSoftShadowPass(const SoftShadowFrame& f, const SoftShadow
 // the pass's pipeline, kept in blit_psos_; ms: the depth it reads is multisampled
 ID3D12PipelineState* D3D12Backend::EnsureSoftShadowPipeline(const SoftShadowPass& pass, bool ms) {
     uint64_t seed = uint64_t(pass.out) | uint64_t(ms) << 32 | uint64_t(pass.samples) << 40;
-    auto& pso = blit_psos_[Hash(pass.entry, std::strlen(pass.entry), seed)];
+    uint64_t key = Hash(pass.entry, std::strlen(pass.entry), seed);
+    auto& pso = blit_psos_[key];
     if (pso) return pso.Get();
     std::string text = std::string(ms ? "#define MS 1\n" : "") + kSoftShadowHlsl;
     ID3DBlob* vs = Compile(text, "vs", "vs_5_0");
@@ -2337,7 +2355,7 @@ ID3D12PipelineState* D3D12Backend::EnsureSoftShadowPipeline(const SoftShadowPass
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d = FullScreenPipelineDesc(vs, ps, pass.out, pass.samples);
     // onto the scene: its colour stays
     if (pass.alpha_only) d.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALPHA;
-    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return nullptr;
+    pso = BuildPipeline(d, key);
     return pso.Get();
 }
 
@@ -2392,7 +2410,8 @@ bool D3D12Backend::EnsureAoTargets(uint32_t w, uint32_t h) {
 // the pass's pipeline, kept in blit_psos_; ms: the depth it reads is multisampled
 ID3D12PipelineState* D3D12Backend::EnsureAoPipeline(const AoPass& pass, bool ms) {
     uint64_t seed = uint64_t(pass.out) | uint64_t(ms) << 32 | uint64_t(pass.samples) << 40;
-    auto& pso = blit_psos_[Hash(pass.entry, std::strlen(pass.entry), seed)];
+    uint64_t key = Hash(pass.entry, std::strlen(pass.entry), seed);
+    auto& pso = blit_psos_[key];
     if (pso) return pso.Get();
     std::string text = std::string(ms ? "#define MS 1\n" : "") + kAoHlsl;
     ID3DBlob* vs = Compile(text, "vs", "vs_5_0");
@@ -2408,7 +2427,7 @@ ID3D12PipelineState* D3D12Backend::EnsureAoPipeline(const AoPass& pass, bool ms)
         b.DestBlendAlpha = D3D12_BLEND_ONE;
         b.BlendOp = b.BlendOpAlpha = D3D12_BLEND_OP_ADD;
     }
-    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) return nullptr;
+    pso = BuildPipeline(d, key);
     return pso.Get();
 }
 
@@ -2503,6 +2522,43 @@ void D3D12Backend::Occlusion(const State& s, const float p[kOcclusionParams]) {
     DrawOcclusionPasses(*rt, *ds, f);
 }
 
+void D3D12Backend::DeliverBuilt(uint64_t h, ComPtr<ID3D12PipelineState> pso) {
+    std::lock_guard lock(built_lock_);
+    built_.emplace_back(h, std::move(pso));
+    built_ready_.store(true, std::memory_order_release);
+}
+
+void D3D12Backend::RememberPipeline(const PsoKey& k) {
+    WarmKey w{k, 0, 0};
+    {
+        std::lock_guard lock(shader_lock_);
+        w.vs_check = shaders_[k.vs].check;
+        w.ps_check = shaders_[k.ps].check;
+    }
+    cache::AddPipelineKey(&w, sizeof(w));
+}
+
+// every start is a new process: the pipelines drawn in earlier runs are built on the build threads now, so their
+// first draw finds them made instead of loading or compiling them on the render thread
+void D3D12Backend::WarmPipelines() {
+    std::vector<std::vector<uint8_t>> keys = cache::TakePipelineKeys();
+    for (const auto& bytes : keys) {
+        if (bytes.size() != sizeof(WarmKey)) continue;
+        WarmKey w;
+        std::memcpy(&w, bytes.data(), sizeof(w));
+        cache::Post([this, w] {
+            ComPtr<ID3DBlob> vs = cache::FindShader(w.key.vs, w.vs_check);
+            ComPtr<ID3DBlob> ps = cache::FindShader(w.key.ps, w.ps_check);
+            if (!vs || !ps) return;
+            uint64_t h = Hash(&w.key, sizeof(w.key));
+            bool unused = false;
+            ComPtr<ID3D12PipelineState> pso = CreatePipeline(w.key, h, vs.Get(), ps.Get(), true, unused);
+            if (pso) DeliverBuilt(h, std::move(pso));
+        });
+    }
+    LOGI("d3d12: %zu pipelines from earlier runs being built", keys.size());
+}
+
 void D3D12Backend::TakeBuilt() {
     std::lock_guard lock(built_lock_);
     built_ready_ = false;
@@ -2532,18 +2588,19 @@ ID3D12PipelineState* D3D12Backend::EnsurePipeline(const PsoKey& k, bool wait) {
     if (pending) {
         building_.insert(h);
         skipped_frame_ = true;
+        // ahead of the warm up: this one is missing from the frame now
         cache::Post([this, k, h] {
             bool unused = false;
             ID3DBlob* vs = EnsureShaderCode(k.vs, true, unused);
             ID3DBlob* ps = EnsureShaderCode(k.ps, true, unused);
             ComPtr<ID3D12PipelineState> pso;
             if (vs && ps) pso = CreatePipeline(k, h, vs, ps, true, unused);
-            std::lock_guard lock(built_lock_);
-            built_.emplace_back(h, std::move(pso));
-            built_ready_.store(true, std::memory_order_release);
-        });
+            if (pso) RememberPipeline(k);
+            DeliverBuilt(h, std::move(pso));
+        }, true);
         return nullptr;
     }
+    if (pso) RememberPipeline(k);
     return (psos_[h] = std::move(pso)).Get();
 }
 
@@ -2612,6 +2669,28 @@ void D3D12Backend::FillPipelineDesc(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps,
     d.SampleDesc.Count = std::max(k.msaa, 1u);
 }
 
+// the pipeline library's name for d, kept by the caller under key
+uint64_t PipelineName(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d, uint64_t key) {
+    // the bytecode's own checksum: another compiler's output for the same source is another pipeline
+    auto sum = [](const D3D12_SHADER_BYTECODE& b) {
+        return Hash(static_cast<const uint8_t*>(b.pShaderBytecode) + 4, 16);
+    };
+    return Hash(&key, sizeof(key), sum(d.VS) ^ sum(d.PS) * 3);
+}
+
+// from the library, else from the driver (any thread)
+ComPtr<ID3D12PipelineState> D3D12Backend::BuildPipeline(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d, uint64_t key) {
+    uint64_t name = PipelineName(d, key);
+    ComPtr<ID3D12PipelineState> pso = cache::LoadPipeline(name, d);
+    if (pso) return pso;
+    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) {
+        LOGE("d3d12: pipeline creation failed");
+        return nullptr;
+    }
+    cache::StorePipeline(name, pso.Get());
+    return pso;
+}
+
 // from the library, else from the driver when compile is set (any thread)
 ComPtr<ID3D12PipelineState> D3D12Backend::CreatePipeline(const PsoKey& k, uint64_t h, ID3DBlob* vs, ID3DBlob* ps,
                                                          bool compile, bool& pending) {
@@ -2620,22 +2699,9 @@ ComPtr<ID3D12PipelineState> D3D12Backend::CreatePipeline(const PsoKey& k, uint64
     D3D12_GRAPHICS_PIPELINE_STATE_DESC d{};
     d.InputLayout = {el, n};
     FillPipelineDesc(k, vs, ps, d);
-    // the bytecode's own checksum: another compiler's output for the same source is another pipeline
-    auto sum = [](ID3DBlob* b) { return Hash(static_cast<const uint8_t*>(b->GetBufferPointer()) + 4, 16); };
-    uint64_t name = Hash(&h, sizeof(h), sum(vs) ^ sum(ps) * 3);
-    ComPtr<ID3D12PipelineState> pso = cache::LoadPipeline(name, d);
-    if (pso) {
-        return pso;
-    }
-    if (!compile) {
-        pending = true;
-        return nullptr;
-    }
-    if (FAILED(dev_->CreateGraphicsPipelineState(&d, IID_PPV_ARGS(&pso)))) {
-        LOGE("d3d12: pipeline creation failed");
-        return nullptr;
-    }
-    cache::StorePipeline(name, pso.Get());
+    if (compile) return BuildPipeline(d, h);
+    ComPtr<ID3D12PipelineState> pso = cache::LoadPipeline(PipelineName(d, h), d);
+    if (!pso) pending = true;
     return pso;
 }
 
