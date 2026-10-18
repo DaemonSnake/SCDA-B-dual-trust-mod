@@ -66,8 +66,6 @@ Settings& Get() {
 
 void Load() {
     Settings& s = Get();
-    // stands until a saved scda.toml names one
-    s.language = SystemLanguage();
     toml::table t;
     try {
         t = toml::parse_file(File().string());
@@ -112,7 +110,8 @@ void Load() {
     s.skip_intros = t["skip_intros"].value_or(s.skip_intros);
     s.pause_on_focus_loss = t["pause_on_focus_loss"].value_or(s.pause_on_focus_loss);
     std::string language = t["language"].value_or(s.language);
-    if (std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages)) s.language = language;
+    bool known = std::find(std::begin(kLanguages), std::end(kLanguages), language) != std::end(kLanguages);
+    if (known || language == "auto") s.language = language;
     s.audio_output = std::min(t["audio_output"].value_or(s.audio_output), audio::kOutputMono);
     audio::SetOutputMode(s.audio_output);
     s.coop_tick_rate = t["coop_tick_rate"].value_or(s.coop_tick_rate);
@@ -206,8 +205,10 @@ void LogSettings() {
         if (!line.empty()) LOGR("  %s", line.c_str());
 }
 
+std::string ResolveLanguage(const std::string& setting) { return setting == "auto" ? SystemLanguage() : setting; }
+
 const std::string& BootLanguage() {
-    static const std::string language = Get().language;
+    static const std::string language = ResolveLanguage(Get().language);
     return language;
 }
 

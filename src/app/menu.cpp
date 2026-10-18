@@ -54,7 +54,8 @@ constexpr uint32_t kVersusFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, kVersusMax
 // co-op steps last whole ms, so each rate is the top of its step: 1000/rate rounds down to the same period
 constexpr uint32_t kTickRates[] = {0, 30, 50, 60, 100, 111, 125, 142};
 constexpr uint32_t kDelayFloors[] = {0, 10, 20, 30, 40, 50};
-const char* const kLanguageNames[] = {"ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};  // as kLanguages
+// "auto" then kLanguages
+const char* const kLanguageNames[] = {"AUTOMATIC", "ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH"};
 // player 2 may be empty from its own list, player 1 never (SetPlayer)
 constexpr Port kPlayer1Choices[] = {{true, 0},  {true, 1},  {true, 2},  {true, 3}, {true, -1},
                                     {false, 0}, {false, 1}, {false, 2}, {false, 3}};
@@ -570,14 +571,15 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
 void StepGeneralRow(int id, int step, Settings& s, char (&text)[64]) {
     switch (id) {
         case kLanguage: {
-            int count = int(std::size(kLanguages));
+            int count = int(std::size(kLanguageNames));
             int i = 0;
-            while (i < count - 1 && s.language != kLanguages[i]) i++;
+            while (i < count - 1 && s.language != (i ? kLanguages[i - 1] : "auto")) i++;
             if (step) {
                 i = StepIndex(i, step, count);
-                s.language = kLanguages[i];
+                s.language = i ? kLanguages[i - 1] : "auto";
             }
-            std::snprintf(text, sizeof(text), s.language == BootLanguage() ? "%s" : "%s (RESTART)", kLanguageNames[i]);
+            bool restart = ResolveLanguage(s.language) != BootLanguage();
+            std::snprintf(text, sizeof(text), restart ? "%s (RESTART)" : "%s", kLanguageNames[i]);
             break;
         }
         case kAudioOutput:

@@ -61,7 +61,7 @@ struct Settings {
     float sniper_sensitivity = 1.0f;
     bool skip_intros = false;        // logos video and rating screen at boot
     bool pause_on_focus_loss = true;  // the game and its sound stop while the window is in the background
-    std::string language = "int";    // one of kLanguages
+    std::string language = "auto";   // "auto" (the Windows display language) or one of kLanguages
     uint32_t audio_output = 0;       // audio::kOutputAuto, kOutputStereo, kOutputSurround or kOutputMono
     uint32_t coop_tick_rate = 60;          // co-op step frequency, Hz; 0 is the game's 22
     uint32_t coop_input_delay_floor = 20;  // ms, the game's 50
@@ -79,7 +79,9 @@ void Save();
 void LogSettings();  // every setting into the log, as scda.toml has them
 void LogSystem();    // the machine and the settings into the log, at a run's start
 void ApplyDisplay();  // any thread
-// the language setting as this run started: the console's language setting, which the game reads at boot
+// one of kLanguages for a language setting: "auto" is the Windows display language, English when the game lacks it
+std::string ResolveLanguage(const std::string& setting);
+// the language setting as this run started, resolved: the console's language setting, which the game reads at boot
 const std::string& BootLanguage();
 struct Mode {
     uint32_t width, height;
