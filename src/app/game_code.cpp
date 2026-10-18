@@ -242,13 +242,14 @@ public:
         return pi.hProcess;
     }
 
-    // closes the process; true when it exited cleanly
-    static bool Succeeded(HANDLE process) {
+    // closes the process; 0 when it exited cleanly
+    static DWORD ExitCode(HANDLE process) {
         DWORD code = 1;
         GetExitCodeProcess(process, &code);
         CloseHandle(process);
-        return code == 0;
+        return code;
     }
+    static bool Succeeded(HANDLE process) { return ExitCode(process) == 0; }
 
     // false when cancelled, which ends every process of the build
     bool WaitAll(std::vector<HANDLE>& processes) {
@@ -282,10 +283,13 @@ bool Translate(std::vector<Target>& targets, Processes& run) {
     }
     if (!run.WaitAll(processes)) return false;
     bool ok = true;
+    constexpr DWORD kDllNotFound = 0xC0000135;  // STATUS_DLL_NOT_FOUND, the process never started
+    const wchar_t* missing_runtime = L"xbe_recomp.exe needs msvcp140.dll and vcruntime140.dll beside it in the compiler folder. Extract the whole release again, then start the game.";
     for (size_t i = 0; i < processes.size(); i++) {
-        if (Processes::Succeeded(processes[i])) continue;
+        DWORD code = Processes::ExitCode(processes[i]);
         std::string xbe = targets[i].image->xbe;
-        ok = RecordFailure(L"Translating " + std::wstring(xbe.begin(), xbe.end()) + L" failed.");
+        if (code == kDllNotFound) ok = RecordFailure(missing_runtime);
+        else if (code) ok = RecordFailure(L"Translating " + std::wstring(xbe.begin(), xbe.end()) + L" failed.");
     }
     return ok;
 }
