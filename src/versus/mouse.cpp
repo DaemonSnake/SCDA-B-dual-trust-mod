@@ -228,6 +228,11 @@ constexpr int16_t kNoTrackIncreaseTo = -3;
 constexpr uint32_t kPageSetFocus = 0x25C420;
 constexpr uint32_t kListHitTest = 0x25DF00;
 constexpr uint32_t kListSelect = 0x25EE00;
+// instance thiscall(event): runs its listeners' key release slot, as the list's own release handler 0x25F4A0 does
+constexpr uint32_t kListenersKeyUp = 0x25D3D0;
+// Magma key codes a list steps on
+constexpr uint32_t kMagmaUp = 0x26;
+constexpr uint32_t kMagmaDown = 0x28;
 // pages whose input is not a menu's
 constexpr uint32_t kHudPages[] = {game::magma::Id("p_hudatt"), game::magma::Id("p_interatt")};
 constexpr uint32_t kPopUp = game::magma::Id("p_popupmessageauto");
@@ -446,13 +451,21 @@ void StepSlider(Ui& u, uint32_t hovered, uint32_t widget, uint32_t at) {
     }
 }
 
+// Pages that act on the key's release (Visit a map's picture and description) are told of it as the list would.
+void ListKeyUp(Ui& u, uint32_t instance, uint32_t key) {
+    W32(u.scratch + kScratchEvent, key);
+    W32(u.scratch + kScratchEventPoint, 0);
+    Call(u, kListenersKeyUp, instance, {u.scratch + kScratchEvent});
+}
+
 // The hovered item is reached by D-pad steps, as on the pad: the page acts on the step (the session page's map and
 // game mode lists change its picture and briefing), not on a selection set from outside. A step that does not move
 // the list leaves the rest to a direct select.
 void ListClick(Ui& u, uint32_t hovered, uint32_t widget, bool clicked) {
     int32_t hit = ListItem(u, widget);
     int32_t steps = int32_t((R32(widget + kListItemsEnd) - R32(widget + kListItemsBegin)) / kListItemSize);
-    for (int32_t at = int32_t(R32(widget + kListSelection)); hit >= 0 && at != hit && steps-- > 0;) {
+    int32_t from = int32_t(R32(widget + kListSelection));
+    for (int32_t at = from; hit >= 0 && at != hit && steps-- > 0;) {
         Tap(u, hit < at ? kKeyUp : kKeyDown);
         int32_t now = int32_t(R32(widget + kListSelection));
         if (now == at) {
@@ -462,6 +475,7 @@ void ListClick(Ui& u, uint32_t hovered, uint32_t widget, bool clicked) {
         }
         at = now;
     }
+    if (hit >= 0 && hit != from) ListKeyUp(u, hovered, hit < from ? kMagmaUp : kMagmaDown);
     if (!clicked) return;
     if (R32(widget + kListUpArrow) && Inside(u, widget + kListUpRect)) Tap(u, kKeyUp);
     else if (R32(widget + kListDownArrow) && Inside(u, widget + kListDownRect)) Tap(u, kKeyDown);
