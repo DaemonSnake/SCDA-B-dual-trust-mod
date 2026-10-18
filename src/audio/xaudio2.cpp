@@ -22,7 +22,9 @@ namespace audio {
 
 namespace {
 
+// the console's stereo downmix in the DOLBY image: centre and back pair at -3 dB, no sub
 constexpr float kCentreFold = 0.707f;
+constexpr float kBackFold = 0.707f;
 constexpr DWORD kFront = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER | SPEAKER_LOW_FREQUENCY;
 constexpr DWORD kBack = SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
 constexpr DWORD kSide = SPEAKER_SIDE_LEFT | SPEAKER_SIDE_RIGHT;
@@ -94,11 +96,11 @@ std::vector<float> SurroundMatrix(DWORD mask, uint32_t outputs) {
     return m;
 }
 
-// L = FL + kCentreFold C + BL and R = FR + kCentreFold C + BR without the sub, on the first two outputs.
-// Mono, or a mono master, hears the average of the two.
+// L = FL + kCentreFold C + kBackFold BL and R = FR + kCentreFold C + kBackFold BR without the sub, on the first two
+// outputs. Mono, or a mono master, hears the average of the two, as the console's mono downmix.
 std::vector<float> FoldToStereo(uint32_t outputs, bool mono) {
-    static const float kLeft[kChannels] = {1, 0, kCentreFold, 0, 1, 0};
-    static const float kRight[kChannels] = {0, 1, kCentreFold, 0, 0, 1};
+    static const float kLeft[kChannels] = {1, 0, kCentreFold, 0, kBackFold, 0};
+    static const float kRight[kChannels] = {0, 1, kCentreFold, 0, 0, kBackFold};
     std::vector<float> m(outputs * kChannels, 0.0f);
     bool average = mono || outputs == 1;
     for (uint32_t s = 0; s < kChannels; s++) {
