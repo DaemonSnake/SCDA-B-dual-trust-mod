@@ -630,6 +630,8 @@ X86_FUNC(sub_002BE990) {
 
 namespace game {
 uint32_t DrawingPage() { return g_drawing; }
+// drawn outside the Magma pages, 4:3 against the screen's left side, the canvas flushed after
+void DrawLeft(X86Context& ctx, uint8_t* base, void (*draw)(X86Context&, uint8_t*)) { Draw(ctx, base, Mode::Left, draw); }
 }
 
 // Magma element draw, children come back through here: the first listed or placed element decides. On menu

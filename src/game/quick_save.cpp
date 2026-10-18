@@ -22,6 +22,10 @@ constexpr uint32_t kSlotList = 0x50, kListSelection = 0x9C, kMode = 0x70, kModeL
 constexpr uint32_t kSave = 0x18A40D;  // thiscall (slot, 0, 0)
 constexpr uint32_t kLoad = 0x18A185;  // thiscall (bool confirmed), the selected row of the slot list
 constexpr uint32_t kQuickSlot = 0;
+// the save picture: the save writes [0x6500FC]'s captured image (vtable +0x2C) to z:\savegameimage.tmp and copies it
+// into the slot's image file, so a save with nothing captured keeps the slot's old picture. The menus' save event
+// (NotifyMenu 0x2F, 0x182408) captures the frame first with vtable +0x24 (width, height, -1, -1), as here.
+constexpr uint32_t kCapturer = 0x6500FC, kCapture = 0x24, kCaptureSize = 0x100;
 
 uint32_t Call(X86Context& ctx, uint32_t fn, uint32_t self, std::initializer_list<uint32_t> args) {
     ctx.ecx = self;
@@ -52,6 +56,8 @@ void QuickSaveKeys(X86Context& ctx, uint32_t viewport, bool menu) {
         }
         LOGI("quicksave: saving");
         W32(loadsave + kMode, 0);
+        if (uint32_t capturer = R32(kCapturer))
+            Call(ctx, R32(R32(capturer) + kCapture), capturer, {kCaptureSize, kCaptureSize, ~0u, ~0u});
         Call(ctx, kSave, loadsave, {kQuickSlot, 0, 0});
     } else {
         uint32_t list = R32(loadsave + kSlotList);
