@@ -93,8 +93,8 @@ inline Pair StatisticsScore(const std::array<int, 11>& count, unsigned enabled) 
     if (enabled & 8) loss += count[10] * 2;
     if (enabled & 16) loss += count[6];
     // Halve the accumulated KO gain before integer rounding, so two KOs can
-    // still earn one point. Double the loss cap as well as each penalty.
-    return {std::min(gain, 15) / 2 - std::min(loss, 15) * 2, 0};
+    // still earn one point. Combined losses can now reach 60 points.
+    return {std::min(gain, 15) / 2 - std::min(loss, 30) * 2, 0};
 }
 
 // Only a low trust value starts a crisis. A high value for one camp cannot
