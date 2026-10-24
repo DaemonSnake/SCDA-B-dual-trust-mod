@@ -14,6 +14,17 @@ struct Credit {
     Pair requested, effective;
 };
 
+// Experimental balance: inexpensive trust accumulates slowly; losses hit hard.
+// Classify the complete story effect before deferring any discovered penalty.
+// Apply only to new awards, never to effective-credit reversals or loaded state.
+constexpr Pair Rebalance(Pair baseline) {
+    bool free_gain = baseline.nsa >= 0 && baseline.jba >= 0;
+    auto adjust = [free_gain](int value) {
+        return value < 0 ? value * 2 : free_gain ? value / 2 : value;
+    };
+    return {adjust(baseline.nsa), adjust(baseline.jba)};
+}
+
 // Host-owned state. Save sidecars serialize the ledger as well as both values.
 // Store effective changes: reversing a choice at 100 must not manufacture points.
 struct State {
@@ -62,7 +73,7 @@ inline Pair RecordHishamEvidence(State& state, HishamEvidence evidence) {
     if (evidence == HishamEvidence::Exposed) {
         state.Revoke(Key(state, "hishambody"));
         state.Revoke(Key(state, "hisham-proof-accepted"));
-        state.Once(Key(state, "hisham-exposed"), {0, -15});
+        state.Once(Key(state, "hisham-exposed"), Rebalance({0, -15}));
     } else if (!state.Has(Key(state, "hisham-exposed"))) {
         state.Once(Key(state, "hisham-proof-accepted"), {});
     }
@@ -70,7 +81,7 @@ inline Pair RecordHishamEvidence(State& state, HishamEvidence evidence) {
 }
 inline Pair GrantHishamProof(State& state) {
     if (state.Has(Key(state, "hisham-exposed"))) return {};
-    return state.Once(Key(state, "hishambody"), {0, 5});
+    return state.Once(Key(state, "hishambody"), Rebalance({0, 5}));
 }
 
 // Bits correspond to the mission's kill/knockout/seen/alarm/body rule switches.
@@ -81,7 +92,9 @@ inline Pair StatisticsScore(const std::array<int, 11>& count, unsigned enabled) 
     if (enabled & 4) loss += count[7];
     if (enabled & 8) loss += count[10] * 2;
     if (enabled & 16) loss += count[6];
-    return {std::min(gain, 15) - std::min(loss, 15), 0};
+    // Halve the accumulated KO gain before integer rounding, so two KOs can
+    // still earn one point. Double the loss cap as well as each penalty.
+    return {std::min(gain, 15) / 2 - std::min(loss, 15) * 2, 0};
 }
 
 // Only a low trust value starts a crisis. A high value for one camp cannot

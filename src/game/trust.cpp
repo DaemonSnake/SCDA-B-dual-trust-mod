@@ -141,9 +141,9 @@ void Undo(std::string_view id) {
 }
 void FinishMission() {
     // The JBA discovers sabotage at the outcome, rather than when Sam acts covertly.
-    if (state.Has(Key(state, "chipcellphone"))) Award("bomb-discovered", {0, -30});
-    if (state.Has(Key(state, "obj_hqb_p_30"))) Award("nashville-discovered", {0, -15});
-    if (state.Has(Key(state, "obj_hqb_p_31"))) Award("la-discovered", {0, -15});
+    if (state.Has(Key(state, "chipcellphone"))) Award("bomb-discovered", Rebalance({0, -30}));
+    if (state.Has(Key(state, "obj_hqb_p_30"))) Award("nashville-discovered", Rebalance({0, -15}));
+    if (state.Has(Key(state, "obj_hqb_p_31"))) Award("la-discovered", Rebalance({0, -15}));
     // Hisham's successful fake-death branch cancels the body objective itself.
     // Missing completion is not evidence that Emile discovered the rescue.
 }
@@ -208,7 +208,7 @@ void Event(std::string id) {
     }
     if (id == "obj_hqb_p_30" || id == "obj_hqb_p_31") Undo("keepbombs");
     for (auto& r : kRules) if (r.mission == state.mission && r.id == id) {
-        Pair delta{r.nsa, r.jba};
+        Pair delta = Rebalance({r.nsa, r.jba});
         if (id == "chipcellphone" || id == "obj_hqb_p_30" || id == "obj_hqb_p_31") delta.jba = 0;
         Award(id, delta);
         return;
@@ -713,7 +713,8 @@ X86_FUNC(sub_001BB4F7) {
         if (!active || !player || rule < 1 || rule > 5) return;
         count = StatisticsCounts(player);
     }
-    int values[] = {-count[2] * 2 - count[5] * 5, count[0] - count[3], -count[7], -count[10] * 2, -count[6]};
+    int values[] = {-count[2] * 4 - count[5] * 10, count[0] / 2 - count[3] * 2,
+                    -count[7] * 2, -count[10] * 4, -count[6] * 2};
     char text[64]; std::snprintf(text, sizeof(text), "NSA %+d", values[rule - 1]);
     CellText(ctx, out, std::u16string(text, text + std::strlen(text)));
 }
