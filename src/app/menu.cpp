@@ -23,6 +23,7 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "core/mod_events.h"
 #include "app/panel_colors.h"
 #include "app/translations.h"
 #include "audio/audio.h"
@@ -1061,6 +1062,7 @@ void DrawUi() {
     io.KeyRepeatRate = 0.1f;  // held arrows step ten times a second, ImGui's twenty is too fast for settings
     // scale the font with the output height
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 720.0f);
+    if (mod_events::draw_ui) mod_events::draw_ui();
     if (ConsoleOpen()) DrawConsole();
     if (MenuOpen()) {
         PollCapture();

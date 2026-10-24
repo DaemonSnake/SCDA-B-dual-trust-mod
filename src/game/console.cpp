@@ -1,4 +1,5 @@
 #include "game/console.h"
+#include "game/trust.h"
 
 #include <algorithm>
 #include <mutex>
@@ -88,6 +89,8 @@ void RunCommands(X86Context& ctx, uint32_t engine, uint32_t viewport) {
     }
     uint32_t esp = ctx.esp;
     for (const Command& command : commands) {
+        std::string response;
+        if (trust::Command(command.text, response)) { Print(response); continue; }
         // the wide string goes below the stack pointer, the call below it
         uint32_t text = (esp - 0x40 - uint32_t(kMaxChars + 1) * 2) & ~0xFu;
         size_t n = std::min(command.text.size(), kMaxChars);

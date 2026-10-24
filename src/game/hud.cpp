@@ -13,6 +13,7 @@
 
 #include "app/app.h"
 #include "game/magma.h"
+#include "game/trust.h"
 #include "game/loading.h"
 #include "gpu/backend.h"
 #include "xdk/d3d8.h"
@@ -615,6 +616,7 @@ X86_FUNC(sub_002BE990) {
             return;
         }
     }
+    game::trust::Page(id);
     const Page* saved = g_page;
     uint32_t drawing = std::exchange(g_drawing, ctx.ecx);
     g_page = nullptr;
@@ -639,6 +641,7 @@ void DrawLeft(X86Context& ctx, uint8_t* base, void (*draw)(X86Context&, uint8_t*
 X86_EXTERN_FUNC(__imp__sub_002C64E0);
 X86_FUNC(sub_002C64E0) {
     uint32_t instance = ctx.ecx;
+    if ((G<uint8_t>(instance + 0x18) & 1) && game::trust::Element(R32(instance + 4))) { ctx.esp += 4; return; }
     if (game::OptionsElement(ctx, base, instance)) return;
     if (game::WordingElement(ctx, base, instance)) return;
     if (game::HintElement(ctx, base, instance)) return;
@@ -687,6 +690,7 @@ X86_FUNC(sub_002303E8) {
     g_offset = g_hud_seen ? kNone : kCentre;
     g_in_level = g_hud_seen;
     g_hud_seen = false;
+    game::trust::EndFrame();
 }
 
 // ShowScreen's fade draw (thiscall(alpha, blend, r, g, b, 1), ret 0x18): one quad, stage 0 the picture, stage 1 the

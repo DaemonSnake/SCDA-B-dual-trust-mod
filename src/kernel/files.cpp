@@ -9,6 +9,7 @@
 #include "kernel/disc.h"
 #include "kernel/kernel.h"
 #include "kernel/exports.h"
+#include "core/mod_events.h"
 
 namespace fs = std::filesystem;
 
@@ -78,9 +79,13 @@ struct File : Object {
     size_t next = 0;
     bool listed = false;
     bool delete_on_close = false;
+    bool written = false;
+    uint64_t read_bytes = 0;
     File() : Object(ObjType::File) {}
     ~File() override {
         if (fp) std::fclose(fp);
+        if (!dir && !delete_on_close && !host.empty() && mod_events::file_closed)
+            mod_events::file_closed(host, written, read_bytes);
         if (delete_on_close) {
             std::error_code ec;
             fs::remove(host, ec);
@@ -455,6 +460,7 @@ KERNEL_EXPORT(219, NtReadFile, 8) {
         std::fseek(f->fp, long(pos), SEEK_SET);
         n = len ? std::fread(HostPtr(buf), 1, len, f->fp) : 0;
     }
+    f->read_bytes += n;
     f->pos = pos + n;
     if (len && !n) {
         IoStatus(iosb, kEndOfFile, 0);
@@ -477,6 +483,7 @@ KERNEL_EXPORT(236, NtWriteFile, 8) {
     }
     std::fseek(f->fp, long(pos), SEEK_SET);
     size_t n = std::fwrite(HostPtr(buf), 1, len, f->fp);
+    f->written |= n > 0;
     f->pos = pos + n;
     IoStatus(iosb, kSuccess, uint32_t(n));
     Complete(event, apc, apc_ctx, iosb);

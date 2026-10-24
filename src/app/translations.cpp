@@ -17,6 +17,13 @@ struct Entry {
     std::u16string_view text[4];
 };
 constexpr Entry kEntries[] = {
+    {"Kills (enemies/civilians)", {u"Morts (ennemis/civils)", u"Tote (Gegner/Zivilisten)", u"Morti (nemici/civili)", u"Muertes (enemigos/civiles)"}},
+    {"Knockouts (enemies/civilians)", {u"Assommés (ennemis/civils)", u"Bewusstlos (Gegner/Zivilisten)", u"Storditi (nemici/civili)", u"Inconscientes (enemigos/civiles)"}},
+    {"NSA and JBA trust change independently from 0 to 100. Each action can affect one camp or both.",
+     {u"Les confiances de la NSA et de la JBA évoluent indépendamment, de 0 à 100. Une action peut affecter un seul camp ou les deux.",
+      u"NSA- und JBA-Vertrauen ändern sich unabhängig von 0 bis 100. Eine Handlung kann eine oder beide Seiten beeinflussen.",
+      u"La fiducia di NSA e JBA cambia in modo indipendente, da 0 a 100. Un'azione può influenzare una fazione o entrambe.",
+      u"La confianza de NSA y JBA cambia de forma independiente, de 0 a 100. Una acción puede afectar a un bando o a ambos."}},
     // options menu pages and the RECOMP SETTINGS sections
     {"RECOMP SETTINGS", {u"Paramètres Recomp", u"Recomp-Einstellungen", u"Impostazioni Recomp", u"Configuración de Recomp"}},
     {"MOUSE AND KEYBOARD", {u"Souris et clavier", u"Maus und Tastatur", u"Mouse e tastiera", u"Ratón y teclado"}},

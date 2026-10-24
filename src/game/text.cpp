@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "app/translations.h"
+#include "game/trust.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -27,6 +28,7 @@ struct Text {
     std::u16string_view key, text, section;
 };
 constexpr Text kTexts[] = {
+    {u"TrustLegend", u"NSA and JBA trust change independently from 0 to 100. Each action can affect one camp or both."},
     {u"MainTitleLan", u"LAN"},
     {u"SaveWarning", u"Please don't close the game or turn off your PC."},
     {u"ProfileErrorCreateMsg", u"Your PC doesn't have enough free storage to save a profile."},
@@ -150,6 +152,7 @@ X86_FUNC(sub_00070FC9) {
     for (auto& t : kTexts)
         if (Equals(key, t.key) && (t.section.empty() || Equals(section, t.section))) found = &t;
     __imp__sub_00070FC9(ctx, base);
+    game::trust::Localized(section, key);
     if (!found || !ctx.eax) return;
     std::u16string_view text = found->text;
     if (const char16_t* local = app::Translation(std::string(text.begin(), text.end()))) text = local;

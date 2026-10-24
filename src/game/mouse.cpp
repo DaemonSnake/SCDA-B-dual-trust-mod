@@ -14,6 +14,7 @@
 #include "app/app.h"
 #include "core/input.h"
 #include "game/console.h"
+#include "game/trust.h"
 #include "game/magma.h"
 #include "xdk/hle.h"
 
@@ -365,6 +366,7 @@ X86_FUNC(sub_0004B525) {
     if (input::TakeEvent(input::KeyEvent::Reload) && !menu) game::QueueCommand("Reload", game::Route::Player);
     // exec Interact calls ProcessInteract straight, past the interaction list: s_Carry's puts the body down
     if (input::TakeEvent(input::KeyEvent::DropBody) && !menu) game::QueueCommand("Interact", game::Route::Player);
+    game::trust::Tick(ctx, viewport);
     game::RunCommands(ctx, engine, viewport);
     ctx.esp = esp;
 }

@@ -135,6 +135,9 @@ function(scda_image target xbe config partitions game_dir)
     target_compile_options(${target}_code PRIVATE -fms-compatibility-version=19.40 -O2 -fno-strict-aliasing -nostdinc
         -nostdinc++ -w)
     target_link_libraries(${target}_code PRIVATE ${target})
+    # A host-only edit can leave the import library unchanged. Relink the DLL
+    # after that edit too, matching PrepareGameCode's executable timestamp check.
+    set_property(TARGET ${target}_code APPEND PROPERTY LINK_DEPENDS $<TARGET_FILE:${target}>)
     target_link_options(${target}_code PRIVATE -fuse-ld=lld -Wl,/noentry,/nodefaultlib,/opt:noicf
         -Wl,/def:${GEN}/exports.def)
     # a stamp from an earlier build on the executable's first start would outrank this DLL

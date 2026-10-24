@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "kernel/kernel.h"
+#include "core/mod_events.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -170,6 +171,7 @@ const char* ImageExe(std::string xbe_path) {
 }
 
 void Relaunch(const char* exe) {
+    if (mod_events::relaunch) mod_events::relaunch();
     logx::Flush();
 #ifdef _WIN32
     wchar_t self[MAX_PATH];
