@@ -387,7 +387,10 @@ void DrawUi() {
         if (mode == 1 && !delta) continue;
         bool show_delta = mode == 3 ? review_ready && (i ? review_delta.jba : review_delta.nsa) != 0 : popup && delta != 0;
         int change = mode == 3 ? (i ? review_delta.jba : review_delta.nsa) : delta;
-        float age = popup && change == delta ? std::chrono::duration<float>(std::chrono::steady_clock::now() - popup_changed).count() : -1.f;
+        // A summary is a settled forecast. A coincident gameplay notification
+        // must not animate it on that notification's clock, then snap on expiry.
+        float age = mode != 3 && popup && change == delta
+            ? std::chrono::duration<float>(std::chrono::steady_clock::now() - popup_changed).count() : -1.f;
         float inset = mode == 1 ? 0 : 8 * scale;
         ImVec2 start{pos.x + inset, pos.y + (mode == 1 ? row * 68 : 18 + row * 76) * scale};
         FactionRow(d, start, width - inset * 2, (mode == 1 ? 60 : 64) * scale,
