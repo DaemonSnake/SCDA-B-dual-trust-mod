@@ -323,17 +323,24 @@ void FactionRow(ImDrawList* d, ImVec2 p, float width, float height, float scale,
     progress = progress * progress * (3 - 2 * progress);
     float previous = float(std::clamp(value - delta, 0, 100));
     float animated = show_delta ? previous + (value - previous) * progress : float(value);
+    // Losses leave the new ivory fill fixed; only the removed red tail retracts.
+    float fill = show_delta && delta < 0 ? float(value) : animated;
+    auto edge = [&](float score) {
+        if (score <= 0) return left;
+        int cell = std::min(cells - 1, int(std::ceil(score / 5.f)) - 1);
+        return left + cell * pitch + (pitch - 2) * std::clamp(score / 5.f - cell, 0.f, 1.f);
+    };
     ImU32 bright = value <= 20 ? IM_COL32(210, 140, 111, 255) : IM_COL32(232, 233, 184, 255);
     ImU32 dark = value <= 20 ? IM_COL32(113, 57, 43, 255) : IM_COL32(115, 124, 77, 255);
     for (int i = 0; i < cells; ++i) {
         float x = left + i * pitch;
         d->AddRectFilledMultiColor(point(x, top), point(x + pitch - 2, bottom),
             IM_COL32(49, 56, 43, 255), IM_COL32(44, 51, 40, 255), IM_COL32(23, 29, 23, 255), IM_COL32(27, 33, 25, 255));
-        float fraction = std::clamp(animated / 5.f - i, 0.f, 1.f);
+        float fraction = std::clamp(fill / 5.f - i, 0.f, 1.f);
         if (fraction > 0) d->AddRectFilledMultiColor(point(x, top), point(x + (pitch - 2) * fraction, bottom), bright, bright, dark, dark);
         if (show_delta && age >= 0 && age < 2.5f) {
-            float low = std::min(previous, float(value)) / 5.f;
-            float high = std::max(previous, float(value)) / 5.f;
+            float low = (delta < 0 ? float(value) : previous) / 5.f;
+            float high = animated / 5.f;
             float begin = std::clamp(low - i, 0.f, 1.f), end = std::clamp(high - i, 0.f, 1.f);
             if (end > begin) {
                 int alpha = int(150 * std::clamp((2.5f - age) / 1.2f, 0.f, 1.f) * (.8f + .2f * std::sin(age * 10)));
@@ -349,14 +356,11 @@ void FactionRow(ImDrawList* d, ImVec2 p, float width, float height, float scale,
         float fade = age < 0 ? 1.f : std::clamp((5.f - age) / .65f, 0.f, 1.f);
         float lift = age < 0 ? 0 : 3 * std::min(age / 1.4f, 1.f);
         float text_width = ImGui::GetFont()->CalcTextSizeA(24 * scale, 1000, 0, change).x / scale;
-        // Place the label immediately after the higher pre/post-change level.
-        float maximum = std::max(previous, float(value));
-        float center = left + (right - left) * maximum / 100.f + 6 + text_width * .5f;
+        // Use the exact segmented endpoint, including partial cells and gaps.
+        float center = edge(float(value)) + 9 + text_width * .5f;
         float margin = text_width * .5f + 9;
         center = std::clamp(center, left + margin, right - margin);
         d->PushClipRect(point(left, top - 2), point(right, bottom + 2), true);
-        d->AddRectFilled(point(center - text_width * .5f - 7, cy - 14 - lift),
-                         point(center + text_width * .5f + 8, cy + 13 - lift), IM_COL32(8, 13, 8, int(225 * fade)), 2 * scale);
         TrustText(d, point(center - text_width * .5f, cy - 12 - lift), 24 * scale,
             delta < 0 ? IM_COL32(242, 149, 118, int(255 * fade)) : IM_COL32(224, 241, 179, int(255 * fade)), change);
         d->PopClipRect();
