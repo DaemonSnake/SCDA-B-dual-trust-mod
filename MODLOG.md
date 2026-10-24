@@ -254,3 +254,14 @@ scope and verification limits. Updated narrative examples and removed stale
 future-implementation wording. Verified all45 rows against JSON baseline plus
 current runtime policy and checked local links. Companion documents now point
 to this canonical current reference; no runtime code or game saves changed.
+
+## Statistics loss cap raised to60
+
+At user request, changed only the combined statistics negative accumulator limit:
+min(base_loss,30)*2 now allows-60 instead of-30. Enemy/civilian costs remain-4/-10;
+other statistic penalties unchanged, positive cap+7 unchanged, JBA unaffected.
+All loss categories share the one cap; story events are separate. Updated the
+canonical reference formula, companion docs, metadata, README and changelog.
+Regression assertions passed at5/6/7civilian deaths (-50/-60/-60),14/15enemy
+deaths (-56/-60), mixed categories, inactive rules and duplicate suppression.
+Local solo executable/DLL rebuilt; published alpha1 package is unchanged.

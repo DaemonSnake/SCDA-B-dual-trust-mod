@@ -25,7 +25,9 @@ This document keeps the compact baseline-to-active comparison for the balance te
 All enabled mission-statistics rules remain NSA-only. Sum enemy knockouts, cap
 their baseline gain at15, then halve with integer rounding down: two KOs earn
 one point; a single KO earns zero. Maximum gain becomes+7. Double the negative
-contributions and their independent cap: maximum loss becomes-30.
+contributions; the combined loss cap is now-60 (raised from-30).
+Per-person costs stay-4 per enemy and-10 per civilian. All statistics penalties
+share that cap; story penalties remain separate.
 
 | Action | Old NSA effect | New NSA effect |
 | --- | ---: | ---: |
@@ -113,3 +115,7 @@ shared rewards, opposing choices, delayed penalties, statistics and reloads.
   forecast80/80 ->64/80; actual application64/80; repeat unchanged.
 - Native Hisham path:75/75 ->rescue82/75 ->proof82/77 ->exposure82/45.
 - Native emergency recovery:10/80 ->35/80, retaining the existing+25 recovery.
+
+Cap regression checks: five civilians=-50; six/seven civilians=-60; fourteen
+enemies=-56; fifteen enemies=-60. Mixed kill/detection/alarm losses share-60.
+An identical applied statistics event remains deduplicated.

@@ -470,10 +470,15 @@ les coefficients originaux, qui restent décrits séparément ci-dessus.
 Calcul exact : `gain = floor(min(KO_ennemis, 15) / 2)` si la règle KO est
 active ; `perte_base` additionne les anciens coûts activés (2 par ennemi tué,
 5 par civil tué, 1 par civil assommé, 1 par repérage, 2 par alarme et 1 par corps).
-Le delta NSA est **`gain − 2 × min(perte_base, 15)`**. Les deux accumulateurs
-sont plafonnés indépendamment : **gain maximal +7, perte maximale −30**.
+Le delta NSA est **`gain − 2 × min(perte_base, 30)`**. Les deux accumulateurs
+sont plafonnés indépendamment : **gain maximal +7, perte maximale −60**.
 Le score final est borné à 0–100 ; le clamp historique 5–95 ne limite plus la
 prévisualisation. Le JBA reçoit 0 de ce calcul générique.
+Le plafond de perte a été relevé de −30 à **−60** pour que les actions répétées
+imprudentes restent coûteuses : six civils ou quinze ennemis tués atteignent
+ce plafond si la règle de décès est active et sans bonus de KO. Les repérages,
+alarmes et corps découverts partagent ce même plafond ; ce n'est pas un plafond
+supplémentaire par catégorie. Les coûts par victime ne changent pas.
 
 Le tableau du bilan affiche les contributions brutes rééquilibrées par catégorie,
 et les deux jauges montrent le résultat total effectif après plafonds et saturation.

@@ -34,7 +34,7 @@ rewards. Existing checkpoints and old effective credits are not rescaled.
   enemy death −4, civilian death −10, civilian knockout −2,
   seen −2, alarm −4, body found −2. Sum and halve baseline enemy-KO gains
   with integer rounding down. Existing mission activation flags remain
-  authoritative; the independent positive/negative caps are +7 and −30. Scripted named
+  authoritative; the independent positive/negative caps are +7 and −60. Scripted named
   deaths are subtracted from the generic death count. Final NY deaths are exempt;
   the other enabled statistics still apply.
 - A high score in one camp does not imply a crisis in the other. The adapter

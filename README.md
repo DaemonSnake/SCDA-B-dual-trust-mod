@@ -17,7 +17,7 @@ campaign feedback: halve gains on actions with no baseline trust loss (rounding
 down), double penalties, and retain rewards on trade-off actions. For example,
 `+5 / 0` becomes `+2 / 0`, while `-5 / +5` becomes `-10 / +5`.
 Starting scores and emergency recovery rewards are unchanged. Statistics use
-halved accumulated KO gains and doubled losses, with independent +7/-30 caps.
+halved accumulated KO gains and doubled losses, with independent +7/-60 caps.
 The [balance comparison](knowledge/TRUST_BALANCE.md) lists every story rule.
 Existing scores and past rewards are not rewritten. The published
 **v0.1.0-alpha.1 ZIP still uses the original balance**; build the current source

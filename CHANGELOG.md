@@ -4,7 +4,8 @@
 
 - Halve no-loss objective gains with integer rounding down; retain trade-off rewards.
 - Double all new penalties, including deferred discovery losses.
-- Halve accumulated KO gains and double statistics losses; caps become +7/-30.
+- Halve accumulated KO gains and double statistics losses; caps become +7/-60.
+- Raise the combined statistics loss cap from-30 to-60; per-person costs stay unchanged.
 - Keep75/75 starting state, emergency+25 recoveries and existing saved credits.
 - Update mission-review contribution values to match the new policy.
 
