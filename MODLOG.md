@@ -206,3 +206,4 @@ trust-animation-loss-start.png, trust-animation-loss-end.png,
 trust-animation-gain.png. Only the isolated test instance was used.
 Delta position corrected after user feedback: midpoint(previous,current) mapped to track coordinates, with edge clamping to keep the full label inside the bar.
 Delta placement refined per user: label starts just to the right of max(previous,current), with track-edge clamping.
+Mission review presentation correction: summary rows no longer inherit an equal-valued live notification's timer, avoiding fill animation/fade followed by a snap when the five-second popup expires. README review capture will wait until the native rule reveal completes.

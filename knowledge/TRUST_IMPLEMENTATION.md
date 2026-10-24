@@ -159,3 +159,4 @@ Live native fixtures verified JBA75->60 (-15) and NSA75->90 (+15), capturing
 changing fill/highlight frames in the isolated lab.
 Delta labels are anchored to the midpoint of the gained/lost value range, clamped within the track at its edges, rather than centered across the entire meter.
 Final delta placement: immediately after max(previous,current), clamped to remain inside the track when the score is near100.
+Mission-review rows use a static forecast independently of any active gameplay notification, including when the two deltas happen to match. The native rule-table reveal still runs normally.
