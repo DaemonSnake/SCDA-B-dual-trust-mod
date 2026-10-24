@@ -1,5 +1,6 @@
 #include "game/trust.h"
 #include "game/trust_model.h"
+#include "game/trust_consumers.h"
 #include "game/trust_rules.h"
 #include "game/unreal.h"
 #include "game/magma.h"
@@ -32,6 +33,7 @@ bool active = false, loading = false, legacy = false, suppress = false;
 std::string objective, last;
 int seen = 0, visible = 0;
 int opsat_read = -1;
+int last_initial_projection = -1;
 Pair opsat_levels{-1, -1};
 Pair review_value, review_delta;
 bool review_ready = false;
@@ -728,4 +730,98 @@ X86_FUNC(sub_001BB476) {
     std::string_view english = rule == 1 ? "Kills (enemies/civilians)" : "Knockouts (enemies/civilians)";
     if (const char16_t* local = app::Translation(english)) CellText(ctx, out, local);
     else CellText(ctx, out, std::u16string(english.begin(), english.end()));
+}
+
+// Script consumers do not pass through the native OPSAT getter wrapper.
+X86_EXTERN_FUNC(__imp__sub_000680BA);
+X86_FUNC(sub_000680BA) {
+    using namespace game::trust;
+    uint32_t frame = R32(ctx.esp + 4), function = frame ? R32(frame + 4) : 0;
+    uint32_t name = function ? game::unreal::NameOf(function) : 0;
+    bool loadout = name == game::unreal::Name("SetLoadupType");
+    bool initial = name == game::unreal::Name("StartInitialPattern");
+    if (!loadout && !initial) return __imp__sub_000680BA(ctx, base);
+    uint32_t object = ctx.ecx;
+    std::lock_guard guard(lock);
+    uint32_t pc = initial ? object : R32(object + 0xA0);
+    Observe(pc);
+    if (!active || pc != player) return __imp__sub_000680BA(ctx, base);
+    if (initial) {
+        last_initial_projection = CrisisValue(state.value);
+        G<uint8_t>(pc + 0x360) = uint8_t(last_initial_projection);
+    }
+    __imp__sub_000680BA(ctx, base);
+    if (loadout) {
+        uint8_t type = G<uint8_t>(object + 0x2D);
+        // Preserve elite and multiplayer selections made by the original script.
+        if (type == 7 || type == 9 || type == 10)
+            G<uint8_t>(object + 0x2D) = LoadoutType(state.value.nsa, state.value.jba);
+    }
+    G<uint8_t>(pc + 0x360) = uint8_t(state.value.nsa);
+}
+
+X86_EXTERN_FUNC(__imp__sub_000EA5A7);
+X86_FUNC(sub_000EA5A7) {
+    using namespace game::trust;
+    uint32_t manager = ctx.ecx;
+    bool combine = false;
+    {
+        std::lock_guard guard(lock);
+        combine = active && R32(manager + 0xA0) == player &&
+            G<uint8_t>(manager + 0x2D) == 9 && RewardCamps(state.value.nsa, state.value.jba) == 3;
+    }
+    auto incoming = ctx;
+    __imp__sub_000EA5A7(ctx, base);
+    if (!combine) return;
+    auto returned = ctx;
+    std::array<uint8_t, 0x6C> nsa;
+    std::memcpy(nsa.data(), HostPtr(manager + 0x2C), nsa.size());
+    G<uint8_t>(manager + 0x2D) = 10;
+    ctx = incoming;
+    __imp__sub_000EA5A7(ctx, base);
+    std::array<int, 20> jba;
+    for (unsigned i = 0; i < jba.size(); ++i) jba[i] = int(R32(manager + 0x30 + i * 4));
+    uint32_t jba_flags = R32(manager + 0x94);
+    std::memcpy(HostPtr(manager + 0x2C), nsa.data(), nsa.size());
+    for (unsigned i = 0; i < jba.size(); ++i)
+        W32(manager + 0x30 + i * 4, std::max(int(R32(manager + 0x30 + i * 4)), jba[i]));
+    W32(manager + 0x94, CombinedGearFlags(R32(manager + 0x94), jba_flags));
+    ctx = returned;
+}
+
+X86_EXTERN_FUNC(__imp__sub_00142BAE);
+X86_FUNC(sub_00142BAE) {
+    using namespace game::trust;
+    uint32_t computer = ctx.ecx;
+    std::lock_guard guard(lock);
+    if (!active || !player || !game::unreal::IsA(computer, game::unreal::Name("EComputerSystem")))
+        return __imp__sub_00142BAE(ctx, base);
+    auto saved = ctx;
+    uint32_t frame = R32(ctx.esp + 4), scratch = (ctx.esp - 512) & ~15u;
+    W32(scratch, 0);
+    ctx.esp = scratch - 32; ctx.ecx = frame;
+    CallGuest(ctx, 0x5F650, {R32(frame + 8), scratch});
+    W32(frame + 0xC, R32(frame + 0xC) + 1); // EX_EndFunctionParms
+    bool show = R32(scratch) != 0;
+    for (uint32_t offset : {0x428u, 0x434u}) {
+        uint32_t data = R32(computer + offset), count = R32(computer + offset + 4);
+        if (!data || count > 1024) continue;
+        for (uint32_t i = 0; i < count; ++i) {
+            uint32_t component = R32(data + i * 4);
+            if (!component) continue;
+            uint8_t faction = G<uint8_t>(component + 0x2D);
+            if (!faction) continue;
+            uint32_t flags = R32(component + 0x30);
+            if (show && RecoveryComponent(faction, state.value.nsa, state.value.jba)) flags &= ~8u;
+            else if (!(flags & 8u)) flags = (flags | 8u) & ~6u;
+            W32(component + 0x30, flags);
+        }
+    }
+    uint32_t pawn = R32(player + 0x134), current = game::unreal::StateOf(player);
+    if (pawn && R32(pawn + 0xF0) == computer &&
+        (current == game::unreal::Name("s_Computer") || current == game::unreal::Name("s_EEV"))) {
+        ctx.ecx = player;
+        CallGuest(ctx, R32(R32(player) + 0x2EC), {0x3A, 0, 0});
+    }
+    ctx = saved; ctx.esp += 12;
 }

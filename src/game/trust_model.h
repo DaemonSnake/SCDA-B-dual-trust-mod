@@ -103,7 +103,7 @@ inline Pair StatisticsScore(const std::array<int, 11>& count, unsigned enabled) 
 // crisis dispatch; the persistent state and the two displayed bars stay independent.
 inline int CrisisValue(Pair value) {
     if (value.nsa < 50 && value.nsa <= value.jba) return value.nsa;
-    if (value.jba < 50) return 100 - value.jba;
+    if (value.jba < 50) return value.jba == 0 ? 100 : std::max(61, 100 - value.jba);
     return 50;
 }
 }
