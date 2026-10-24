@@ -442,7 +442,82 @@ void Tick(X86Context& ctx, uint32_t viewport) {
         std::string command;
         if (std::getline(f, command)) {
             f.close(); std::error_code ec; std::filesystem::remove(path, ec);
-            if (command.starts_with("trust speech ") && active && player) {
+            if (command == "trust consumers-fixture" && active && player) {
+                std::lock_guard guard(lock);
+                auto before = state;
+                uint32_t scratch = (saved.esp - 12288) & ~15u;
+                std::memset(HostPtr(scratch), 0, 8192);
+                uint32_t manager = R32(player + 0x710);
+                std::array<uint8_t, 0x6C> inventory;
+                std::memcpy(inventory.data(), HostPtr(manager + 0x2C), inventory.size());
+                auto path = app::ExeDir() / "trust-consumers-results.txt";
+                std::ofstream report(path);
+                uint32_t fake = scratch, cls = scratch + 0x500;
+                W32(fake + 0x24, cls); W32(cls + 0x20, unreal::Name("EComputerSystem"));
+                uint32_t frame = scratch + 0x1000, code = scratch + 0x1100;
+                W32(frame + 8, fake);
+                int failures = 0;
+                std::map<unsigned, std::array<int, 20>> gear;
+                for (Pair pair : {Pair{75,75}, {75,0}, {0,75}, {0,0}, {40,100}, {100,40}, {60,60}, {61,61}}) {
+                    state.value = pair;
+                    ctx = saved; ctx.esp = scratch - 64; ctx.ecx = manager;
+                    uint32_t fn = CallGuest(ctx, 0x603DA, {unreal::Name("SetLoadupType"), 0});
+                    ctx.ecx = manager;
+                    CallGuest(ctx, R32(R32(manager) + 0x10), {fn, scratch + 0x1200, 0});
+                    int type = G<uint8_t>(manager + 0x2D);
+                    if (type != LoadoutType(pair.nsa, pair.jba)) ++failures;
+                    ctx = saved; ctx.esp = scratch - 64; ctx.ecx = manager;
+                    CallGuest(ctx, 0xEB8B8, {manager + 0xF0, uint32_t(type)});
+                    std::array<int, 20> counts;
+                    for (unsigned i = 0; i < counts.size(); ++i) counts[i] = int(R32(manager + 0x30 + i * 4));
+                    gear[RewardCamps(pair.nsa, pair.jba)] = counts;
+                    report << "loadout " << pair.nsa << '/' << pair.jba << " type " << type
+                           << " camera " << R32(manager + 0x4C) << " shocker " << R32(manager + 0x50) << '\n';
+                    for (bool show : {true, false}) {
+                        for (unsigned array = 0; array < 2; ++array) {
+                            uint32_t entries = scratch + 0x900 + array * 16;
+                            W32(fake + (array ? 0x434 : 0x428), entries);
+                            W32(fake + (array ? 0x438 : 0x42C), 4);
+                            for (unsigned faction = 0; faction < 4; ++faction) {
+                                uint32_t component = scratch + 0x600 + (array * 4 + faction) * 0x40;
+                                W32(entries + faction * 4, component);
+                                G<uint8_t>(component + 0x2D) = uint8_t(faction);
+                                W32(component + 0x30, faction ? 8 : 0);
+                            }
+                        }
+                        G<uint8_t>(code) = show ? 0x27 : 0x28;
+                        G<uint8_t>(code + 1) = 0x16; W32(frame + 0xC, code);
+                        ctx = saved; ctx.esp = scratch - 64; ctx.ecx = fake;
+                        CallGuest(ctx, 0x142BAE, {frame, 0});
+                        for (unsigned array = 0; array < 2; ++array) {
+                            report << "computer " << pair.nsa << '/' << pair.jba << " show " << show << " array " << array;
+                            for (unsigned faction = 0; faction < 4; ++faction) {
+                                uint32_t component = scratch + 0x600 + (array * 4 + faction) * 0x40;
+                                bool visible = !(R32(component + 0x30) & 8);
+                                bool expected = !faction || (show && RecoveryComponent(uint8_t(faction), pair.nsa, pair.jba));
+                                if (visible != expected) ++failures;
+                                report << ' ' << visible;
+                            }
+                            report << '\n';
+                        }
+                        if (R32(frame + 0xC) != code + 2) ++failures;
+                    }
+                }
+                for (unsigned i = 0; i < gear[3].size(); ++i)
+                    if (gear[3][i] != std::max(gear[1][i], gear[2][i])) ++failures;
+                if (std::all_of(gear[3].begin(), gear[3].end(), [](int n) { return n == 0; })) ++failures;
+                state.value = {75,75};
+                ctx = saved; ctx.esp = scratch - 64; ctx.ecx = player;
+                uint32_t initial = CallGuest(ctx, 0x603DA, {unreal::Name("StartInitialPattern"), 0});
+                ctx.ecx = player;
+                CallGuest(ctx, R32(R32(player) + 0x10), {initial, scratch + 0x1200, 0});
+                report << "initial 75/75 projected " << last_initial_projection << " mirror " << int(G<uint8_t>(player + 0x360)) << '\n';
+                if (last_initial_projection != 50 || G<uint8_t>(player + 0x360) != 75) ++failures;
+                state = before;
+                std::memcpy(HostPtr(manager + 0x2C), inventory.data(), inventory.size());
+                G<uint8_t>(player + 0x360) = uint8_t(state.value.nsa);
+                report << "failures " << failures << '\n';
+            } else if (command.starts_with("trust speech ") && active && player) {
                 uint32_t scratch = (saved.esp - 2048) & ~15u;
                 const std::string parts[] = {"p_x10_kinshasa_b_comms", command.substr(13), "Localization\\P_x10_kinshasa_b"};
                 for (unsigned i = 0; i < 3; ++i) {

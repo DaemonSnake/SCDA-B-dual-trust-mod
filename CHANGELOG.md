@@ -2,6 +2,16 @@
 
 ## v0.1.0-alpha.2 — 2026-10-25
 
+### Independent faction effects (release updated in place)
+
+- Select mission reward kits from each faction's own trust (61+). Combine both
+  eligible kits by maximum supply counts; preserve restrictions and elite kits.
+- Gate normal/secure computer recovery entries by the corresponding faction's
+  low score (<=40), including both-low and neither-low states.
+- Use independent low-trust projection for initial mission patterns; align the
+  JBA warning boundary at 40 with its OPSAT status. Native timers are unchanged.
+- Preserve each release's existing balance and existing checkpoint scores.
+
 ### Rebalancing
 
 - Reduce original -30 story penalties from -60 to **-40**, affecting cruise-bomb
@@ -44,6 +54,16 @@
   discovery timing, protected-police classification and multiplayer need further QA.
 
 ## v0.1.0-alpha.1 — 2026-10-24
+
+### Independent faction effects (release updated in place)
+
+- Select mission reward kits from each faction's own trust (61+). Combine both
+  eligible kits by maximum supply counts; preserve restrictions and elite kits.
+- Gate normal/secure computer recovery entries by the corresponding faction's
+  low score (<=40), including both-low and neither-low states.
+- Use independent low-trust projection for initial mission patterns; align the
+  JBA warning boundary at 40 with its OPSAT status. Native timers are unchanged.
+- Preserve each release's existing balance and existing checkpoint scores.
 
 First playable Windows x64 prerelease for campaign testing, based on source
 commit `87e12fa` of this fork and upstream SCDA-XBERecomp.

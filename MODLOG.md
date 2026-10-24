@@ -265,3 +265,30 @@ canonical reference formula, companion docs, metadata, README and changelog.
 Regression assertions passed at5/6/7civilian deaths (-50/-60/-60),14/15enemy
 deaths (-56/-60), mixed categories, inactive rules and duplicate suppression.
 Local solo executable/DLL rebuilt; published alpha1 package is unchanged.
+
+
+## Low-trust consumer audit — 25 October 2026
+
+Read-only audit of alpha.2 downstream trust consumers. Live reflected thresholds
+0/40/60/100 and Kinshasa warning/critical pattern mappings resolved. Identified
+EMissionManager.SetLoadupType (NSA-tier-based faction kit) and native
+EComputerSystem.DisplayFactionComponents 0x142BAE (normal/secure computer faction
+components) as remaining opposing-scalar assumptions. OPSAT substitution applies
+only inside 0x19890F; those other consumers read NSA. Also flagged initial-map
+StartInitialPattern and both-low dispatch selection; ending coverage remains open.
+See knowledge/TRUST_LOW_TRUST_AUDIT.md for exact evidence, branches and limits.
+Private snapshot/bytecode remains outside the repo. No runtime or release changes.
+
+
+## Independent downstream faction consumers
+
+Adapted named script SetLoadupType and StartInitialPattern via native script
+executor0x680BA. Kits qualify independently at61+, merge counts by maximum and
+preserve explicit equipment restrictions; elite and multiplayer remain native.
+Replaced native DisplayFactionComponents0x142BAE with independent <=40 faction
+filtering for NormalAccess and SecureAccess, retaining argument evaluation,
+hide flags and active computer/EEV refresh. JBA40 warning projection aligned.
+Native fixtures verified loadout types9/9/10/7 for75/75,75/0,0/75,0/0, actual
+kit configuration and both component arrays/all faction tags. Backported to both
+releases with each release's prior balance retained. Full mission/end coverage
+remains limited as documented.

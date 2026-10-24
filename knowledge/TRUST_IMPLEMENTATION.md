@@ -164,3 +164,18 @@ new value with a brief green highlight. Text drifts upward3px and fades during
 the last0.65s of the five-second notification. The model applies immediately.
 Mission-review rows use a settled forecast independently of gameplay pop-up
 timing; the native rule-table reveal still runs normally.
+
+
+## Downstream faction consumer fixes (alpha.1 and alpha.2 updated in place)
+
+SetLoadupType and StartInitialPattern are adapted at the named Unreal script
+entry point, not by globally changing the OPSAT getter. Faction kits qualify
+independently at61+, both combine maximum counts and conservative equipment
+flags; default/elite/multiplayer selections retain their separate rules.
+EComputerSystem.DisplayFactionComponents now evaluates each faction at<=40
+for both normal/secure arrays, preserves None/Both tags and refreshes active UI.
+JBA40 projects to61 so its native warning agrees with the displayed tier.
+Native fixtures exercise all8 score combinations, all4 component tags in both
+arrays and both show/hide calls. Healthy initial-pattern projection is50, with
+the NSA75 mirror restored. Alpha.1 balance is preserved separately from alpha.2.
+See TRUST_LOW_TRUST_AUDIT.md for the original findings and exact adapter scope.

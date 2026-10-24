@@ -10,6 +10,18 @@ The dual-trust concept comes from **Double Agent version A (Xbox 360, PC and PS3
 
 ![Independent NSA and JBA trust in the OPSAT](docs/media/opsat-dual-trust.png)
 
+## Independent faction effects — updated alpha.1 and alpha.2
+
+Equipment rewards now use each faction's own trust: **61+** qualifies for its kit.
+If both qualify, their supplies are combined without doubling duplicate items;
+if neither qualifies, the default kit applies. Elite loadouts keep their rules.
+Trust-recovery entries on computers now follow the corresponding faction at
+**40 or less**, including both when both are low. Mission-entry warnings also
+use independent trust rather than assuming high NSA means low JBA.
+
+Both existing downloads have been updated in place. Download again if you have
+an earlier copy; keep your saves and matching `trust-state/` folder together.
+
 ## Rebalancing — v0.1.0-alpha.2
 
 Original −30 story penalties now become **−40**,

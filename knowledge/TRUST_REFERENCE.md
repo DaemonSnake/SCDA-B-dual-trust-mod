@@ -85,6 +85,13 @@ natives, respectivement `0x00069954` et `0x00069FED` → `0x00036D16`.
 Le wrapper et des objectifs ont été exercés par des appels natifs. La totalité
 des crises, délais, récompenses d'équipement et lecteurs directs reste à vérifier.
 
+Audit des conséquences aval (25 octobre) : [TRUST_LOW_TRUST_AUDIT.md](TRUST_LOW_TRUST_AUDIT.md).
+Les kits de mission et composants de faction des ordinateurs utilisent désormais
+le score du camp concerné dans les versions alpha.1 et alpha.2 mises à jour.
+Les kits sont éligibles à 61+, leurs quantités sont combinées par maximum si
+les deux camps sont éligibles. Les composants de récupération apparaissent à
+40 ou moins pour leur propre faction.
+
 ## Les chemins qui déclenchent réellement ModifyTrust
 
 ```text
@@ -400,9 +407,10 @@ jamais d'une confiance élevée de l'autre camp. Il projette le camp en difficul
 dans le système historique, et mémorise le niveau déjà transmis pour éviter de
 relancer l'alerte à chaque événement. Le seuil de projection est inférieur à 50 ;
 les niveaux, branches et délais effectifs restent ceux des scripts d'origine.
-Aucun nouveau délai de mort n'a été ajouté. Tous les scénarios de crise et leurs
-récompenses d'équipement restent à vérifier en campagne, car certains scripts
-lisent directement l'ancien scalaire (miroir NSA hors dispatch).
+Aucun nouveau délai de mort n'a été ajouté. Les lecteurs des kits et des
+composants d'ordinateurs sont adaptés ; les variantes complètes de campagne
+restent à vérifier. Le démarrage de carte utilise la projection indépendante,
+et JBA 40 est désormais projeté sur le niveau d'avertissement 61.
 
 ## Déclencheurs techniques et objectifs neutres
 

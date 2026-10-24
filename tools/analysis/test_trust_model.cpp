@@ -51,6 +51,8 @@ int main() {
     assert(CrisisValue({90, 10}) == 90);
     assert(CrisisValue({35, 80}) == 35);
     assert(CrisisValue({80, 35}) == 65);
+    assert(CrisisValue({100, 40}) == 61);
+    assert(CrisisValue({100, 0}) == 100);
     assert(Mission("x06_cozumel_a") == Mission("x06_cozumel_b"));
     assert(Mission("x05_hq2_r") != Mission("x11_hq5_r"));
     std::array<int, 11> records{};
