@@ -7,7 +7,7 @@ what the native implementation actually does and what has been tested.
 The active development balance policy is [TRUST_BALANCE.md](TRUST_BALANCE.md).
 The narrative reference now displays active values and all retained decisions.
 The JSON proposal fields and generated C++ table retain the baseline; runtime
-awards halve no-loss gains (round down), double losses and preserve trade-off
+awards halve no-loss gains (round down), double losses (except baseline -30 becomes -40) and preserve trade-off
 rewards. Existing checkpoints and old effective credits are not rescaled.
 
 ## Implementation

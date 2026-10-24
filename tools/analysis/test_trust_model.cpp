@@ -7,7 +7,15 @@ int main() {
     static_assert(Rebalance({0, 15}) == Pair{0, 7});
     static_assert(Rebalance({5, 5}) == Pair{2, 2});
     static_assert(Rebalance({-5, 5}) == Pair{-10, 5});
-    static_assert(Rebalance({15, -30}) == Pair{15, -60});
+    static_assert(Rebalance({15, -30}) == Pair{15, -40});
+    static_assert(Rebalance({-30, 30}) == Pair{-40, 30});
+    static_assert(Rebalance({30, -30}) == Pair{30, -40});
+    static_assert(Rebalance({0, -15}) == Pair{0, -30});
+    State major_loss;
+    major_loss.Once("major", Rebalance({-30, 30}));
+    assert((major_loss.value == Pair{35, 100}));
+    major_loss.Revoke("major");
+    assert((major_loss.value == Pair{75, 75}));
     static_assert(Rebalance({-5, -10}) == Pair{-10, -20});
     static_assert(Rebalance({0, 0}) == Pair{0, 0});
     State balanced;

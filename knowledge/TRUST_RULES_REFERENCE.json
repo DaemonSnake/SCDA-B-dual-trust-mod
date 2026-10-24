@@ -3708,7 +3708,7 @@
     "baseline": "The proposal fields below remain the original narrative values",
     "no_loss_gains": "If both baseline deltas are nonnegative, divide positive deltas by 2 with integer rounding down",
     "tradeoffs": "Retain positive gains when either baseline delta is negative",
-    "losses": "Multiply negative deltas by 2",
+    "losses": "Original -30 story deltas become -40; multiply other negative story deltas by 2",
     "deferred_effects": "Classify the full story pair before postponing its discovered loss",
     "statistics": "Halve accumulated KO gains with rounding down; double losses; independent caps become +7 and -60",
     "exceptions": "Keep initial scores 75/75 and emergency recovery +25; never rescale existing state or effective-credit reversals",

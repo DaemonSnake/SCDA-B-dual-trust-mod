@@ -1,6 +1,7 @@
 # Integer balance experiment — 25 October 2026
 
-Included in **v0.1.0-alpha.2**, applying to new trust events only. The older
+Included in the updated **v0.1.0-alpha.2** release: original
+-30 story losses now become -40 instead of -60. Applies to new trust events only. The older
 v0.1.0-alpha.1 ZIP retains its original balance. All scores and deltas stay integers.
 
 The complete current decision reference is [TRUST_REFERENCE.md](TRUST_REFERENCE.md).
@@ -12,9 +13,10 @@ This document keeps the compact baseline-to-active comparison for the balance te
   Examples: +5/0 becomes +2/0; +15/0 becomes +7/0; +5/+5 becomes +2/+2.
 - If either baseline delta is negative, retain positive trade-off rewards.
   Example: -5/+5 becomes -10/+5.
-- Double every new trust penalty, including discovered sabotage and Hisham exposure.
+- Double new story penalties, except original -30 losses become -40.
+  This includes discovered sabotage; Hisham exposure remains -30 (baseline -15).
 - Classify a complete story effect before deferring a discovery penalty. Cozumel
-  chip sabotage remains NSA +30 immediately, then JBA -60 at mission exit.
+  chip sabotage remains NSA +30 immediately, then JBA -40 at mission exit.
 - Initial state stays75/75. Crisis-recovery objectives stay+25 so a recovery
   can still lift the affected camp out of its emergency threshold.
 - Existing saved scores/ledger entries are not rescaled. Reversals subtract the
@@ -69,10 +71,10 @@ Values below show the complete effect, including any delayed discovery loss.
 | `P_LambertCover` | +15 / -15 | +15 / -30 |
 | `OBJ_HQB_P_30` | +15 / -15 | +15 / -30 |
 | `OBJ_HQB_P_31` | +15 / -15 | +15 / -30 |
-| `KeepBombs` | -30 / +30 | -60 / +30 |
+| `KeepBombs` | -30 / +30 | -40 / +30 |
 | `OBJ_HQA_O_20` | +5 / +0 | +2 / +0 |
-| `ChipCellPhone` | +30 / -30 | +30 / -60 |
-| `ProCellPhone` | -30 / +30 | -60 / +30 |
+| `ChipCellPhone` | +30 / -30 | +30 / -40 |
+| `ProCellPhone` | -30 / +30 | -40 / +30 |
 | `PlaceRelay` | +0 / +10 | +0 / +5 |
 | `PassengerLog` | +5 / +5 | +2 / +2 |
 | `GetBomb` | +0 / +10 | +0 / +5 |
@@ -107,10 +109,10 @@ shared rewards, opposing choices, delayed penalties, statistics and reloads.
 ## Verification
 
 - Pure model tests: no-loss rounding, both-camp gains, unchanged trade-off
-  rewards, doubled losses, duplicate prevention and saturated reversals pass.
+  rewards, -30 → -40 story exception, other doubled losses, duplicate prevention and saturated reversals pass.
 - Native PassengerLog:75/75 ->77/77; ShipEngine ->79/77; repeat unchanged.
 - Native opposing phone choice at95/50: chip saturates100/50; opposing outcome
-  reverses only its effective+5, then applies-60/+30 ->35/80.
+  reverses only its effective+5, then applies-40/+30 ->55/80 with the current policy (previous alpha.2 fixture:35/80).
 - Native statistics fixture (civilian death, enemy KO, detection, alarm):
   forecast80/80 ->64/80; actual application64/80; repeat unchanged.
 - Native Hisham path:75/75 ->rescue82/75 ->proof82/77 ->exposure82/45.

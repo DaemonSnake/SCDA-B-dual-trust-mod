@@ -150,7 +150,7 @@ crédits, en complément des protections éventuelles des scripts.
   restent possibles ; le but du réglage est de rendre leur accumulation moins facile.
 - Les objectifs originellement neutres restent à **0/0**.
 
-### Gains divisés par deux et pertes doublées
+### Gains divisés par deux et pertes renforcées
 
 Les valeurs narratives de base reprennent les ordres de grandeur 5/10/15/30.
 Le réglage actif du 25 octobre leur applique ensuite cette politique :
@@ -159,14 +159,20 @@ Le réglage actif du 25 octobre leur applique ensuite cette politique :
 | --- | --- | --- |
 | Aucune des deux variations n'est négative | Diviser chaque gain par deux, avec arrondi entier inférieur | +5/0 → +2/0 ; +15/0 → +7/0 |
 | Les deux camps gagnent sans perte | Diviser les deux gains par deux | +5/+5 → +2/+2 |
-| Au moins un camp perd de la confiance | Doubler chaque perte ; conserver le gain positif de l'autre camp | −5/+5 → −10/+5 |
+| Au moins un camp perd de la confiance | Doubler chaque perte, sauf −30 qui devient −40 ; conserver le gain positif de l'autre camp | −5/+5 → −10/+5 |
 | Perte sans récompense opposée | Doubler la perte | 0/−15 → 0/−30 |
 | Annulation d'un crédit déjà attribué | Retirer exactement sa variation effective stockée ; ne pas réappliquer la politique | Un ancien gain effectif de +5 s'annule par −5 |
 
 La classification porte sur **la paire narrative complète avant tout report**
-d'une perte à la découverte. Un sabotage +30/−30 devient +30/−60, même si la
-partie −60 n'est appliquée qu'à la sortie de mission. Son gain immédiat n'est
+d'une perte à la découverte. Un sabotage +30/−30 devient +30/−40, même si la
+partie −40 n'est appliquée qu'à la sortie de mission. Son gain immédiat n'est
 donc pas réduit à +15 au prétexte que sa perte est temporairement différée.
+
+Ajustement inclus dans alpha.2 (publication mise à jour) : les pertes narratives de base −30 deviennent **−40**
+(au lieu de −60). Les autres pertes restent doublées ; le plafond statistique
+reste −60. Depuis 75, une telle décision laisse 35 ; une confiance déjà faible
+peut toujours déclencher une crise. Les deux désamorçages à −30 chacun restent
+cumulables : cette exception porte sur chaque valeur de base, pas sur leur somme.
 
 Exceptions conservées : **état initial 75/75** et **récupérations d'urgence +25**.
 Ces dernières doivent encore permettre de sortir d'une crise. Les statistiques
@@ -235,8 +241,8 @@ la dernière colonne font partie de chaque règle.
 
 | ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `ChipCellPhone` | Saboter le déclencheur d'Enrica | +30 | +30 | -60 | NSA +30 au sabotage secret ; JBA −60 à la sortie de mission dans l’implémentation actuelle. Perte différée, pas gain sans contrepartie. |
-| `ProCellPhone` | Préserver le déclencheur de la bombe | -30 | -60 | +30 | Permettre volontairement l'attentat malgré l'ordre de Lambert; résolution opposée au sabotage, jamais cumulée avec lui. |
+| `ChipCellPhone` | Saboter le déclencheur d'Enrica | +30 | +30 | -40 | NSA +30 au sabotage secret ; JBA −40 à la sortie de mission dans l’implémentation actuelle. Perte différée, pas gain sans contrepartie. |
+| `ProCellPhone` | Préserver le déclencheur de la bombe | -30 | -40 | +30 | Permettre volontairement l'attentat malgré l'ordre de Lambert; résolution opposée au sabotage, jamais cumulée avec lui. |
 | `PlaceRelay` | Installer le relais avec Enrica | -10 | +0 | +5 | Maintenir la couverture avant le choix sur le téléphone; ne pas punir une seconde fois le résultat final. |
 | `PassengerLog` | Récupérer le manifeste des passagers | +5 | +2 | +2 | La description sert l'identification des victimes et Enrica rapporte une demande explicite d'Emile: intérêt des deux camps. |
 | `GetBomb` | Récupérer la bombe | -10 | +0 | +5 | Continuer la mission de couverture avec Enrica; le sort du navire possède son propre événement majeur. |
@@ -277,7 +283,7 @@ la dernière colonne font partie de chaque règle.
 | `P_LambertCover` | Confirmer la couverture de Lambert | +15 | +15 | -30 | Sauver Lambert entretient les soupçons d'Emile selon le texte de l'objectif. |
 | `OBJ_HQB_P_30` | Désamorcer la bombe de Nashville | +15 | +15 | -30 | NSA +15 immédiatement ; JBA −30 à la sortie de mission. Crédit et pénalité distincts pour chaque bombe ; annulation si KeepBombs remplace ce résultat. |
 | `OBJ_HQB_P_31` | Désamorcer la bombe de Los Angeles | +15 | +15 | -30 | NSA +15 immédiatement ; JBA −30 à la sortie de mission. Crédit et pénalité distincts pour chaque bombe ; annulation si KeepBombs remplace ce résultat. |
-| `KeepBombs` | Empêcher la neutralisation des bombes | -30 | -60 | +30 | Faire partir les bombes par une autre route compromet volontairement leur interception par la NSA. |
+| `KeepBombs` | Empêcher la neutralisation des bombes | -30 | -40 | +30 | Faire partir les bombes par une autre route compromet volontairement leur interception par la NSA. |
 
 
 ## Cas particuliers et conditions narratives retenues
@@ -336,14 +342,14 @@ protège la présence secrète et la couverture de Sam : **+2/+2** également.
 `ShipEngine` donne **+2/0**. `PlaceRelay` et `GetBomb` donnent chacun
 **0/+5**, sans sanction NSA supplémentaire pour poursuivre l'infiltration.
 
-Le téléphone saboté donne **NSA +30 immédiatement**. La perte **JBA −60**
+Le téléphone saboté donne **NSA +30 immédiatement**. La perte **JBA −40**
 est appliquée **à la sortie de mission** dans le code actuel, une fois par
 crédit de sabotage. Ce report est un choix d'implémentation : l'instant exact
 de découverte scénarisée reste à raccorder/valider. Il ne faut ni prétendre que
 Sam est découvert au geste clandestin ni attribuer à ce geste le demi-gain des
-tâches sans contrepartie : sa paire complète est bien +30/−60.
+tâches sans contrepartie : sa paire complète est bien +30/−40.
 
-`ProCellPhone` donne **−60/+30** et remplace le sabotage. Le mod retire son
+`ProCellPhone` donne **−40/+30** et remplace le sabotage. Le mod retire son
 crédit NSA effectif et toute pénalité `bomb-discovered` déjà enregistrée avant
 d'appliquer l'issue opposée. Les morts génériques restent évaluées séparément
 selon les catégories statistiques activées.
@@ -353,7 +359,7 @@ selon les catégories statistiques activées.
 Nashville et Los Angeles ont chacune leur crédit : **NSA +15 immédiatement**,
 puis **JBA −30 à la sortie de mission**. Leur découverte n'est pas instantanée.
 Les deux bombes peuvent donc produire au total +30/−60 avant saturation.
-`KeepBombs` donne **−60/+30** et retire les crédits de désamorçage ainsi que
+`KeepBombs` donne **−40/+30** et retire les crédits de désamorçage ainsi que
 leurs pénalités de découverte déjà appliquées. Un désamorçage ultérieur retire
 le crédit `KeepBombs` ; chaque nouvelle attribution reste protégée par le registre.
 
@@ -567,9 +573,9 @@ un build non modifié ; l'ancien jeu ne sait pas lire l'historique JBA indépend
 
 | Vérification | Résultat / portée |
 | --- | --- |
-| Tests C++ du modèle | Arrondis entiers, gains partagés, arbitrages, pertes doublées, saturation, annulations effectives et doublons validés |
+| Tests C++ du modèle | Exception −30 → −40, annulation après saturation, arrondis entiers, gains partagés, arbitrages, autres pertes doublées, saturation, annulations effectives et doublons validés |
 | Manifeste puis moteur, appels natifs | 75/75 → 77/77 → 79/77 ; répétition sans gain |
-| Choix du téléphone saturé, appels natifs | 95/50 → 100/50 → 35/80 ; annulation du +5 effectif puis −60/+30 |
+| Choix du téléphone saturé, appels natifs | Fixture alpha.2 : 95/50 → 100/50 → 35/80 avec −60/+30. Politique actuelle : résultat attendu 55/80 avec −40/+30 ; non rejoué en jeu |
 | Statistiques : civil tué, KO ennemi, repérage, alarme | Prévision 80/80 → 64/80 ; application 64/80 ; répétition inchangée |
 | Sauvetage/preuve/fuite Hisham, objectifs et dialogue synthétiques | 75/75 → 82/75 → 82/77 → 82/45 |
 | Récupération NSA native | 10/80 → 35/80 ; autre camp inchangé |

@@ -12,11 +12,16 @@ The dual-trust concept comes from **Double Agent version A (Xbox 360, PC and PS3
 
 ## Rebalancing — v0.1.0-alpha.2
 
+Original −30 story penalties now become **−40**,
+keeping major choices costly without taking a starting score of 75 straight into
+crisis range. Other losses remain doubled; the statistics loss cap stays −60.
+The alpha.2 release was updated in place to include this adjustment.
+
 Campaign testing showed that routine tasks made it too easy to reach 100 trust
 with both factions. This release makes trust accumulate in smaller amounts and
 makes reckless actions more costly. **All trust values remain integers.**
 
-| Rule | Before (alpha.1) | Now (alpha.2) |
+| Rule | Before (alpha.1) | Current source |
 | --- | --- | --- |
 | Gain with no loss to either camp | Full gain | Half the gain, rounded down: `+5 / 0 → +2 / 0` |
 | Shared gain with no loss | `+5 / +5` | `+2 / +2` |
@@ -30,7 +35,7 @@ makes reckless actions more costly. **All trust values remain integers.**
 Six civilian kills or fifteen enemy kills reach the -60 limit before KO bonuses.
 Story-choice penalties are separate from that shared statistics cap. Sabotage is
 classified using its complete effect before a discovery penalty is postponed:
-Cozumel remains NSA +30 immediately, followed by JBA -60 at mission exit.
+Cozumel gives NSA +30 immediately, followed by JBA -40 at mission exit.
 
 Starting scores remain **75/75**, and emergency recovery stays **+25**. Upgrading
 does not rewrite current scores or previously credited actions: an existing

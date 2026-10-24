@@ -4,11 +4,17 @@
 
 ### Rebalancing
 
+- Reduce original -30 story penalties from -60 to **-40**, affecting cruise-bomb
+  sabotage discovery, allowing the cruise bombing and keeping the final bombs.
+  Opposing +30 rewards remain unchanged. Other story penalties remain doubled;
+  the shared statistics loss cap remains -60. Applies only to new awards, without
+  rewriting saved scores or previous effective credits.
+
 - Halve gains on objectives with no baseline loss to either faction, rounding down
   to whole points: +5/0 becomes +2/0; shared +5/+5 becomes +2/+2.
 - Double new trust penalties while retaining positive rewards on trade-off
   choices: -5/+5 becomes -10/+5. Classify deferred effects before postponement;
-  Cozumel sabotage gives NSA+30 immediately and JBA-60 at mission exit.
+  Cozumel sabotage gives NSA+30 immediately and JBA-40 at mission exit.
 - Halve accumulated enemy-KO gains, rounded down, with a positive cap of+7.
 - Double per-action statistics losses: enemy kill-4, civilian kill-10, civilian
   KO-2, detection-2, alarm-4 and discovered body-2 (NSA only, when enabled).
