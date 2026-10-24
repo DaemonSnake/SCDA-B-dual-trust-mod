@@ -53,9 +53,20 @@ A loss flashes the removed segment range in muted red; a gain highlights the add
 
 The review retains the native rules table and previews each faction’s resulting trust independently, including score limits.
 
-## Build and play
+## Download and play
 
-This branch contains the mod’s source. **An unmodified upstream release does not contain these changes.**
+Get the [Windows x64 prerelease](https://github.com/DaemonSnake/SCDA-B-dual-trust-mod/releases/tag/v0.1.0-alpha.1), then:
+
+1. Extract the entire ZIP into a new writable folder.
+2. Put your original Xbox Double Agent game files in the included `assets/` folder (an ISO or extracted files).
+3. Run `SCDA.exe`. The included compiler prepares the game code on first launch; this can take several minutes. Visual Studio is not required for this package.
+4. Select **Start** when preparation finishes. A fresh solo campaign is recommended for testing.
+
+Keep the `compiler/` folder until preparation succeeds. The download contains no game files or precompiled game-code DLLs. Back up saves and the `trust-state/` metadata together. This is a campaign-testing prerelease; see the limits below.
+
+## Build from source
+
+To build the mod yourself, use this fork. **An unmodified upstream release does not contain these changes.**
 
 You need Windows 10 or later (64-bit), a Direct3D 12 GPU, and your own game files from the original Xbox release. This mod does not target the separate Xbox 360/PS3/PC version of Double Agent, and no game files are included.
 

@@ -209,3 +209,18 @@ Delta placement refined per user: label starts just to the right of max(previous
 Mission review presentation correction: summary rows no longer inherit an equal-valued live notification's timer, avoiding fill animation/fade followed by a snap when the five-second popup expires. README review capture will wait until the native rule reveal completes.
 Delta/fill alignment revised after screenshot review: use exact new-value segmented endpoint (including gaps/partial cells) for label placement. Losses fix ivory fill at the final score and retract the red tail toward that endpoint; the old max-value label anchor is removed. README media refreshed.
 Removed the opaque delta backplate: it covered the red loss tail and made the highlight appear detached. Delta readability now uses its fading text shadow only.
+
+## v0.1.0-alpha.1 Windows prerelease
+
+Built the published87e12fa source in a clean detached checkout, excluding local
+texture experiments. Solo/versus host builds and pure trust-model tests passed.
+Bundled xbe_recomp/Clang19.1.5/LLD19.1.5 independently translated, compiled and
+linked both owner-provided game images (129/65 translation units). Those private
+outputs are excluded from the release. Packaged solo executable reached a playable
+map using its newly compiled DLL; native rescue/exposure fixtures75/75->90/60.
+Archive41files,67635074bytes; SHA256:
+641f1d8d4c386770838470de1703978b1ffcbd0d9b5d22215e4fdeb9aec25164.
+Lint found zero failures; two documentation warnings are local evidence paths
+already in the research notes, not bundled game data or runtime dependencies.
+Published as prerelease with ZIP and SHA256SUMS.txt. Added binary installation
+instructions and changelog. Campaign limitations remain explicitly documented.
