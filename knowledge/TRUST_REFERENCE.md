@@ -458,3 +458,15 @@ Requêtes de recherche utilisées : « Splinter Cell Double Agent Xbox original
 trust objectives walkthrough NSA JBA GameFAQs » et « Splinter Cell Double Agent
 Xbox lin umd Unreal script format ». Aucune capture de jeu réalisée pendant
 cette recherche; aucune validation dynamique revendiquée.
+
+
+## Correctifs aval communs aux versions alpha.1 et alpha.2
+
+Les kits sont attribués selon le score indépendant du camp : éligibilité à61+,
+quantités maximales combinées si les deux camps sont éligibles, kit par défaut
+sinon. Les restrictions explicites et kits élite sont conservés. Les composants
+de récupération des ordinateurs (accès normal et sécurisé) suivent chaque camp
+à40 ou moins. Le démarrage de carte utilise la projection indépendante et JBA40
+déclenche le niveau d’avertissement cohérent avec l’OPSAT. Aucun délai modifié.
+Alpha.1 conserve les valeurs d’origine et ses plafonds statistiques+15/-15.
+Voir [TRUST_LOW_TRUST_AUDIT.md](TRUST_LOW_TRUST_AUDIT.md).

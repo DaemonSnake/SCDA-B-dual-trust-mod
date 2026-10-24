@@ -209,3 +209,10 @@ Delta placement refined per user: label starts just to the right of max(previous
 Mission review presentation correction: summary rows no longer inherit an equal-valued live notification's timer, avoiding fill animation/fade followed by a snap when the five-second popup expires. README review capture will wait until the native rule reveal completes.
 Delta/fill alignment revised after screenshot review: use exact new-value segmented endpoint (including gaps/partial cells) for label placement. Losses fix ivory fill at the final score and retract the red tail toward that endpoint; the old max-value label anchor is removed. README media refreshed.
 Removed the opaque delta backplate: it covered the red loss tail and made the highlight appear detached. Delta readability now uses its fading text shadow only.
+
+
+## Backport: downstream faction consumers
+
+Backported independent loadout/computer/mission-entry fixes and native fixture
+to alpha.1, retaining its original reward/loss/statistics rules. See the new
+TRUST_LOW_TRUST_AUDIT.md and CHANGELOG.md.
