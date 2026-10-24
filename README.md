@@ -16,7 +16,7 @@ The dual-trust concept comes from **Double Agent version A (Xbox 360, PC and PS3
 - **Trust effects based on story context.** The 45 nonzero story rules are classified separately for each faction. Neutral objectives remain neutral, and opposite outcomes replace the credit for the previous choice.
 - **Independent mission statistics.** Enabled rules for kills, knockouts, detection, alarms and discovered bodies affect NSA trust; they do not automatically reward the JBA.
 - **An interface closer to the original.** Olive metallic faction strips, circular badges and ivory segmented meters replace the shared gauge in the OPSAT and mission review.
-- **Temporary, animated notifications.** Only affected factions appear during gameplay. The meter moves from its previous value to the new score, the changed segments pulse, and a signed delta appears just beyond the higher fill level before fading. There is no constant debug panel.
+- **Temporary, animated notifications.** Only affected factions appear during gameplay. The meter moves from its previous value to the new score, the changed segments pulse, and a signed delta appears just beyond the new fill level before fading. There is no constant debug panel.
 - **Checkpoint persistence.** Both scores and the event ledger survive reloads, preventing an objective from rewarding the same action repeatedly.
 
 ## Before / after
@@ -43,7 +43,7 @@ The “before” image shows the game’s native trust presentation with the rep
 
 ### Animated trust changes
 
-![JBA trust loss notification with the delta beside the previous fill maximum](docs/media/trust-change.gif)
+![JBA trust loss notification with the delta beside the new fill edge](docs/media/trust-change.gif)
 
 A loss flashes the removed segment range in muted red; a gain highlights the added range in ivory-green. The notification lasts five seconds. Values are applied immediately—the animation only explains the change. At the edge of a full meter, the delta is kept inside the track so it remains readable.
 

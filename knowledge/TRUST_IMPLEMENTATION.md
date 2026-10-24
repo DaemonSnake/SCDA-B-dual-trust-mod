@@ -149,14 +149,11 @@ bypasses loading key prompts without sending keyboard input to the desktop.
 
 Campaign testing display: the compact gameplay panel is hidden unless a five-second trust-change notification is active. OPSAT and mission review retain their two bars.
 
-Animated change presentation: signed deltas are centered inside each affected
-track. The fill eases from its previous value to the final score over1.25s after
-a0.15s hold. Changed segments briefly pulse (muted red for loss, ivory-green for
-gain), then settle. Delta text drifts upward3px and fades during the last0.65s of
-the five-second notification. Static review deltas remain inside their tracks.
-This animation changes presentation only; the trust model applies immediately.
-Live native fixtures verified JBA75->60 (-15) and NSA75->90 (+15), capturing
-changing fill/highlight frames in the isolated lab.
-Delta labels are anchored to the midpoint of the gained/lost value range, clamped within the track at its edges, rather than centered across the entire meter.
-Final delta placement: immediately after max(previous,current), clamped to remain inside the track when the score is near100.
-Mission-review rows use a static forecast independently of any active gameplay notification, including when the two deltas happen to match. The native rule-table reveal still runs normally.
+Animated change presentation: signed deltas sit immediately after the exact
+new fill edge, accounting for partial cells and segment gaps. For a loss, the
+ivory fill shows the new value and a red tail starts at that same endpoint,
+retracting from the old value over1.25s after a0.15s hold. Gains ease toward the
+new value with a brief green highlight. Text drifts upward3px and fades during
+the last0.65s of the five-second notification. The model applies immediately.
+Mission-review rows use a settled forecast independently of gameplay pop-up
+timing; the native rule-table reveal still runs normally.
