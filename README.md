@@ -10,18 +10,38 @@ The dual-trust concept comes from **Double Agent version A (Xbox 360, PC and PS3
 
 ![Independent NSA and JBA trust in the OPSAT](docs/media/opsat-dual-trust.png)
 
-## Development balance test
+## Rebalancing — v0.1.0-alpha.2
 
-The current source includes an integer-only balance experiment prompted by
-campaign feedback: halve gains on actions with no baseline trust loss (rounding
-down), double penalties, and retain rewards on trade-off actions. For example,
-`+5 / 0` becomes `+2 / 0`, while `-5 / +5` becomes `-10 / +5`.
-Starting scores and emergency recovery rewards are unchanged. Statistics use
-halved accumulated KO gains and doubled losses, with independent +7/-60 caps.
-The [balance comparison](knowledge/TRUST_BALANCE.md) lists every story rule.
-Existing scores and past rewards are not rewritten. The published
-**v0.1.0-alpha.1 ZIP still uses the original balance**; build the current source
-or use the updated local build to test this experiment.
+Campaign testing showed that routine tasks made it too easy to reach 100 trust
+with both factions. This release makes trust accumulate in smaller amounts and
+makes reckless actions more costly. **All trust values remain integers.**
+
+| Rule | Before (alpha.1) | Now (alpha.2) |
+| --- | --- | --- |
+| Gain with no loss to either camp | Full gain | Half the gain, rounded down: `+5 / 0 → +2 / 0` |
+| Shared gain with no loss | `+5 / +5` | `+2 / +2` |
+| Choice with a trust trade-off | `-5 / +5` | `-10 / +5`: losses doubled; opposing reward retained |
+| Enemy killed, when the rule is active | NSA -2 per person | NSA -4 per person |
+| Civilian killed, when the rule is active | NSA -5 per person | NSA -10 per person |
+| Enemy knockouts, when rewarded | NSA +1 each | NSA +1 per pair, rounded down across the mission tally |
+| Maximum positive statistics contribution | +15 NSA | +7 NSA |
+| Combined statistics loss cap | -15 NSA | **-60 NSA** across kills, civilian KOs, detection, alarms and bodies |
+
+Six civilian kills or fifteen enemy kills reach the -60 limit before KO bonuses.
+Story-choice penalties are separate from that shared statistics cap. Sabotage is
+classified using its complete effect before a discovery penalty is postponed:
+Cozumel remains NSA +30 immediately, followed by JBA -60 at mission exit.
+
+Starting scores remain **75/75**, and emergency recovery stays **+25**. Upgrading
+does not rewrite current scores or previously credited actions: an existing
+100/100 save stays at 100/100, and only future events use the new balance. Back
+up your saves and `trust-state/`; use a fresh campaign for a full comparison.
+
+The [complete trust reference](knowledge/TRUST_REFERENCE.md) contains every
+active rule and exception; the [balance comparison](knowledge/TRUST_BALANCE.md)
+lists all 45 story objectives. **alpha.1 downloads retain the old balance.**
+The current alpha.2 package includes these changes and the corrected meter/delta
+alignment and mission-review timing. Full campaign validation remains ongoing.
 
 ## What changes
 
@@ -68,7 +88,7 @@ The review retains the native rules table and previews each faction’s resultin
 
 ## Download and play
 
-Get the [Windows x64 prerelease](https://github.com/DaemonSnake/SCDA-B-dual-trust-mod/releases/tag/v0.1.0-alpha.1), then:
+Get the [Windows x64 alpha release](https://github.com/DaemonSnake/SCDA-B-dual-trust-mod/releases/tag/v0.1.0-alpha.2), then:
 
 1. Extract the entire ZIP into a new writable folder.
 2. Put your original Xbox Double Agent game files in the included `assets/` folder (an ISO or extracted files).

@@ -15,7 +15,7 @@ Les sections techniques [TRUST_IMPLEMENTATION.md](TRUST_IMPLEMENTATION.md) et
 avant/après, sans être nécessaires pour lire les règles actives ci-dessous.
 
 **Périmètre de version :** les valeurs actives décrites ici sont celles du code
-actuel et du build local de test. Le ZIP publié **v0.1.0-alpha.1** conserve
+actuel, du build local et de **v0.1.0-alpha.2**. Le ZIP **v0.1.0-alpha.1** conserve
 l'équilibrage précédent. Il n'a pas été remplacé par cette passe de réglage.
 La campagne complète, toutes les crises et toutes les fins restent à valider.
 

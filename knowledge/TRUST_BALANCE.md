@@ -1,6 +1,6 @@
 # Integer balance experiment — 25 October 2026
 
-This applies to new trust events in the development build. The released
+Included in **v0.1.0-alpha.2**, applying to new trust events only. The older
 v0.1.0-alpha.1 ZIP retains its original balance. All scores and deltas stay integers.
 
 The complete current decision reference is [TRUST_REFERENCE.md](TRUST_REFERENCE.md).
