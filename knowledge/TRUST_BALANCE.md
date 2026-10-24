@@ -3,6 +3,9 @@
 This applies to new trust events in the development build. The released
 v0.1.0-alpha.1 ZIP retains its original balance. All scores and deltas stay integers.
 
+The complete current decision reference is [TRUST_REFERENCE.md](TRUST_REFERENCE.md).
+This document keeps the compact baseline-to-active comparison for the balance test.
+
 ## Policy
 
 - No baseline loss to either faction: halve each positive gain, rounding down.

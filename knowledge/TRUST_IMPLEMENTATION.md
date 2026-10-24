@@ -5,7 +5,8 @@ and [TRUST_RULES_REFERENCE.json](TRUST_RULES_REFERENCE.json). This document reco
 what the native implementation actually does and what has been tested.
 
 The active development balance policy is [TRUST_BALANCE.md](TRUST_BALANCE.md).
-The narrative reference and generated table retain baseline proposals; runtime
+The narrative reference now displays active values and all retained decisions.
+The JSON proposal fields and generated C++ table retain the baseline; runtime
 awards halve no-loss gains (round down), double losses and preserve trade-off
 rewards. Existing checkpoints and old effective credits are not rescaled.
 

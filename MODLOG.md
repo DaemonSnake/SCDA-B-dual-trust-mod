@@ -242,3 +242,15 @@ repeat unchanged. Opposing phone choice95/50->100/50->35/80 confirms loss-60,
 reward+30 and exact saturated credit reversal. Native statistics80/80 forecasts
 and applies64/80; repeat unchanged. Tests use the isolated instance2 HDD only.
 Native Hisham sequence75/75->82/75->82/77->82/45 verified reduced rescue/proof and doubled exposure. Emergency recovery10/80->35/80 verified unchanged+25.
+
+## Canonical trust reference consolidated
+
+Corrected TRUST_REFERENCE.md itself rather than only adding a balance-note link.
+All45 story rows now show active integer values, preserving original scalar
+values as historical evidence. Consolidated deferred sabotage, Hisham evidence,
+choice reversals/saturation, crisis/recovery guards, current statistics/caps,
+selected faction-row UI/animation placement, checkpoint compatibility, version
+scope and verification limits. Updated narrative examples and removed stale
+future-implementation wording. Verified all45 rows against JSON baseline plus
+current runtime policy and checked local links. Companion documents now point
+to this canonical current reference; no runtime code or game saves changed.
