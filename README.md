@@ -10,6 +10,19 @@ The dual-trust concept comes from **Double Agent version A (Xbox 360, PC and PS3
 
 ![Independent NSA and JBA trust in the OPSAT](docs/media/opsat-dual-trust.png)
 
+## Development balance test
+
+The current source includes an integer-only balance experiment prompted by
+campaign feedback: halve gains on actions with no baseline trust loss (rounding
+down), double penalties, and retain rewards on trade-off actions. For example,
+`+5 / 0` becomes `+2 / 0`, while `-5 / +5` becomes `-10 / +5`.
+Starting scores and emergency recovery rewards are unchanged. Statistics use
+halved accumulated KO gains and doubled losses, with independent +7/-30 caps.
+The [balance comparison](knowledge/TRUST_BALANCE.md) lists every story rule.
+Existing scores and past rewards are not rewritten. The published
+**v0.1.0-alpha.1 ZIP still uses the original balance**; build the current source
+or use the updated local build to test this experiment.
+
 ## What changes
 
 - **Two independent scores, from 0 to 100.** New mod state starts at 75 NSA / 75 JBA. Both can be high, both can be low, and an action can affect one faction or both.

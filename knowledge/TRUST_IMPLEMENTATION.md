@@ -1,8 +1,13 @@
 # Independent NSA/JBA trust — implementation and verification
 
-Version 0.3, 24 October 2026. Design values remain in [TRUST_REFERENCE.md](TRUST_REFERENCE.md)
+Version 0.4 balance test, 25 October 2026. Design values remain in [TRUST_REFERENCE.md](TRUST_REFERENCE.md)
 and [TRUST_RULES_REFERENCE.json](TRUST_RULES_REFERENCE.json). This document records
 what the native implementation actually does and what has been tested.
+
+The active development balance policy is [TRUST_BALANCE.md](TRUST_BALANCE.md).
+The narrative reference and generated table retain baseline proposals; runtime
+awards halve no-loss gains (round down), double losses and preserve trade-off
+rewards. Existing checkpoints and old effective credits are not rescaled.
 
 ## Implementation
 
@@ -19,15 +24,16 @@ what the native implementation actually does and what has been tested.
   compensation is deliberately ignored, because the ledger already reverses it.
 - Cozumel and HQ bomb sabotage gives its NSA reward immediately; JBA loss is
   deferred until leaving the mission. Hisham rescue gains NSA trust; JBA loses
-  15 only on the explicit script-selected dialogue where Emile sees him flee.
+  30 only on the explicit script-selected dialogue where Emile sees him flee.
   The successful fake-death branch cancels the body objective, so its absence
   must not imply discovery. Exposure revokes the effective proof bonus first.
   Explicit accepted/exposed evidence also reverses the old inferred penalty
   when reading an earlier modded checkpoint.
 - Native mission-statistics application is redirected to NSA-only gains/losses:
-  enemy death −2, civilian death −5, enemy knockout +1, civilian knockout −1,
-  seen −1, alarm −2, body found −1. Existing mission activation flags remain
-  authoritative; positive and negative totals are capped at 15. Scripted named
+  enemy death −4, civilian death −10, civilian knockout −2,
+  seen −2, alarm −4, body found −2. Sum and halve baseline enemy-KO gains
+  with integer rounding down. Existing mission activation flags remain
+  authoritative; the independent positive/negative caps are +7 and −30. Scripted named
   deaths are subtracted from the generic death count. Final NY deaths are exempt;
   the other enabled statistics still apply.
 - A high score in one camp does not imply a crisis in the other. The adapter

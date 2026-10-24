@@ -1,7 +1,7 @@
 {
   "version": "0.1-static",
   "date": "2026-10-23",
-  "status": "Proposed design, not implemented or dynamically validated",
+  "status": "Baseline narrative proposals; active integer balance adjustment is described in balance_policy and TRUST_BALANCE.md",
   "original_sign": "positive=NSA; negative=JBA",
   "units": "percentage points on independent 0..100 bars",
   "summary": {
@@ -3702,8 +3702,20 @@
     "HQ packages contain both HQ visits: do not treat their duplicate code as extra story rewards.",
     "Raw game text and decoded packages are intentionally kept outside this repository."
   ],
+  "balance_policy": {
+    "name": "integer-half-gains-double-losses",
+    "date": "2026-10-25",
+    "baseline": "The proposal fields below remain the original narrative values",
+    "no_loss_gains": "If both baseline deltas are nonnegative, divide positive deltas by 2 with integer rounding down",
+    "tradeoffs": "Retain positive gains when either baseline delta is negative",
+    "losses": "Multiply negative deltas by 2",
+    "deferred_effects": "Classify the full story pair before postponing its discovered loss",
+    "statistics": "Halve accumulated KO gains with rounding down; double losses; independent caps become +7 and -30",
+    "exceptions": "Keep initial scores 75/75 and emergency recovery +25; never rescale existing state or effective-credit reversals",
+    "document": "knowledge/TRUST_BALANCE.md"
+  },
   "implementation": {
-    "version": "0.3-native",
+    "version": "0.4-integer-balance-test",
     "document": "knowledge/TRUST_IMPLEMENTATION.md",
     "story_rules_compiled": 45,
     "status": "Independent objective/checkpoint model, HUD, OPSAT and mission-review implemented; native statistics and Hisham branch fixtures verified; full campaign QA remains documented"

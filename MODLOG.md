@@ -224,3 +224,21 @@ Lint found zero failures; two documentation warnings are local evidence paths
 already in the research notes, not bundled game data or runtime dependencies.
 Published as prerelease with ZIP and SHA256SUMS.txt. Added binary installation
 instructions and changelog. Campaign limitations remain explicitly documented.
+
+## 2026-10-25 — integer-only balance experiment
+
+User reported both camps reaching100 by Cozumel without deliberate optimization.
+New Rebalance policy halves no-loss gains (rounding down) and doubles negative
+story effects, while retaining positive trade-off rewards. Apply to the complete
+pair before deferring discovery losses; do not transform Undo, saved values or
+legacy effective credits. Contextual Hisham proof/exposure and deferred sabotage
+use the same policy. Emergency recovery remains+25; initial state stays75/75.
+Statistics halve accumulated KO gains before integer rounding and double both
+loss contributions and their cap (+7/-30). Native review rows updated as well.
+Baseline narrative JSON/table remain unchanged; active metadata and full45-rule
+before/after comparison are in TRUST_BALANCE.md. Existing released ZIP unchanged.
+Pure tests passed. Native PassengerLog75/75->77/77 and ShipEngine->79/77;
+repeat unchanged. Opposing phone choice95/50->100/50->35/80 confirms loss-60,
+reward+30 and exact saturated credit reversal. Native statistics80/80 forecasts
+and applies64/80; repeat unchanged. Tests use the isolated instance2 HDD only.
+Native Hisham sequence75/75->82/75->82/77->82/45 verified reduced rescue/proof and doubled exposure. Emergency recovery10/80->35/80 verified unchanged+25.

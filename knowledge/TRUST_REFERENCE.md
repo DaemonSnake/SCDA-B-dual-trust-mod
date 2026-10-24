@@ -3,12 +3,18 @@
 Version **0.1 — inventaire statique et proposition de règles**, 23 octobre 2026.
 
 Une première implémentation native est disponible. Voir [TRUST_IMPLEMENTATION.md](TRUST_IMPLEMENTATION.md) pour les comportements réalisés, preuves et limites; les propositions ci-dessous restent distinctes des validations en jeu.
+
+**Équilibrage du 25 octobre 2026 :** les tableaux ci-dessous conservent les
+valeurs narratives de base. Le test actuel divise par deux les gains sans perte
+(arrondi entier inférieur) et double les pertes. Voir [TRUST_BALANCE.md](TRUST_BALANCE.md)
+pour les règles actives, les exceptions de récupération et les 45 comparaisons.
 Jeu : Splinter Cell Double Agent, **Xbox originale**, assets locaux de ce projet.
 
 Ce document est la référence de conception pour remplacer le système à valeur
 unique par deux confiances indépendantes. Il décrit les événements identifiés,
 leur contexte narratif, les valeurs originales et les valeurs proposées.
-Les propositions ne sont pas encore installées dans le jeu.
+L'implémentation applique ces propositions avec les ajustements d'équilibrage
+documentés séparément.
 
 ## Lecture et niveau de preuve
 

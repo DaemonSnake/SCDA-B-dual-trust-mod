@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — integer balance test (2026-10-25)
+
+- Halve no-loss objective gains with integer rounding down; retain trade-off rewards.
+- Double all new penalties, including deferred discovery losses.
+- Halve accumulated KO gains and double statistics losses; caps become +7/-30.
+- Keep75/75 starting state, emergency+25 recoveries and existing saved credits.
+- Update mission-review contribution values to match the new policy.
+
 ## v0.1.0-alpha.1 — 2026-10-24
 
 First playable Windows x64 prerelease for campaign testing, based on source
