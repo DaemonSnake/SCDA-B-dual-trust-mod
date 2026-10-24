@@ -20,7 +20,8 @@ struct Credit {
 constexpr Pair Rebalance(Pair baseline) {
     bool free_gain = baseline.nsa >= 0 && baseline.jba >= 0;
     auto adjust = [free_gain](int value) {
-        return value < 0 ? value * 2 : free_gain ? value / 2 : value;
+        // Original major story penalties stay impactful without becoming -60.
+        return value == -30 ? -40 : value < 0 ? value * 2 : free_gain ? value / 2 : value;
     };
     return {adjust(baseline.nsa), adjust(baseline.jba)};
 }
