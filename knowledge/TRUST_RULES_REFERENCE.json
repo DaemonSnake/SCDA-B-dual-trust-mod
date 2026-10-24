@@ -1,0 +1,3711 @@
+{
+  "version": "0.1-static",
+  "date": "2026-10-23",
+  "status": "Proposed design, not implemented or dynamically validated",
+  "original_sign": "positive=NSA; negative=JBA",
+  "units": "percentage points on independent 0..100 bars",
+  "summary": {
+    "solo_declarations": 139,
+    "solo_unique_rules": 111,
+    "coop_declarations": 44,
+    "coop_nonzero": 0,
+    "solo_status_calls": 208,
+    "kinds": {
+      "zero": 37,
+      "story": 45,
+      "recovery": 19,
+      "technical_debug": 10
+    }
+  },
+  "source_files": [
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\common.lin",
+      "sha256": "37b1ee31b547349dead5d8bf65862b137f05b31391bc045f74c66e806eb88d3e",
+      "decoded_size": 4731184
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\Menu\\Menu.lin",
+      "sha256": "be32e3b8b92349f21f7cf3a7803b30cef0a57f0f7c53f19544e5aef08d728c32",
+      "decoded_size": 3091855
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_coop_ice_a\\x01_coop_ice_a.lin",
+      "sha256": "ea031c185ab8235de26c2831a483c3618d1dd78c67335e49b891d09c90d1676d",
+      "decoded_size": 13432523
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_coop_ice_b\\x01_coop_ice_b.lin",
+      "sha256": "bafd24d22e83f01376071ee90ccf1df101d64f1cfcf2c415616eff4657997f83",
+      "decoded_size": 19600435
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_coop_ice_c\\x01_coop_ice_c.lin",
+      "sha256": "afe546864847bfc8376dfb010672d66f0b25c46f63bac43278587ea0b283b968",
+      "decoded_size": 15771887
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_coop_ice_d\\x01_coop_ice_d.lin",
+      "sha256": "49ca01882722dfa33e0871473f6d1d51009907a2da06eca370c5857e673a3c84",
+      "decoded_size": 17857159
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_coop_ice_e\\x01_coop_ice_e.lin",
+      "sha256": "a4641922061234914785d3b7d8779dcd03719e5d1e5fd658aa6b55177db2d175",
+      "decoded_size": 19811497
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_Iceland_a\\x01_Iceland_a.lin",
+      "sha256": "bca7fb0ea4f536a3407747e7e6dea1cb7b98ead18b20d306bbf47866c1a584b8",
+      "decoded_size": 37994140
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x01_iceland_b\\x01_iceland_b.lin",
+      "sha256": "3e1ae9e6a850e5b1d27f54e3ac628b38075ead8cce181017fda65d9819df98d5",
+      "decoded_size": 16467984
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_coop_pris_a\\x02_coop_pris_a.lin",
+      "sha256": "e593843b4aa88c230b1366054f840b67c8d44eb2d171cb59400aa76dd21e4001",
+      "decoded_size": 20055453
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_coop_pris_b\\x02_coop_pris_b.lin",
+      "sha256": "d9f6c1611e5b0e7aa14186b67800f0cfbd09a171d189a1f466c44c6539a8090e",
+      "decoded_size": 21134866
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_coop_pris_c\\x02_coop_pris_c.lin",
+      "sha256": "7815cd2c10692b1367402945cc8eb28a4d67a529961f020324dddccf9356b51f",
+      "decoded_size": 16761965
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_coop_pris_d\\x02_coop_pris_d.lin",
+      "sha256": "9aba8491905788125e19d6e9ed156e09e30281390c53e630e390a50b01f63774",
+      "decoded_size": 17504618
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_coop_pris_e\\x02_coop_pris_e.lin",
+      "sha256": "402546f879e052bc5e075e357253e9c909e93cd658f7db8a80a5c27bccdf3e0a",
+      "decoded_size": 16905171
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_prison_a\\x02_prison_a.lin",
+      "sha256": "10ab6790f45e24e67c3e3c9d37056b18203e9c40d5854986a84115561e2c66fc",
+      "decoded_size": 15209779
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x02_prison_b\\x02_prison_b.lin",
+      "sha256": "c86b02a9d078d320e7081e8f12e6c099eb8cb9062b0160ced96b5d103b770ec0",
+      "decoded_size": 15138419
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x03_coop_kin_a\\x03_coop_kin_a.lin",
+      "sha256": "4cc3c41b7e732ac9f518540ec98c752929f389d287933c2359e7625c99339bdb",
+      "decoded_size": 20586006
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x03_coop_kin_b\\x03_coop_kin_b.lin",
+      "sha256": "84a7255152d709278ed9bce065b65a426146de03fd1e2970e21e94ae580a0ccb",
+      "decoded_size": 21055336
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x03_coop_kin_c\\x03_coop_kin_c.lin",
+      "sha256": "336fe397c6fca98f01163fb0e8865cca8a0839f96e2e05852fe9384710d3ec2a",
+      "decoded_size": 18799443
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x03_coop_kin_f\\x03_coop_kin_f.lin",
+      "sha256": "6f25f18f8cd1417ebd034b14ee808b43092b86f645c9b2275affbe421e5c6be4",
+      "decoded_size": 13192741
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x04_moneytrain_a\\x04_moneytrain_a.lin",
+      "sha256": "dd93de46bd89cdd67b232cba2661d99e44929430f11a561b6453ffaf74f43325",
+      "decoded_size": 16117886
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x04_moneytrain_b\\x04_moneytrain_b.lin",
+      "sha256": "5c5d16985d438e25016520dc8b3723c7eba2278e53da7812e06bd30a209d80fd",
+      "decoded_size": 16182845
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x05_hq2_r\\x05_hq2_r.lin",
+      "sha256": "8bcc0e3e5944b551955acc431f125783168ccc08dcddfe08e9cd13044d626feb",
+      "decoded_size": 15312358
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x06_cozumel_a\\x06_cozumel_a.lin",
+      "sha256": "4db3d86ef955d63f68a7523b34f32a27e60422ed56073fd67b2567db238432e3",
+      "decoded_size": 14524506
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x06_cozumel_b\\x06_cozumel_b.lin",
+      "sha256": "2f790cc6b1317679f2d9e1da404176ace288c6b042980cbb33a93bb8d60b2706",
+      "decoded_size": 19284471
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x08_okhotsk_a\\x08_okhotsk_a.lin",
+      "sha256": "f3c47288bf1ab34b8a5dad2d0caaabb43180d6b92ab440be4bda1f2e398aaad1",
+      "decoded_size": 17957152
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x08_okhotsk_b\\x08_okhotsk_b.lin",
+      "sha256": "fc94d790e1b55c384786b05af589569fbe70f1e4e653306cde8e844bbc86b261",
+      "decoded_size": 16499485
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x10_kinshasa_a\\x10_kinshasa_a.lin",
+      "sha256": "ccb3bcba41e94c9e86c9d33f82795d7b864f12bbaf82d46735b7612bc2635481",
+      "decoded_size": 15537345
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x10_kinshasa_b\\x10_kinshasa_b.lin",
+      "sha256": "6cc9e1888295b3f21dc17bffc68f33910d5711424402c8afbc48e1496ef07378",
+      "decoded_size": 15066669
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x11_hq5_r\\x11_hq5_r.lin",
+      "sha256": "3f4ece5991a005d57255954681ec2e0a9a9a75ad701c6cb82351bf51a7f3e3f4",
+      "decoded_size": 15793725
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x12_ny_a\\x12_ny_a.lin",
+      "sha256": "a7bef5aba7dc7ca5aa5af8fec6ec923da6176ec543d4e10f31fe85577399d484",
+      "decoded_size": 20646873
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x12_ny_b\\x12_ny_b.lin",
+      "sha256": "9e6e0f6bc1e6326dae1a5fcdce6d64baaa85af00cb944fa208a81c956509dd72",
+      "decoded_size": 20145956
+    },
+    {
+      "file": "assets\\Default\\DataXb\\LMaps\\x12_ny_c\\x12_ny_c.lin",
+      "sha256": "c37fba500c4cc800fa6daf7a394e38f2390ee6ebb302f87027977db6d7912173",
+      "decoded_size": 19743663
+    }
+  ],
+  "rules": [
+    {
+      "section": "p_x01_iceland_a_objectives",
+      "id": "OBJ_01_P_01",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196932"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383039",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_a_objectives",
+      "id": "Ice_A_BackT",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196afd"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196c45",
+          "state": 1
+        },
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383140",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_a_objectives",
+      "id": "knocknpcs",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196c57"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196dfa",
+          "state": 1
+        },
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x196f45",
+          "state": 2
+        },
+        {
+          "map": "x01_Iceland_a",
+          "decoded_offset": "0x1a62ac",
+          "state": 2
+        },
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383203",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_b_objectives",
+      "id": "OBJ_01_P_20",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x3833a7"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x38357c",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_b_objectives",
+      "id": "OBJ_01_O_10",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383483"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x3837b9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_b_objectives",
+      "id": "OBJ_01_O_20",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383874"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383c27",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x01_iceland_b_comoverride",
+      "id": "OBJ_01_P_30",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x38b0a4"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x01_iceland_b",
+          "decoded_offset": "0x383775",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_objectives",
+      "id": "WalkieTalkie",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32ab00"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32af01",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_objectives",
+      "id": "Escape",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32ac33"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331d3a",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_objectives",
+      "id": "BarnhamAlive",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32acbb"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Épargner Barnham",
+        "nsa": 15,
+        "jba": -15,
+        "reason": "Témoin du DOJ protégé; Jamie constate personnellement le refus de le tuer."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x334cf2",
+          "state": 2
+        },
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x334dc5",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_objectives",
+      "id": "Retrieve",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32ad33"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Récupérer le disque sur Jamie",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Renseignement clandestin pour Third Echelon; aucune découverte JBA établie."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x3317ea",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_objectives",
+      "id": "NeedSeringe",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32b1a7"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Trouver la seringue pour Jamie",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Préserver le contact qui permet l'infiltration; la NSA a autorisé cette opération."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32b2c1",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_a_visitationguard",
+      "id": "BarnHamDead",
+      "original_delta": -15,
+      "origins": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x32ed52"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Aider Jamie à tuer Barnham",
+        "nsa": -15,
+        "jba": 15,
+        "reason": "Tuer le témoin contredit l'ordre de Lambert et rassure directement Jamie."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x334ce0",
+          "state": 1
+        },
+        {
+          "map": "x02_prison_a",
+          "decoded_offset": "0x334dd8",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_b_objectives",
+      "id": "Regroup",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x3315a3"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Retrouver Jamie",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Maintenir Jamie en vie et poursuivre l'infiltration autorisée."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331bdb",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_b_objectives",
+      "id": "Disc",
+      "original_delta": -5,
+      "origins": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331893"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Falsifier les registres de décès",
+        "nsa": 0,
+        "jba": 5,
+        "reason": "Faciliter l'évasion et renforcer la couverture; pas de trahison NSA supplémentaire."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331a2f",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x02_prison_b_objectives",
+      "id": "Chamber",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331c5a"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x02_prison_b",
+          "decoded_offset": "0x331d26",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_objectives",
+      "id": "P_WoltCode",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357102"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Obtenir le code du coffre",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Étape du braquage confié par Emile, nécessaire à la couverture."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3573b0",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357623",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_objectives",
+      "id": "P_GoFrontTrain",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357421"
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357694"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a6ce",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a7a1",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a84a",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a8c4",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_objectives",
+      "id": "P_KillChief",
+      "original_delta": -15,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3578a8"
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357fd0"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Tuer le chef de gare",
+        "nsa": -15,
+        "jba": 15,
+        "reason": "Preuve de loyauté exigée par Emile; meurtre d'un innocent expressément interdit par Lambert."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3579a7",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357aea",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x35e15a",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_objectives",
+      "id": "P_ChiefAlive",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357927"
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357f50"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Laisser le chef de gare vivant",
+        "nsa": 15,
+        "jba": -15,
+        "reason": "Respecter l'ordre NSA tout en refusant une preuve de loyauté explicite."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3579b9",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x357afc",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x35e16c",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36437e"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3644fc",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3645cb",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260ccb",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260dc7",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_a_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36470d"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36488b",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36495a",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x26110f",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x26120e",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_b_objectives",
+      "id": "O_DetachCars",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x259642"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Décrocher les wagons arrière",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Éloigner des employés du danger sans empêcher le braquage principal."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a03f",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_b_objectives",
+      "id": "P_DisconnectCom",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x259809"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Couper les communications du train",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Retarder l'alerte et permettre le braquage sous couverture."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x25a310",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_b_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260b16"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3644fc",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x3645cb",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260ccb",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260dc7",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x04_moneytrain_b_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x260f5a"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36488b",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_a",
+          "decoded_offset": "0x36495a",
+          "state": 1
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x26110f",
+          "state": 2
+        },
+        {
+          "map": "x04_moneytrain_b",
+          "decoded_offset": "0x26120e",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "OBJ_HQA_P_10",
+      "original_delta": 10,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0b31"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fcea2"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Réduire le brouillage de la JBA",
+        "nsa": 10,
+        "jba": 0,
+        "reason": "Ouvrir une fenêtre de surveillance NSA en secret; perte JBA seulement si une autre scène établit la découverte."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0e04",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fd175",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "CarsonMoss",
+      "original_delta": -5,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0bea"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fcf5b"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Renforcer la fausse identité de Sam",
+        "nsa": 0,
+        "jba": 5,
+        "reason": "Falsifier le contrôle de sécurité de Moss sert aussi l'infiltration autorisée par Lambert."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e17e8",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fdb59",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "YeagerLambert",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0c71"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fcfe2"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Transmettre Yeager à Lambert",
+        "nsa": 15,
+        "jba": 0,
+        "reason": "Lambert prévoit de le faire disparaître avant Emile; ne pas attribuer automatiquement cette exfiltration à Sam côté JBA."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9c0e",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9cb5",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x415f7f",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x416026",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "YeagerEmile",
+      "original_delta": -15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0cf9"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fd06a"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Dénoncer Yeager à Emile",
+        "nsa": -15,
+        "jba": 15,
+        "reason": "Écarter la piste que Lambert voulait exploiter et fournir à Emile la preuve qu'il attend."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9c22",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9cc9",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x415f93",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x41603a",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "OBJ_HQA_P_20",
+      "original_delta": 10,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e1389"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fd6fa"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Ouvrir le serveur JBA à la NSA",
+        "nsa": 10,
+        "jba": 0,
+        "reason": "Renseignement clandestin; la pénalité JBA relève d'une découverte avérée, pas de la seule réussite technique."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e1517",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fd888",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_objectives",
+      "id": "OBJ_HQA_P_40",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e18d9"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fdc4a"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e0929",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e19f6",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fcc9a",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x3fdd67",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "OBJ_HQB_P_10",
+      "original_delta": 10,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e5d37"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4020a8"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Voler les contacts d'Emile",
+        "nsa": 10,
+        "jba": 0,
+        "reason": "Obtenir les contacts pour Third Echelon sans informer la JBA."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e5ec0",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402231",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "OBJ_HQB_P_20",
+      "original_delta": 10,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e5f87"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4022f8"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Analyser le mercure rouge",
+        "nsa": 10,
+        "jba": 0,
+        "reason": "Vérifier l'authenticité de l'arme pour Williams; action clandestine."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6229",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40259a",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "P_LambertNOTCover",
+      "original_delta": -15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e602e"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40239f"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Révéler l'identité de Lambert",
+        "nsa": -15,
+        "jba": 15,
+        "reason": "Conserver l'orientation morale du jeu original et le sacrifice d'un agent allié; Williams encourage pourtant ce choix: tension narrative à conserver explicitement."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9f68",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fa0d5",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4162d9",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x416446",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "P_LambertCover",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e60a4"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402415"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Confirmer la couverture de Lambert",
+        "nsa": 15,
+        "jba": -15,
+        "reason": "Sauver Lambert entretient les soupçons d'Emile selon le texte de l'objectif."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f9f53",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fa0c0",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4162c4",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x416431",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "FindBunker",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6117"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402488"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fcc3a",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x418fab",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "OBJ_HQB_P_30",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6452"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4027c3"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Désamorcer la bombe de Nashville",
+        "nsa": 15,
+        "jba": -15,
+        "reason": "Empêcher un attentat et compromettre le plan JBA; appliquer la perte JBA lorsque l'échec de la bombe est établi, pas au seul geste clandestin."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6753",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6b28",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402ac4",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402e99",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "OBJ_HQB_P_31",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e64c4"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402835"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Désamorcer la bombe de Los Angeles",
+        "nsa": 15,
+        "jba": -15,
+        "reason": "Même règle que Nashville, avec un identifiant de bombe distinct."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e68f6",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6bc1",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402c67",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402f32",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "KeepBombs",
+      "original_delta": -30,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6536"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4028a7"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Empêcher la neutralisation des bombes",
+        "nsa": -30,
+        "jba": 30,
+        "reason": "Faire partir les bombes par une autre route compromet volontairement leur interception par la NSA."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6862",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6a05",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3ee73d",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3ee936",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f2a44",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f2aed",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f2bcb",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402bd3",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x402d76",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40aaae",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40aca7",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40edb5",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40ee5e",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x40ef3c",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x11_hq5_r_objectives",
+      "id": "OBJ_HQB_P_40",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e6f01"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x403272"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e4e97",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3e7013",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x401208",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x403384",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_fingerprints",
+      "id": "OBJ_HQA_O_10",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f8841"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x414bb2"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": []
+    },
+    {
+      "section": "p_x05_hq2_r_fingerprints",
+      "id": "OBJ_HQA_O_20",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f8a89"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x414dfa"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Relever les empreintes d'Enrica",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Collecte de renseignement clandestine; les autres empreintes à montant original nul restent neutres."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f8baa",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x414f1b",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_fingerprints",
+      "id": "OBJ_HQA_O_30",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f8d4b"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4150bc"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": []
+    },
+    {
+      "section": "p_x05_hq2_r_fingerprints",
+      "id": "OBJ_HQA_O_40",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f8f8e"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4152ff"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": []
+    },
+    {
+      "section": "p_x05_hq2_r_fingerprints",
+      "id": "OBJ_HQA_O_50",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3f91e6"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x415557"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": []
+    },
+    {
+      "section": "p_x05_hq2_r_trustgameplay",
+      "id": "TrustNow",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb2bd"
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb696"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x41762e"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x417a07"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb424",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb53d",
+          "state": 1
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb8a7",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fb9c4",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x417795",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4178ae",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x417c18",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x417d35",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fbd53"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x4180c4"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fbea4",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fbffa",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x418215",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x41836b",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x05_hq2_r_trustgameplay",
+      "id": "P_TrustNSAHq2",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fc193"
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x418504"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fc2ea",
+          "state": 2
+        },
+        {
+          "map": "x05_hq2_r",
+          "decoded_offset": "0x3fc3a8",
+          "state": 1
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x41865b",
+          "state": 2
+        },
+        {
+          "map": "x11_hq5_r",
+          "decoded_offset": "0x418719",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "ChipCellPhone",
+      "original_delta": 30,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f0e0b"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Saboter le déclencheur d'Enrica",
+        "nsa": 30,
+        "jba": -30,
+        "reason": "Sauver les passagers; perte JBA à l'échec constaté de l'attentat. Pendant le sabotage secret seul: NSA +30, JBA 0."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e1c0",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e2b8",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "ProCellPhone",
+      "original_delta": -30,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f0e86"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Préserver le déclencheur de la bombe",
+        "nsa": -30,
+        "jba": 30,
+        "reason": "Permettre volontairement l'attentat malgré l'ordre de Lambert; résolution opposée au sabotage, jamais cumulée avec lui."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e1d4",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e2a5",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "PlaceRelay",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f0fab"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Installer le relais avec Enrica",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Maintenir la couverture avant le choix sur le téléphone; ne pas punir une seconde fois le résultat final."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f11d2",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "PassengerLog",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f10b8"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Récupérer le manifeste des passagers",
+        "nsa": 5,
+        "jba": 5,
+        "reason": "La description sert l'identification des victimes et Enrica rapporte une demande explicite d'Emile: intérêt des deux camps."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f1589",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "GetDown",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f1296"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f1398",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_objectives",
+      "id": "GetBomb",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2f1456"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Récupérer la bombe",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Continuer la mission de couverture avec Enrica; le sort du navire possède son propre événement majeur."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26dcae",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd255"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd3c1",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd49e",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277019",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2770f6",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd5e8"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd754",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd831",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2773cc",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2774a9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_trustgameplay",
+      "id": "TEMPNSA",
+      "original_delta": 20,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd9bc"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fda34",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2776aa",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_a_trustgameplay",
+      "id": "TEMPJBA",
+      "original_delta": -70,
+      "origins": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fda55"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fdacd",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277743",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_objectives",
+      "id": "PlantBomb",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26dd22"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26defe",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_objectives",
+      "id": "PierExtraction",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e00b"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e808",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_objectives",
+      "id": "CameraRecord",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e369"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Effacer les enregistrements vidéo",
+        "nsa": 5,
+        "jba": 5,
+        "reason": "Le texte exige de préserver le secret de la présence de Sam; préserver sa couverture protège les intérêts opérationnels des deux camps."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e491",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_objectives",
+      "id": "ShipEngine",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e544"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Immobiliser le navire",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Réduire les victimes à terre sans rendre ce sabotage automatiquement connu de la JBA."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x26e63a",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x276ead"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd3c1",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd49e",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277019",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2770f6",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277260"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd754",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fd831",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2773cc",
+          "state": 2
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2774a9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_trustgameplay",
+      "id": "TEMPNSA",
+      "original_delta": 20,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277632"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fda34",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2776aa",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x06_cozumel_b_trustgameplay",
+      "id": "TEMPJBA",
+      "original_delta": -70,
+      "origins": [
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x2776cb"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x06_cozumel_a",
+          "decoded_offset": "0x2fdacd",
+          "state": 1
+        },
+        {
+          "map": "x06_cozumel_b",
+          "decoded_offset": "0x277743",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_objectives",
+      "id": "Mercenaries",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277652"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Neutraliser les mercenaires du camp",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Permettre aux alliés d'Emile d'aborder; l'objectif accepte létal ou non létal. Les pertes humaines sont évaluées séparément."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277ac2",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_objectives",
+      "id": "Communications",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x27771d"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Couper le réseau des mercenaires",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Empêcher l'alerte pendant la prise du pétrolier."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277bde",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_objectives",
+      "id": "Bombs",
+      "original_delta": -5,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x2777eb"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Désarmer les charges dans la glace",
+        "nsa": 0,
+        "jba": 5,
+        "reason": "Maintenir le pétrolier bloqué jusqu'à sa capture; ces charges ne sont pas les bombes d'attentat de la JBA."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277cc5",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x27804c",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_objectives",
+      "id": "KeyCode",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x27786a"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Récupérer la clé de chiffrement",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Surveiller le réseau des contrebandiers pour la NSA."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277d8c",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x27806f",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_objectives",
+      "id": "Tanker",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x277968"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abc24",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x2823da"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282546",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282607",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b941f",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9529",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_a_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282821"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x28298d",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282a4e",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b98c2",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9983",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_objectives",
+      "id": "Freight_Done",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3ab432"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Identifier la cargaison",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Renseigner la NSA sur ce que la JBA pourrait exploiter; conserver une seule attribution malgré deux branches de complétion."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abdec",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abecb",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_objectives",
+      "id": "Tracker_Done",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3ab518"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Poser le traceur du pétrolier",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Suivre clandestinement le navire après sa capture par la JBA."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abd0d",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_objectives",
+      "id": "Captain_Extraction",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3ab74b"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3ac220",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_objectives",
+      "id": "Bombs_Done",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abb46"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Empêcher le sabordage du pétrolier",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Sauver le navire destiné à la JBA; ne pas confondre ce désamorçage avec un sabotage de ses attentats."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3abff9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9281"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282546",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282607",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b941f",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9529",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9756"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x28298d",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_a",
+          "decoded_offset": "0x282a4e",
+          "state": 1
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b98c2",
+          "state": 2
+        },
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9983",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_trustgameplay",
+      "id": "TEMPNSA",
+      "original_delta": 20,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9b36"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9bae",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x08_okhotsk_b_trustgameplay",
+      "id": "TEMPJBA",
+      "original_delta": -70,
+      "origins": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9bcf"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x08_okhotsk_b",
+          "decoded_offset": "0x3b9c47",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_P_50",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d1da8"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Vérifier les partenaires d'Emile",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Confirmer le calendrier et la loyauté des deux autres groupes."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d25b2",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_O_10",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d1e24"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Renseigner la NSA sur Takfir",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Collecte clandestine sur un groupe terroriste."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d2331",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d2812",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_O_20",
+      "original_delta": 5,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d1ea0"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Renseigner la NSA sur Massoud",
+        "nsa": 5,
+        "jba": 0,
+        "reason": "Même intention, cible et objectif distincts."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d22e9",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d28e8",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_O_100",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d21b6"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d66ea",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_P_200",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d26ca"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d275d",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_P_60",
+      "original_delta": -15,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d2a63"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Tuer Hisham",
+        "nsa": -15,
+        "jba": 15,
+        "reason": "Exécuter un agent allié à la demande d'Emile; conserver la gravité du choix original même si Lambert privilégie la mission."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0cbd",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0ec9",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "HishamBody",
+      "original_delta": -5,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d2adf"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Faire exploser le véhicule censé contenir Hisham",
+        "nsa": 0,
+        "jba": 5,
+        "reason": "Valider la preuve fournie à Emile. Un autre corps peut servir au simulacre: aucune perte NSA pour une fausse mort réussie; le meurtre réel est déjà pénalisé par son objectif."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0edb",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e5194",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e5216",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_objectives",
+      "id": "OBJ_10_P_30",
+      "original_delta": 15,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3d2b90"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Sauver Hisham",
+        "nsa": 15,
+        "jba": 0,
+        "reason": "Si la fausse mort convainc Emile: JBA 0. Si Emile le voit fuir, variante NSA +15 / JBA -15, attestée par les dialogues."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0ccf",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0eb7",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df547"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df6b9",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df798",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ec935",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2eca14",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df8e6"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfa58",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfb37",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2eccd4",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecdb3",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_trustgameplay",
+      "id": "TEMPNSA",
+      "original_delta": 20,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfcbb"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfd35",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecfb9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_a_trustgameplay",
+      "id": "TEMPJBA",
+      "original_delta": -70,
+      "origins": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfd56"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfdd0",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ed054",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_objectives",
+      "id": "OBJ_10_P_70",
+      "original_delta": -10,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e0ffd"
+        }
+      ],
+      "kind": "story",
+      "proposal": {
+        "label": "Sécuriser l'extraction et le canon AA",
+        "nsa": 0,
+        "jba": 10,
+        "reason": "Permettre le départ du groupe sous couverture; ne pas sanctionner des neutralisations obligatoires comme des victimes civiles."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e10e0",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_objectives",
+      "id": "OBJ_10_P_500",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e11d7"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2e1372",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_trustgameplay",
+      "id": "P_TrustJBA",
+      "original_delta": -25,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ec7c3"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 0,
+        "jba": 25,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df6b9",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3df798",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ec935",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2eca14",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_trustgameplay",
+      "id": "P_TrustNSA",
+      "original_delta": 25,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecb62"
+        }
+      ],
+      "kind": "recovery",
+      "proposal": {
+        "nsa": 25,
+        "jba": 0,
+        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfa58",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfb37",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2eccd4",
+          "state": 2
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecdb3",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_trustgameplay",
+      "id": "TEMPNSA",
+      "original_delta": 20,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecf3f"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfd35",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecfb9",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x10_kinshasa_b_trustgameplay",
+      "id": "TEMPJBA",
+      "original_delta": -70,
+      "origins": [
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ecfda"
+        }
+      ],
+      "kind": "technical_debug",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+      },
+      "status_calls": [
+        {
+          "map": "x10_kinshasa_a",
+          "decoded_offset": "0x3dfdd0",
+          "state": 1
+        },
+        {
+          "map": "x10_kinshasa_b",
+          "decoded_offset": "0x2ed054",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_a_objectives",
+      "id": "bomba",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d56ec"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d594c",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_a_objectives",
+      "id": "hikilla",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d57a6"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d5a4f",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_a_objectives",
+      "id": "killalla",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d5811"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3d5b11",
+          "state": 1
+        },
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x30281d",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_a_enricahelps",
+      "id": "ReachB",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_a",
+          "decoded_offset": "0x3da555"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x3027f1",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_b_objectives",
+      "id": "bombb",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x302605"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x302863",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_b_objectives",
+      "id": "hikillb",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x3026bf"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x30292a",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_b_objectives",
+      "id": "killallb",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x30272b"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x3029e8",
+          "state": 1
+        },
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x409fff",
+          "state": 2
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_b_objectives",
+      "id": "ReachC",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_b",
+          "decoded_offset": "0x302aaf"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x409f7b",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_c_objectives",
+      "id": "bombc",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x409de6"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x40a056",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_c_objectives",
+      "id": "hikillc",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x409ea0"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x40a10c",
+          "state": 1
+        }
+      ]
+    },
+    {
+      "section": "p_x12_ny_c_objectives",
+      "id": "killallc",
+      "original_delta": 0,
+      "origins": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x409f0d"
+        }
+      ],
+      "kind": "zero",
+      "proposal": {
+        "nsa": 0,
+        "jba": 0,
+        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+      },
+      "status_calls": [
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x40a277",
+          "state": 1
+        },
+        {
+          "map": "x12_ny_c",
+          "decoded_offset": "0x40a3a9",
+          "state": 2
+        }
+      ]
+    }
+  ],
+  "direct_calls": [
+    {
+      "map": "x04_moneytrain_a",
+      "offset": "0x3579cc",
+      "amount": 15,
+      "jba_direction": true,
+      "original_delta": -15
+    }
+  ],
+  "limits": [
+    "Static constant-call inventory; control flow reachability and dynamic expression calls are not proven.",
+    "HQ packages contain both HQ visits: do not treat their duplicate code as extra story rewards.",
+    "Raw game text and decoded packages are intentionally kept outside this repository."
+  ],
+  "implementation": {
+    "version": "0.3-native",
+    "document": "knowledge/TRUST_IMPLEMENTATION.md",
+    "story_rules_compiled": 45,
+    "status": "Independent objective/checkpoint model, HUD, OPSAT and mission-review implemented; native statistics and Hisham branch fixtures verified; full campaign QA remains documented"
+  }
+}

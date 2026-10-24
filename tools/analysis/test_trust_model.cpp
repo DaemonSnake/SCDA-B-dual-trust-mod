@@ -1,0 +1,66 @@
+#include "game/trust_model.h"
+#include <cassert>
+#include <iostream>
+using namespace game::trust;
+int main() {
+    State s;
+    s.Once("intel", {10, 0});
+    assert((s.value == Pair{85, 75}));
+    s.Once("intel", {10, 0});
+    assert((s.value == Pair{85, 75}));
+    s.Once("shared", {5, 5});
+    assert((s.value == Pair{90, 80}));
+    s.Once("spared", {15, -15});
+    assert((s.value == Pair{100, 65}));
+    s.Revoke("spared");
+    assert((s.value == Pair{90, 80}));
+    s.Once("killed", {-15, 15});
+    assert((s.value == Pair{75, 95}));
+    State checkpoint = s;
+    s.Change({-100, -100});
+    s = checkpoint;
+    assert(s.Has("intel") && (s.value == Pair{75, 95}));
+    assert(CrisisValue({100, 100}) == 50);
+    assert(CrisisValue({10, 90}) == 10);
+    assert(CrisisValue({90, 10}) == 90);
+    assert(CrisisValue({35, 80}) == 35);
+    assert(CrisisValue({80, 35}) == 65);
+    assert(Mission("x06_cozumel_a") == Mission("x06_cozumel_b"));
+    assert(Mission("x05_hq2_r") != Mission("x11_hq5_r"));
+    std::array<int, 11> records{};
+    records[2] = 1; records[5] = 1;
+    assert((StatisticsScore(records, 1) == Pair{-7, 0}));
+    assert((StatisticsScore(records, 0) == Pair{0, 0}));
+    records = {}; records[0] = 4; records[3] = 1;
+    assert((StatisticsScore(records, 2) == Pair{3, 0}));
+    records = {}; records[7] = 2; records[10] = 1; records[6] = 1;
+    assert((StatisticsScore(records, 4 | 8 | 16) == Pair{-5, 0}));
+    records = {}; records[2] = 30;
+    assert((StatisticsScore(records, 1) == Pair{-15, 0}));
+    records[0] = 40;
+    assert((StatisticsScore(records, 1 | 2) == Pair{0, 0}));
+    State hisham;
+    hisham.mission = "x10_kinshasa";
+    hisham.Once(Key(hisham, "obj_10_p_30"), {15, 0});
+    RecordHishamEvidence(hisham, HishamEvidence::Accepted);
+    assert((hisham.value == Pair{90, 75}));
+    GrantHishamProof(hisham);
+    assert((hisham.value == Pair{90, 80}));
+    RecordHishamEvidence(hisham, HishamEvidence::Exposed);
+    assert((hisham.value == Pair{90, 60}));
+    State oldSave;
+    oldSave.mission = "x10_kinshasa";
+    oldSave.Once(Key(oldSave, "hisham-no-proof"), {0, -15});
+    RecordHishamEvidence(oldSave, HishamEvidence::Exposed);
+    assert((oldSave.value == Pair{75, 60}));
+    State acceptedSave;
+    acceptedSave.mission = oldSave.mission;
+    acceptedSave.Once(Key(acceptedSave, "hisham-no-proof"), {0, -15});
+    RecordHishamEvidence(acceptedSave, HishamEvidence::Accepted);
+    assert((acceptedSave.value == Pair{75, 75}));
+    RecordHishamEvidence(hisham, HishamEvidence::Exposed);
+    GrantHishamProof(hisham);
+    RecordHishamEvidence(hisham, HishamEvidence::Accepted);
+    assert((hisham.value == Pair{90, 60}));
+    std::cout << "trust model: independent effects, duplicate suppression, saturated reversal, checkpoint copy, crises, statistics and Hisham evidence passed\n";
+}

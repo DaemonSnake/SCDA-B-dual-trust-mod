@@ -5,6 +5,7 @@ project(scda LANGUAGES C CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(SCDA_TEST_OUTPUT_DIRECTORY "" CACHE PATH "Optional isolated executable/DLL output for native mod tests")
 
 include(FetchContent)
 set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
@@ -117,6 +118,10 @@ function(scda_image target xbe config partitions game_dir)
     add_dependencies(${target} recompile_${target} build_info compiler_files)
     # the import library of what the executable exports to its DLL goes to the compiler folder
     set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON ARCHIVE_OUTPUT_DIRECTORY ${COMPILER_DIR})
+    if(SCDA_TEST_OUTPUT_DIRECTORY)
+        set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${SCDA_TEST_OUTPUT_DIRECTORY}
+            ARCHIVE_OUTPUT_DIRECTORY ${SCDA_TEST_OUTPUT_DIRECTORY}/compiler)
+    endif()
     target_include_directories(${target} PRIVATE src ${GEN})
     target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
     target_compile_options(${target} PRIVATE -fno-strict-aliasing)
@@ -128,6 +133,10 @@ function(scda_image target xbe config partitions game_dir)
     # without a C runtime: the executable passes on what the code calls
     add_library(${target}_code SHARED ${GEN_SOURCES})
     set_target_properties(${target}_code PROPERTIES OUTPUT_NAME ${target} CXX_EXTENSIONS OFF)
+    if(SCDA_TEST_OUTPUT_DIRECTORY)
+        set_target_properties(${target}_code PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${SCDA_TEST_OUTPUT_DIRECTORY}
+            ARCHIVE_OUTPUT_DIRECTORY ${SCDA_TEST_OUTPUT_DIRECTORY}/linker)
+    endif()
     add_dependencies(${target}_code recompile_${target})
     target_include_directories(${target}_code PRIVATE src ${GEN})
     target_include_directories(${target}_code SYSTEM PRIVATE src/cpu/freestanding)

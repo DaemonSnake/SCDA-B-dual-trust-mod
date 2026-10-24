@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -99,7 +100,7 @@ X86_FUNC(sub_0026AB34) {
             FullBar(ctx);
             FullBar(ctx);
             MarkPersistedDisplay();
-            input::WaitForPress();
+            if (!(std::getenv("SCDA_TRUST_TEST") && std::getenv("SCDA_TRUST_AUTOTEST"))) input::WaitForPress();
         }
     }
     __imp__sub_0026AB34(ctx, base);

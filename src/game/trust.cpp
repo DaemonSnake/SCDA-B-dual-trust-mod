@@ -15,6 +15,7 @@
 #include <mutex>
 #include <iterator>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <cmath>
@@ -422,6 +423,130 @@ void Tick(X86Context& ctx, uint32_t viewport) {
         dispatch = active && player && CrisisValue(state.value) != state.dispatched;
     }
     if (dispatch) { ctx.ecx = player; CallGuest(ctx, 0x92413, {0}); }
+    // Explicitly enabled local test bridge. Normal play never reads commands from disk.
+    static bool test = std::getenv("SCDA_TRUST_TEST") != nullptr;
+    static auto next = std::chrono::steady_clock::now();
+    if (test && std::chrono::steady_clock::now() >= next) {
+        next = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+        auto path = app::ExeDir() / "trust-test.txt";
+        std::ifstream f(path);
+        std::string command;
+        if (std::getline(f, command)) {
+            f.close(); std::error_code ec; std::filesystem::remove(path, ec);
+            if (command.starts_with("trust speech ") && active && player) {
+                uint32_t scratch = (saved.esp - 2048) & ~15u;
+                const std::string parts[] = {"p_x10_kinshasa_b_comms", command.substr(13), "Localization\\P_x10_kinshasa_b"};
+                for (unsigned i = 0; i < 3; ++i) {
+                    auto* out = static_cast<char16_t*>(HostPtr(scratch + i * 256));
+                    size_t length = std::min<size_t>(parts[i].size(), 120);
+                    for (size_t j = 0; j < length; ++j) out[j] = static_cast<unsigned char>(parts[i][j]);
+                    out[length] = 0;
+                }
+                ctx.esp = scratch - 32;
+                CallGuest(ctx, 0x70FC9, {scratch, scratch + 256, scratch + 512, 0, 0, 1});
+            } else if (command == "trust stat-fixture" && active && player && R32(player + 0x710)) {
+                uint32_t container = R32(player + 0x710), info = R32(player + 0xF4);
+                W32(container + 0xAC, 0);
+                ctx.ecx = container + 0xA8; CallGuest(ctx, 0x23D0BC, {0x14, 4});
+                uint32_t data = R32(container + 0xA8);
+                std::memset(HostPtr(data), 0, 4 * 0x14);
+                const uint8_t types[] = {5, 0, 7, 10};
+                for (unsigned i = 0; i < 4; ++i) G<uint8_t>(data + i * 0x14) = types[i];
+                if (info) for (unsigned i = 0; i < 5; ++i) W32(info + 0xC60 + i * 4, R32(info + 0xC60 + i * 4) | 1);
+            } else if (command == "trust statistics" && active && player) {
+                uint32_t interaction = R32(viewport + 0x70);
+                uint32_t manager = interaction ? R32(interaction + 0x3C) : 0;
+                uint32_t summary = manager ? R32(manager + 0x2CB0 + 0x3CC) : 0;
+                if (summary) { ctx.ecx = summary; CallGuest(ctx, 0x1BB69C, {}); }
+            } else if ((command == "trust page" || command == "trust review") && active && player) {
+                uint32_t interaction = R32(viewport + 0x70);
+                uint32_t manager = interaction ? R32(interaction + 0x3C) : 0;
+                if (manager && command == "trust review") {
+                    uint32_t slot = manager + 0x2CB0 + 0x3CC;
+                    CallGuest(ctx, 0x1BA9C9, {slot, manager});
+                    uint32_t review = R32(slot);
+                    if (review && R32(review + 0x50)) {
+                        ctx.ecx = manager; CallGuest(ctx, 0x292318, {R32(review + 0x50), 1, 1, 0});
+                        ctx.ecx = review; CallGuest(ctx, 0x1BD370, {});
+                    }
+                }
+                uint32_t menu = manager && command == "trust page" ? manager + 0x31C4 : 0;
+                uint32_t page = menu ? R32(menu + 0x150) : 0;
+                if (page) {
+                    G<uint8_t>(menu + 0x18C) = 1;
+                    ctx.ecx = menu; CallGuest(ctx, 0x192129, {page, 1});
+                    ctx.ecx = menu; CallGuest(ctx, 0x19890F, {});
+                }
+            } else if (command == "trust skip" && active && player &&
+                       unreal::StateOf(player) == unreal::Name("s_ScriptedEvent")) {
+                ctx.ecx = player;
+                uint32_t fn = CallGuest(ctx, 0x603DA, {unreal::Name("ProcessPauseMenu"), 0});
+                if (fn) {
+                    uint32_t params = (saved.esp - 1024) & ~15u;
+                    std::memset(HostPtr(params), 0, 256); ctx.esp = params - 32;
+                    ctx.ecx = player; CallGuest(ctx, R32(R32(player) + 0x10), {fn, params, 0});
+                }
+            } else if (command == "trust inspect" && active && player) {
+                auto dir = std::filesystem::path(std::getenv("USERPROFILE")) / "scda-trust-analysis";
+                std::ofstream report(dir / "live-functions.txt");
+                for (auto name : {"ModifyTrust", "GetEchelonTrustLevel", "ConvertTrustValueToTrustLevel", "ManageTrustLevelEvents"}) {
+                    ctx.ecx = player;
+                    uint32_t fn = CallGuest(ctx, 0x603DA, {unreal::Name(name), 0});
+                    report << name << " " << std::hex << fn << '\n';
+                    if (!fn) continue;
+                    for (uint32_t i = 0; i < 0x100; i += 4)
+                        report << std::hex << i << ':' << R32(fn + i) << ' ';
+                    report << '\n';
+                    for (uint32_t i = 0x30; i < 0xB0; i += 4) {
+                        uint32_t data = R32(fn + i), size = R32(fn + i + 4), capacity = R32(fn + i + 8);
+                        if (data >= 0x700000 && data < 0x4000000 && size > 0 && size < 4000 && capacity >= size && capacity < 8000) {
+                            std::ofstream bytes(dir / (std::string(name) + "-" + std::to_string(i) + ".bin"), std::ios::binary);
+                            bytes.write(static_cast<const char*>(HostPtr(data)), size);
+                        }
+                    }
+                }
+            } else if ((command.starts_with("trust goal ") || command.starts_with("trust native ")) && active && player) {
+                bool synthetic = command.starts_with("trust native ");
+                std::string id = command.substr(synthetic ? 13 : 11);
+                if (id.size() > 180) id.resize(180);
+                uint32_t scratch = (saved.esp - 4096) & ~15u;
+                std::memset(HostPtr(scratch), 0, 2048);
+                for (size_t i = 0; i <= id.size() && i < 200; ++i)
+                    W16(scratch + 32 + uint32_t(i) * 2, i == id.size() ? 0 : uint8_t(id[i]));
+                W32(scratch, scratch + 32); W32(scratch + 4, uint32_t(id.size() + 1));
+                W32(scratch + 8, uint32_t(id.size() + 1)); W32(scratch + 12, 1);
+                ctx.esp = scratch - 32;
+                ctx.ecx = R32(player + 0x710);
+                // Exercise the real native setter even on a debug-opened level,
+                // whose mission/profile has not allocated an objective container.
+                // The synthetic container exists only for this synchronous test call.
+                if (synthetic) {
+                    ctx.ecx = scratch + 512;
+                    uint32_t record = scratch + 1024;
+                    W32(ctx.ecx + 0xA0, player);
+                    W32(ctx.ecx + 0xC0, record); W32(ctx.ecx + 0xC4, 1); W32(ctx.ecx + 0xC8, 1);
+                    std::memcpy(HostPtr(record + 0x24), HostPtr(scratch), 12);
+                    W32(record + 0x38, 5);
+                }
+                CallGuest(ctx, 0xE9CE4, {scratch, scratch + 12});
+            } else game::QueueCommand(command);
+        }
+        std::ofstream out(app::ExeDir() / "trust-test-state.txt");
+        out << "active " << active << " player " << std::hex << player << std::dec
+            << " map " << state.map << " NSA " << state.value.nsa << " JBA " << state.value.jba
+            << " events " << state.credits.size() << " ui " << visible << " last " << last << '\n';
+        out << "opsat-levels " << opsat_levels.nsa << ' ' << opsat_levels.jba << " review "
+            << review_value.nsa << ' ' << review_value.jba << " delta " << review_delta.nsa << ' ' << review_delta.jba << '\n';
+        if (pc) out << "candidate " << std::hex << pc << " class " << unreal::NameOf(R32(pc + 0x24))
+                    << " expected " << unreal::Name("EPlayerController") << " level " << R32(pc + 0x270)
+                    << " map-string " << (R32(pc + 0x270) ? FString(R32(pc + 0x270) + 0x5C) : "") << '\n';
+        if (active && player && R32(player + 0x710)) {
+            uint32_t goals = R32(player + 0x710), n = R32(goals + 0xC4), data = R32(goals + 0xC0);
+            for (uint32_t i = 0; i < n && i < 256; ++i)
+                out << "goal " << FString(data + i * 0x58 + 0x24) << ' '
+                    << int(G<uint8_t>(data + i * 0x58 + 0x40)) << '\n';
+        }
+    }
     ctx = saved;
 }
 void Page(uint32_t id) {
