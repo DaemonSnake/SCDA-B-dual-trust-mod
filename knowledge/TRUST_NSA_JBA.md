@@ -1,99 +1,97 @@
-# Confiance NSA / JBA : localisation et préparation de deux jauges
+# NSA / JBA trust: locating the system and preparing two meters
 
-**Référence actuelle : [TRUST_REFERENCE.md](TRUST_REFERENCE.md)**, avec inventaire
-des déclencheurs, contexte narratif et propositions NSA/JBA. Le présent document
-conserve la première localisation technique, corrigée après l'analyse des scripts.
+**Current reference: [TRUST_REFERENCE.md](TRUST_REFERENCE.md)**, with trigger
+inventory, narrative context and NSA/JBA proposals. This document retains the
+initial technical findings, corrected after script analysis.
 
-Analyse statique du 23 octobre 2026. Adresses virtuelles du XBE, et non adresses
-hôte du processus PC. Empreinte du binaire dans `MODLOG.md`.
-Les conclusions ci-dessous proviennent exclusivement des fichiers locaux.
+Static analysis from 23 October 2026. Addresses are XBE virtual addresses, not
+host addresses in the PC process. The binary fingerprint is in `MODLOG.md`.
+The conclusions below come exclusively from local files.
 
-## Résultat
+## Findings
 
-La confiance utilisée par l'interface est une valeur unique, lue comme un octet
-à `objet + 0x360`. L'objet est obtenu depuis le gestionnaire de menus par
-`sub_0017B720`. Son nom de classe exact reste à confirmer.
+Trust used by the interface is a single value, read as a byte at
+`object + 0x360`. The object is obtained from the menu manager through
+`sub_0017B720`. Its exact class name remains to be confirmed.
 
-L'extrémité 0 active `logo_NSA`, l'extrémité 100 active `logo_JBA`.
-Ces logos indiquent le camp en difficulté : **les deltas positifs favorisent
-la NSA, les négatifs la JBA**. La première interprétation inverse de ces
-extrémités était erronée et est remplacée par la lecture des scripts et objectifs.
-Les valeurs intermédiaires parcourent l'animation `A_trust`.
-Le bilan calcule des contributions positives et négatives, les soustrait,
-puis transmet un delta unique à l'événement `ModifyTrust`.
+The 0 endpoint enables `logo_NSA`; the 100 endpoint enables `logo_JBA`.
+These logos indicate the faction in trouble: **positive deltas favor the NSA,
+negative deltas favor the JBA**. The initial reversed interpretation of these
+endpoints was incorrect and is superseded by the scripts and objectives.
+Intermediate values move through the `A_trust` animation. Mission review
+calculates positive and negative contributions, subtracts them, then sends a
+single delta to the `ModifyTrust` event.
 
-Deux jauges exigent donc deux états et une classification avant cette soustraction.
-Créer `NSA = 100 - JBA` reproduirait exactement le couplage existant.
+Two meters therefore require two states and classification before that
+subtraction. Setting `NSA = 100 - JBA` would reproduce the existing coupling.
 
-## Points d'entrée vérifiés
+## Verified entry points
 
-| Adresse | Rôle observé | Source |
+| Address | Observed role | Source |
 | --- | --- | --- |
-| `0x00092413` | Wrapper d'appel de l'événement script `ModifyTrust(int)` | `generated/game/x86_recomp.14.cpp`, ligne 19943 |
-| `0x00095B32` | Entrée VM : lit montant et second paramètre, inverse le montant si ce paramètre est non nul, appelle le wrapper | `generated/game/x86_recomp.15.cpp`, ligne 3 |
-| `0x000E9CE4` | Recherche un enregistrement par identifiant, traite son changement d'état et applique son montant de confiance | `generated/game/x86_recomp.22.cpp`, ligne 5409 |
-| `0x000E9B32` | Compte les entrées d'un type statistique donné | `generated/game/x86_recomp.22.cpp` |
-| `0x001BB69C` | Agrège les statistiques, applique le delta et stocke le résultat dans l'historique | `generated/game/x86_recomp.41.cpp`, ligne 28969 |
-| `0x001BA097` | Recalcule le delta pour la prévisualisation du bilan | `generated/game/x86_recomp.41.cpp`, ligne 24760 |
-| `0x001BDA0C` | Résout `AInst_Trust`, `A_trust`, `logo_JBA`, `logo_NSA` | `generated/game/x86_recomp.42.cpp`, ligne 4556 |
-| `0x001BDB21` | Positionne l'animation sur la valeur transmise | `generated/game/x86_recomp.42.cpp`, ligne 4766 |
-| `0x001BDC15` | Active le logo NSA à 0 et le logo JBA à 100 | `generated/game/x86_recomp.42.cpp`, ligne 4995 |
-| `0x000C357D` | Lit `TRUSTVALUE=` dans les options et écrit l'octet `+0x360` | `generated/game/x86_recomp.18.cpp`, ligne 23857 |
-| `0x0018121F` | Gros répartiteur de menus : affichage, initialisation et restauration de confiance entre autres | `generated/game/x86_recomp.36.cpp`, ligne 7699 |
+| `0x00092413` | Call wrapper for the `ModifyTrust(int)` script event | `generated/game/x86_recomp.14.cpp`, line 19943 |
+| `0x00095B32` | VM entry: reads the amount and second parameter, negates the amount if that parameter is nonzero, calls the wrapper | `generated/game/x86_recomp.15.cpp`, line 3 |
+| `0x000E9CE4` | Finds a record by identifier, processes its state change and applies its trust amount | `generated/game/x86_recomp.22.cpp`, line 5409 |
+| `0x000E9B32` | Counts entries of a specified statistics type | `generated/game/x86_recomp.22.cpp` |
+| `0x001BB69C` | Aggregates statistics, applies the delta and stores the result in history | `generated/game/x86_recomp.41.cpp`, line 28969 |
+| `0x001BA097` | Recalculates the delta for the review preview | `generated/game/x86_recomp.41.cpp`, line 24760 |
+| `0x001BDA0C` | Resolves `AInst_Trust`, `A_trust`, `logo_JBA`, `logo_NSA` | `generated/game/x86_recomp.42.cpp`, line 4556 |
+| `0x001BDB21` | Positions the animation at the supplied value | `generated/game/x86_recomp.42.cpp`, line 4766 |
+| `0x001BDC15` | Enables the NSA logo at 0 and the JBA logo at 100 | `generated/game/x86_recomp.42.cpp`, line 4995 |
+| `0x000C357D` | Reads `TRUSTVALUE=` from options and writes byte `+0x360` | `generated/game/x86_recomp.18.cpp`, line 23857 |
+| `0x0018121F` | Large menu dispatcher: includes trust display, initialization and restoration | `generated/game/x86_recomp.36.cpp`, line 7699 |
 
-### Pourquoi `0x00092413` est bien `ModifyTrust`
+### Why `0x00092413` is indeed `ModifyTrust`
 
-L'initialiseur `0x0011BE6D` enregistre la chaîne UTF-16 `ModifyTrust`
-à `0x00522750` et conserve son identifiant dans `0x0064E924`.
-Le wrapper lit cet identifiant, résout la fonction via `0x000603DA`, puis
-déclenche l'appel virtuel `vtable + 0x10` avec le delta en paramètres.
+Initializer `0x0011BE6D` registers the UTF-16 string `ModifyTrust` at
+`0x00522750` and stores its identifier at `0x0064E924`. The wrapper reads this
+identifier, resolves the function through `0x000603DA`, then invokes
+`vtable + 0x10` with the delta as its parameter.
 
-**Ce wrapper n'est pas le corps de la fonction.** Le corps a depuis été retrouvé
-dans le flux décompressé de `common.lin`, en-tête `0x17f295`, code `0x17f2a6` :
-la mise à jour ajoute le delta puis borne `Trust` entre 0 et 100. Voir la nouvelle
-référence pour les preuves et la limite concernant les effets annexes non testés.
+**This wrapper is not the function body.** The body has since been found in the
+decompressed `common.lin` stream, header `0x17f295`, code `0x17f2a6`: the update
+adds the delta and clamps `Trust` between 0 and 100. See the new reference for
+evidence and the limitations concerning untested side effects.
 
-Deux autres noms sont enregistrés : `GetEchelonTrustLevel` → identifiant
-dans `0x0064E850`, wrapper `0x001429C3`; et
-`ConvertTrustValueToTrustLevel` → identifiant dans `0x0064E7D4`.
-Les consommateurs des niveaux de confiance doivent également être examinés.
+Two other names are registered: `GetEchelonTrustLevel` → identifier at
+`0x0064E850`, wrapper `0x001429C3`; and `ConvertTrustValueToTrustLevel` →
+identifier at `0x0064E7D4`. Trust-tier consumers must also be examined.
 
-## Objectifs : la classification existe, mais sous une forme couplée
+## Objectives: classification exists, but in coupled form
 
-Dans `0x000E9CE4`, le conteneur possède un tableau à `+0xC0`, un nombre
-d'éléments à `+0xC4`, avec un pas de **0x58 octets**.
-La comparaison d'identifiant passe par `0x000D28B9` avec `entrée + 0x24`.
+In `0x000E9CE4`, the container has an array at `+0xC0`, an element count at
+`+0xC4`, and a stride of **0x58 bytes**. Identifier comparison goes through
+`0x000D28B9` using `entry + 0x24`.
 
-Champs observés de chaque entrée :
+Observed fields in each entry:
 
-| Offset | Utilisation constatée |
+| Offset | Observed use |
 | --- | --- |
-| `+0x24` | Identifiant comparé à l'identifiant demandé |
-| `+0x38` | Montant entier de confiance |
-| `+0x40` | État, écrit depuis le nouvel état transmis |
-| `+0x54`, masque `0x02` | Inverse le signe du montant |
+| `+0x24` | Identifier compared with the requested identifier |
+| `+0x38` | Integer trust amount |
+| `+0x40` | State, written from the supplied new state |
+| `+0x54`, mask `0x02` | Reverses the amount's sign |
 
-L'application du montant est conditionnée notamment par un nouvel état égal
-à 1, un montant non nul et un drapeau du contexte. Avec le drapeau de signe
-absent, le montant est transmis tel quel; avec ce drapeau, il est négatif.
-Pour un montant positif, cela correspond respectivement aux directions
-NSA et JBA de la jauge. Les montants réels sont maintenant inventoriés dans la
-nouvelle référence. Il reste à vérifier dynamiquement le sens
-métier des états dans les ressources avant de nommer les champs définitivement.
+Applying the amount depends on conditions including a new state of 1, a nonzero
+amount and a context flag. Without the sign flag, the amount is passed unchanged;
+with it, the amount is negative. For a positive amount, these correspond to the
+NSA and JBA directions respectively. Actual amounts are now inventoried in the
+new reference. The gameplay meaning of resource states still needs dynamic
+verification before the fields are given definitive names.
 
-Le bon endroit pour une règle par objectif conserve **mission + identifiant
-d'objectif + transition d'état**, avant de convertir le tout en delta.
-Un simple hook du delta final ne sait plus quel objectif l'a produit.
+A per-objective rule should retain **mission + objective identifier + state
+transition** before reducing the result to a delta. A hook on the final delta
+alone no longer knows which objective produced it.
 
-## Actions générales : cinq groupes au bilan
+## General actions: five review groups
 
-Le bilan lit l'historique statistique via `objet + 0x710`.
-`0x000E9B32` parcourt un tableau à `+0xA8`, de taille `+0xAC`, avec
-des entrées de 0x14 octets; le premier octet est l'identifiant de type.
+Mission review reads statistics history through `object + 0x710`.
+`0x000E9B32` walks an array at `+0xA8`, with size at `+0xAC` and 0x14-byte
+entries; the first byte is the type identifier.
 
-La formule de `0x001BB69C` utilise cinq groupes :
+The formula in `0x001BB69C` uses five groups:
 
-| Types statistiques | Coefficient sur l'objet | Drapeaux sur l'objet référencé par `objet + 0xF4` |
+| Statistics types | Coefficient on the object | Flags on the object referenced by `object + 0xF4` |
 | --- | --- | --- |
 | `2 + 5` | `+0x4EC` | `+0xC60` |
 | `0 + 3` | `+0x4F0` | `+0xC64` |
@@ -101,87 +99,86 @@ La formule de `0x001BB69C` utilise cinq groupes :
 | `10` | `+0x4F8` | `+0xC6C` |
 | `6` | `+0x4FC` | `+0xC70` |
 
-Pour chaque groupe, masque `0x01` = contribution activée;
-masque `0x02` = ajout dans l'accumulateur positif; sinon ajout dans celui
-qui sera soustrait. Chaque accumulateur est borné séparément entre 0 et 15.
+For each group, mask `0x01` means its contribution is enabled; mask `0x02`
+adds it to the positive accumulator; otherwise it is added to the accumulator
+that will be subtracted. Each accumulator is independently clamped between 0 and 15.
 
-Le calcul observé équivaut à :
+The observed calculation is equivalent to:
 
 ```text
-positif = clamp(somme des groupes positifs, 0, 15)
-negatif = clamp(somme des groupes négatifs, 0, 15)
-cible = clamp(confiance_actuelle + positif - negatif, 5, 95)
-ModifyTrust(cible - confiance_actuelle)
+positive = clamp(sum of positive groups, 0, 15)
+negative = clamp(sum of negative groups, 0, 15)
+target = clamp(current_trust + positive - negative, 5, 95)
+ModifyTrust(target - current_trust)
 ```
 
-Ces bornes **5..95 sont celles de ce chemin de bilan**, pas une preuve des
-bornes générales de `ModifyTrust`. Le répartiteur de menus contient aussi
-un appel avec `100 - valeur_actuelle`, et le HUD gère les extrémités 0 et 100.
+The **5..95 bounds belong to this review path**; they do not establish the
+general bounds of `ModifyTrust`. The menu dispatcher also has a call using
+`100 - current_value`, and the HUD handles the 0 and 100 endpoints.
 
-La prévisualisation `0x001BA097` duplique cette formule en utilisant une
-valeur de départ conservée dans le menu à `+0xB0`; elle écrit le delta à
-`menu + 0xA0`. Il faut adapter les deux chemins pour garder le bilan cohérent.
+Preview function `0x001BA097` duplicates this formula using a starting value
+stored at menu `+0xB0`; it writes the delta at `menu + 0xA0`. Both paths need
+adapting to keep the review consistent.
 
-Les catégories ont depuis été recoupées avec le bilan et ses textes :
-0/3 = ennemis/civils assommés, 2/5 = ennemis/civils tués, 7 = repérages,
-10 = alarmes, 6 = corps découverts. La nouvelle référence distingue cette
-identification des coefficients par mission, qui restent à extraire.
+Categories have since been cross-checked against the review and its text:
+0/3 = enemy/civilian knockouts, 2/5 = enemy/civilian deaths, 7 = detections,
+10 = alarms, 6 = bodies found. The new reference distinguishes this identification
+from mission-specific coefficients, which remain to be extracted.
 
-## Affichage et persistance
+## Display and persistence
 
-Le HUD passe par `0x0019B7A1`, puis `0x001BDB21` et `0x001BDC15`.
-L'écran OPSAT utilise `P_Trust`; le bilan utilise `P_TrustReview` et
-`Lst_TrustOverall`. Un second affichage doit couvrir ces écrans et leurs
-notifications, pas uniquement dessiner deux barres dans le HUD.
+The HUD goes through `0x0019B7A1`, then `0x001BDB21` and `0x001BDC15`.
+OPSAT uses `P_Trust`; mission review uses `P_TrustReview` and `Lst_TrustOverall`.
+A second display must cover these screens and their notifications, not merely
+draw two HUD bars.
 
-Le bilan stocke la valeur dans un historique d'octets à
-`base_profil + index_mission + 0x1C4B`. Le chemin console/changement de carte
-`0x001CEB87` lit et écrit aussi cette zone, et transmet `?TRUSTVALUE=%d`.
-Le répartiteur `0x0018121F` restaure des valeurs de cet historique et contient
-une initialisation explicite à **75** dans un de ses chemins. Ce n'est pas
-une preuve que toutes les nouvelles parties démarrent à 75.
+Mission review stores the value in a byte history at
+`profile_base + mission_index + 0x1C4B`. Console/map-travel path `0x001CEB87`
+also reads and writes that area and passes `?TRUSTVALUE=%d`. Dispatcher
+`0x0018121F` restores values from this history and explicitly initializes trust
+to **75** in one path. This does not prove that every new game starts at 75.
 
-Il faudra traiter sauvegarde, chargement de checkpoint, changement de carte,
-redémarrage de mission et historique. Deux variables globales hôte ne suffisent
-pas : elles peuvent survivre à un rechargement qui devrait revenir en arrière.
-Ne pas réutiliser les octets voisins de `+0x360` sans établir leur propriété.
+Saving, checkpoint loading, map travel, mission restart and history all need
+handling. Two host globals are insufficient: they can survive a reload that
+should roll back their values. Do not reuse bytes adjacent to `+0x360` without
+establishing their ownership.
 
-## Architecture proposée — à implémenter après identification des événements
+## Proposed architecture — implement after identifying events
 
-Un événement possède deux effets explicites, par exemple
-`{ delta_nsa: +5, delta_jba: 0 }`, avec bornage indépendant de chaque jauge.
-Les cas `(+5,+5)`, `(-5,-5)` et `(+5,-5)` restent possibles lorsqu'une règle
-de gameplay les justifie. Aucun effet opposé automatique.
+Each event has two explicit effects, for example
+`{ delta_nsa: +5, delta_jba: 0 }`, with each meter independently clamped.
+Cases `(+5,+5)`, `(-5,-5)` and `(+5,-5)` remain possible when justified by a
+gameplay rule. There is no automatic opposing effect.
 
-Les clés de règles doivent distinguer :
+Rule keys must distinguish:
 
-- Objectif : mission, identifiant, transition d'état.
-- Action : type statistique identifié, contexte pertinent, moment d'application.
-- Appel script direct : fonction/appelant et contexte de mission.
+- Objective: mission, identifier, state transition.
+- Action: identified statistics type, relevant context, application time.
+- Direct script call: function/caller and mission context.
 
-Une règle inconnue doit être journalisée comme non classée. Le signe de
-l'ancien delta ne permet pas de déduire à lui seul l'effet sur les deux camps.
-Les déclenchements répétés et les actions déjà comptabilisées au bilan doivent
-être distingués pour éviter un double gain ou une double pénalité.
+An unknown rule should be logged as unclassified. The old delta's sign alone
+cannot determine independent effects on both factions. Repeated triggers and
+actions already counted in review must be distinguished to avoid duplicate
+rewards or penalties.
 
-Il faudra aussi décider explicitement des valeurs initiales, des seuils d'échec,
-des conditions narratives et des récompenses d'équipement. Les chaînes
-`LOADOUT_JBA_TRUST` et `LOADOUT_ECHELON_TRUST` sont présentes dans le XBE;
-leur présence seule n'établit pas leurs conditions de déblocage.
+Starting values, failure thresholds, narrative conditions and equipment rewards
+also require explicit decisions. Strings `LOADOUT_JBA_TRUST` and
+`LOADOUT_ECHELON_TRUST` are present in the XBE; their presence alone does not
+establish unlock conditions.
 
-## Vérifications restantes avant un mod fonctionnel
+## Remaining checks before a working mod
 
-1. Le corps UnrealScript de `ModifyTrust` et le catalogue des objectifs constants
-   sont désormais identifiés; vérifier les effets annexes et les appels dynamiques.
-2. Extraire les coefficients statistiques par mission et raccorder les variantes
-   narratives, notamment la fausse mort d'Hisham, aux conditions exactes des scripts.
-3. Tracer en jeu un objectif, un appel script direct et chaque groupe de bilan :
-   identifiant, contexte, ancien état, nouveau, montant et écritures de confiance.
-4. Introduire les deux états persistants, les règles et les deux affichages,
-   puis adapter les lecteurs des seuils et les bilans.
-5. Vérifier gain NSA seul, gain JBA seul, effets sur les deux camps,
-   répétition d'événement, bilan, checkpoint et transition de mission.
+1. The UnrealScript body of `ModifyTrust` and the constant-objective catalogue
+   are now identified; check side effects and dynamic calls.
+2. Extract mission-specific statistics coefficients and connect narrative
+   variants, particularly Hisham's fake death, to exact script conditions.
+3. Trace an objective, a direct script call and each review group in-game:
+   identifier, context, old state, new state, amount and trust writes.
+4. Introduce both persistent states, rules and displays, then adapt threshold
+   readers and mission reviews.
+5. Verify NSA-only gains, JBA-only gains, effects on both factions, repeated
+   events, review, checkpoints and mission transitions.
 
-À ce stade, la localisation et les calculs natifs ci-dessus sont établis par
-lecture statique. Le jeu n'a pas été lancé et aucun comportement à deux jauges
-n'est encore installé ou validé.
+At this stage, the locations and native calculations above are established by
+static reading. The game has not been launched and no two-meter behavior has
+yet been installed or validated.

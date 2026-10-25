@@ -1,2 +1,6 @@
 * text=auto
 *.bat text eol=crlf
+
+# Keep translated archive documentation checksums stable across checkouts.
+knowledge/experiments/*/Apply-Pack.ps1 text eol=lf
+knowledge/experiments/iceland-a-remaster-snapshot-20261022/README.md text eol=lf

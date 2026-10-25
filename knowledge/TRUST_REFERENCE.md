@@ -1,668 +1,655 @@
-# Référence — confiance NSA / JBA : décisions et règles actives
+# Reference — NSA / JBA trust: decisions and active rules
 
-Version **0.4 — équilibrage entier et décisions consolidées**, 25 octobre 2026.
+Version **0.4 — integer balance and consolidated decisions**, 25 October 2026.
 
-Jeu ciblé : **Splinter Cell: Double Agent, version B Xbox originale**, via
-SCDA-XBERecomp. Le principe des deux confiances indépendantes vient de la
-**version A (Xbox 360, PC et PS3)** ; les effets sont adaptés aux objectifs et
-au contexte de la campagne B.
+Target game: **Splinter Cell: Double Agent, original Xbox version B**, through
+SCDA-XBERecomp. The two independent trust scores are based on
+**version A (Xbox 360, PC and PS3)**; their effects are adapted to the objectives
+and narrative context of the version B campaign.
 
-Ce document est la référence principale des décisions retenues : montants actifs,
-conditions narratives, effets différés, statistiques, récupération, interface et
-sauvegardes. Il conserve aussi les preuves de l'inventaire du système original.
-Les sections techniques [TRUST_IMPLEMENTATION.md](TRUST_IMPLEMENTATION.md) et
-[TRUST_BALANCE.md](TRUST_BALANCE.md) apportent les vérifications et la comparaison
-avant/après, sans être nécessaires pour lire les règles actives ci-dessous.
+This document is the main reference for the agreed decisions: active amounts,
+narrative conditions, deferred effects, statistics, recovery, interface and
+saves. It also retains evidence from the inventory of the original system.
+The technical documents [TRUST_IMPLEMENTATION.md](TRUST_IMPLEMENTATION.md) and
+[TRUST_BALANCE.md](TRUST_BALANCE.md) provide verification and before/after
+comparisons; they are not required to understand the active rules below.
 
-**Périmètre de version :** les valeurs actives décrites ici sont celles du code
-actuel, du build local et de **v0.1.0-alpha.2**. Le ZIP **v0.1.0-alpha.1** conserve
-l'équilibrage précédent. Il n'a pas été remplacé par cette passe de réglage.
-La campagne complète, toutes les crises et toutes les fins restent à valider.
+**Version scope:** the active values described here apply to the current code,
+the local build and **v0.1.0-alpha.2**. The **v0.1.0-alpha.1** ZIP retains its
+previous balance. This balance pass did not replace it.
+The complete campaign, every crisis and all endings still require validation.
 
-## Lecture et niveau de preuve
+## How to read this document and assess the evidence
 
-- **Établi par les fichiers** : identifiants, montants constants, drapeaux,
-  appels natifs, textes d'objectifs et dialogues associés.
-- **Interprétation narrative** : ce que les actions signifient pour chaque camp,
-  en tenant compte de ce qu'il sait réellement.
-- **Règle active** : décision de conception appliquée par le mod ; les colonnes
-  NSA/JBA donnent les valeurs entières du réglage courant, pas celles des développeurs.
-- **À valider en jeu** : atteignabilité de toutes les branches, notifications,
-  rejouabilité des événements, séquences exactes de découverte et équilibrage.
+- **Established from files:** identifiers, constant amounts, flags, native calls,
+  objective text and associated dialogue.
+- **Narrative interpretation:** what actions mean to each faction, accounting
+  for what that faction actually knows.
+- **Active rule:** a design decision implemented by the mod; the NSA/JBA columns
+  show the current integer balance, not the original developers' values.
+- **Requires in-game validation:** reachability of every branch, notifications,
+  event replay, exact discovery sequences and balance.
 
-L'inventaire couvre les appels constants reconnus dans toutes les cartes solo
-installées, avec contrôle supplémentaire des cartes coop et du code commun.
-Il ne constitue pas une preuve formelle d'absence d'appels indirects ou à arguments
-dynamiques. Les tests natifs et captures réalisés sont distingués du parcours complet de
-campagne, qui reste inachevé.
+The inventory covers recognized constant calls in all installed solo maps,
+with additional checks of co-op maps and common code. It does not formally
+prove the absence of indirect calls or calls with dynamic arguments. Native
+tests and captured footage are distinguished from a complete campaign
+playthrough, which remains unfinished.
 
-## Résultats de l'inventaire
+## Inventory results
 
-| Ensemble | Résultat statique |
+| Set | Static result |
 | --- | ---: |
-| Cartes solo examinées | 17 |
-| Déclarations d'objectifs solo | 139 |
-| Règles solo distinctes après regroupement section + ID + montant | 111 |
-| Objectifs narratifs distincts à montant non nul | **45** |
-| Objectifs de récupération de confiance | 19 |
-| Déclarations de test `TEMPNSA` / `TEMPJBA` | 10 |
-| Objectifs distincts à montant nul | 37 |
-| Appels constants de changement d'état solo | 208 |
-| Appel direct constant `EPattern.ModifyTrust` retenu | 1 |
-| Déclarations d'objectifs coop examinées | 44, toutes à montant nul |
+| Solo maps examined | 17 |
+| Solo objective declarations | 139 |
+| Distinct solo rules after grouping by section + ID + amount | 111 |
+| Distinct narrative objectives with nonzero amounts | **45** |
+| Trust-recovery objectives | 19 |
+| `TEMPNSA` / `TEMPJBA` test declarations | 10 |
+| Distinct objectives with zero amounts | 37 |
+| Constant solo state-change calls | 208 |
+| Retained direct constant `EPattern.ModifyTrust` call | 1 |
+| Co-op objective declarations examined | 44, all with zero amounts |
 
-Les deux cartes du QG embarquent du code des **deux visites**. Une déclaration
-présente dans chaque LIN n'est donc pas une récompense à appliquer deux fois.
-Des objectifs sont aussi déclarés dans une carte et complétés dans la suivante.
+Both HQ maps contain code for **both visits**. A declaration appearing in each
+LIN therefore does not represent a reward to apply twice. Some objectives are
+also declared in one map and completed in the next.
 
-Les adresses de chaque déclaration et changement d'état sont dans
+The addresses of every declaration and state change are listed in
 [TRUST_TRIGGER_INVENTORY.md](TRUST_TRIGGER_INVENTORY.md).
-Le catalogue [TRUST_RULES_REFERENCE.json](TRUST_RULES_REFERENCE.json) conserve
-les origines, transitions constantes et valeurs narratives de base. Son champ
-`balance_policy` décrit leur transformation actuelle. Les champs `proposal` et
-la table C++ générée restent volontairement à la base : le runtime applique
-`Rebalance` une seule fois. Les 45 lignes du présent document affichent, elles,
-les résultats actifs après cette transformation.
+The [TRUST_RULES_REFERENCE.json](TRUST_RULES_REFERENCE.json) catalogue retains
+origins, constant transitions and baseline narrative values. Its `balance_policy`
+field describes the current transformation. The `proposal` fields and generated
+C++ table deliberately retain the baseline: the runtime applies `Rebalance`
+once. The 45 rows in this document show the active results after that transformation.
 
-## Correction du sens de la valeur originale
+## Correcting the meaning of the original value
 
-**Delta positif = orientation NSA; delta négatif = orientation JBA.**
-La propriété s'appelle `EPlayerController.Trust` et correspond à l'octet `+0x360`
-du contrôleur utilisé par les menus. La lecture initiale « 0 = NSA, 100 = JBA »
-était erronée : les logos activés aux extrémités signalent le camp en difficulté.
-Cette correction remplace cette interprétation dans le premier rapport.
+**Positive delta = NSA direction; negative delta = JBA direction.**
+The property is named `EPlayerController.Trust` and corresponds to byte `+0x360`
+on the controller used by menus. The initial interpretation, "0 = NSA, 100 = JBA",
+was incorrect: the logos enabled at the endpoints identify the faction in trouble.
+This correction supersedes that interpretation in the first report.
 
-La déclaration de Barnham vivant vaut **+15**; celle de sa mort vaut **−15**.
-Le paramètre de direction est cohérent avec le nom `bJBATrust` trouvé dans les
-noms de scripts : vrai inverse le signe du montant.
+The declaration for keeping Barnham alive is **+15**; the declaration for his
+death is **−15**. The direction parameter agrees with the `bJBATrust` name found
+in script names: true reverses the amount's sign.
 
-Le corps script `EPlayerController.ModifyTrust` a été retrouvé dans `common.lin`.
-Son en-tête est au décalage décompressé `0x17f295`; son code commence à
-`0x17f2a6` et annonce 102 octets. La partie de mise à jour correspond à
-`Trust = clamp(Trust + trustpt, 0, 100)`, entourée de traitements de niveaux
-de confiance. L'addition et le clamp ont été recoupés avec leurs fonctions
-natives, respectivement `0x00069954` et `0x00069FED` → `0x00036D16`.
-Le wrapper et des objectifs ont été exercés par des appels natifs. La totalité
-des crises, délais, récompenses d'équipement et lecteurs directs reste à vérifier.
+The `EPlayerController.ModifyTrust` script body was found in `common.lin`.
+Its header is at decompressed offset `0x17f295`; its code starts at `0x17f2a6`
+and declares 102 bytes. The update corresponds to
+`Trust = clamp(Trust + trustpt, 0, 100)`, surrounded by trust-tier handling.
+Addition and clamping were cross-checked against their native functions,
+`0x00069954` and `0x00069FED` → `0x00036D16`, respectively.
+The wrapper and objectives have been exercised through native calls. Complete
+coverage of crises, timers, equipment rewards and direct readers remains open.
 
-Audit des conséquences aval (25 octobre) : [TRUST_LOW_TRUST_AUDIT.md](TRUST_LOW_TRUST_AUDIT.md).
-Les kits de mission et composants de faction des ordinateurs utilisent désormais
-le score du camp concerné dans les versions alpha.1 et alpha.2 mises à jour.
-Les kits sont éligibles à 61+, leurs quantités sont combinées par maximum si
-les deux camps sont éligibles. Les composants de récupération apparaissent à
-40 ou moins pour leur propre faction.
+Downstream-effects audit (25 October): [TRUST_LOW_TRUST_AUDIT.md](TRUST_LOW_TRUST_AUDIT.md).
+Mission kits and computer faction components now use the relevant faction's
+score in the updated alpha.1 and alpha.2 releases. Kits qualify at 61+; their
+quantities are combined by maximum when both factions qualify. Recovery
+components appear at 40 or less for their own faction.
 
-## Les chemins qui déclenchent réellement ModifyTrust
+## Paths that actually trigger ModifyTrust
 
 ```text
-Script de mission
-  → AddGoal(..., montant, drapeau JBA)
-  → SetGoalStatus(ID, complété)
-  → traitement natif des objectifs
+Mission script
+  → AddGoal(..., amount, JBA flag)
+  → SetGoalStatus(ID, completed)
+  → native objective processing
   → EPlayerController.ModifyTrust(delta)
 
-Script de mission → EPattern.ModifyTrust(montant, bJBATrust)
+Mission script → EPattern.ModifyTrust(amount, bJBATrust)
   → EPlayerController.ModifyTrust(delta)
 
-Bilan → comptage des actions → calcul des règles de mission
+Mission review → action counts → mission-rule calculation
   → EPlayerController.ModifyTrust(delta)
 
-Menu / commande technique → EPlayerController.ModifyTrust(delta)
+Menu / technical command → EPlayerController.ModifyTrust(delta)
 ```
 
-Le wrapper événement est à `0x00092413`. Ses quatre sites d'appel natifs
-identifiés sont :
+The event wrapper is at `0x00092413`. Its four identified native call sites are:
 
-| Adresse de l'appel | Origine | Traitement actif du mod |
+| Call address | Origin | Active mod handling |
 | --- | --- | --- |
-| `0x00095B86` | Native VM `EPattern.ModifyTrust` | Classer l'appel par son contexte; ne pas déduire deux effets de son seul signe |
-| `0x000E9D59` | Objectif complété | Chercher la règle par mission, section et ID |
-| `0x001BB92A` | Bilan des actions générales | Traiter les catégories avant leur réduction en delta unique |
-| `0x00181284` | Répartiteur de menus, delta `100 - Trust` | Commande technique, aucune récompense narrative |
+| `0x00095B86` | Native VM `EPattern.ModifyTrust` | Classify the call by context; do not infer two effects from its sign alone |
+| `0x000E9D59` | Objective completion | Look up the rule by mission, section and ID |
+| `0x001BB92A` | General-action review | Process categories before reducing them to one delta |
+| `0x00181284` | Menu dispatcher, delta `100 - Trust` | Technical command, no narrative reward |
 
-Identifiants natifs confirmés par les initialiseurs du XBE :
+Native identifiers confirmed by XBE initializers:
 
-| Opération | Native VM | Octets d'appel | Fonction native |
+| Operation | Native VM | Call bytes | Native function |
 | --- | --- | --- | --- |
 | `EPattern.AddGoal` | `0xD05` | `6D 05` | `0x0009B19F` |
-| Changement d'état via EPattern | `0x8AE` | `68 AE` | `0x0009B346` |
-| Changement d'état via le conteneur de statistiques | `0x3EB` | `63 EB` | `0x000EA3F2` |
+| State change through EPattern | `0x8AE` | `68 AE` | `0x0009B346` |
+| State change through the statistics container | `0x3EB` | `63 EB` | `0x000EA3F2` |
 | `EPattern.ModifyTrust` | `0xFC0` | `6F C0` | `0x00095B32` |
 
-Dans les appels `AddGoal`, le **13e paramètre** fournit le montant de confiance,
-le **12e** le drapeau qui inverse son signe. Cela a été suivi à travers
-`0x0009B19F` → `0x000EA452`, jusqu'à `entrée + 0x38` et masque `0x02` de
-`entrée + 0x54`. Les autres paramètres intermédiaires ne sont pas des montants.
-Les paramètres optionnels omis sont pris avec leurs valeurs natives par défaut.
+In `AddGoal` calls, the **13th parameter** supplies the trust amount; the
+**12th** supplies the flag that reverses its sign. This was traced through
+`0x0009B19F` → `0x000EA452` to `entry + 0x38` and mask `0x02` at
+`entry + 0x54`. The other intermediate parameters are not amounts.
+Omitted optional parameters use their native defaults.
 
-Le traitement à `0x000E9CE4` applique le montant sur un état demandé égal à 1.
-Il n'a pas de vérification visible « ancien état déjà complété » avant cet
-appel. Le mod protège donc les attributions répétées avec un registre persistant des
-crédits, en complément des protections éventuelles des scripts.
+Processing at `0x000E9CE4` applies the amount when the requested state is 1.
+There is no visible "previous state already completed" check before this call.
+The mod therefore prevents repeated awards through a persistent credit ledger,
+in addition to any protections provided by the scripts.
 
-## Règles de conception et équilibrage actifs
+## Active design and balance rules
 
-### Valeurs indépendantes et valeurs initiales
+### Independent values and starting scores
 
-- Deux scores **entiers**, chacun borné à **0–100** ; pas de décimales ni de
-  complément automatique entre les deux camps.
-- Le nouvel état du mod commence à **NSA 75 / JBA 75**. Ce point de départ n'a
-  pas changé lors du rééquilibrage.
-- Une opération clandestine réussie pour la NSA ne coûte pas automatiquement de
-  confiance JBA : il faut une découverte, un échec visible ou un refus connu.
-- Aider la JBA pour maintenir une infiltration autorisée ne coûte pas
-  automatiquement de confiance NSA. Meurtres d'innocents, sacrifice d'alliés et
-  attentats gardent leurs conséquences.
-- Un bénéfice partagé est possible si l'histoire le justifie. Deux jauges à 100
-  restent possibles ; le but du réglage est de rendre leur accumulation moins facile.
-- Les objectifs originellement neutres restent à **0/0**.
+- Two **integer** scores, each clamped to **0–100**; no decimals or automatic
+  complementary relationship between the factions.
+- New mod state starts at **NSA 75 / JBA 75**. This starting point did not change
+  during rebalancing.
+- A successful covert NSA operation does not automatically cost JBA trust:
+  discovery, visible failure or a known refusal is required.
+- Helping the JBA to maintain an authorized infiltration does not automatically
+  cost NSA trust. Killing innocents, sacrificing allies and terrorist attacks
+  retain their consequences.
+- Shared benefits are possible when justified by the story. Both meters can
+  still reach 100; the balance aims to make that accumulation less easy.
+- Originally neutral objectives remain **0/0**.
 
-### Gains divisés par deux et pertes renforcées
+### Halved gains and stronger losses
 
-Les valeurs narratives de base reprennent les ordres de grandeur 5/10/15/30.
-Le réglage actif du 25 octobre leur applique ensuite cette politique :
+Baseline narrative values use the 5/10/15/30 scale. The active adjustment of
+25 October then applies the following policy:
 
-| Situation de base | Décision active | Exemple NSA/JBA |
+| Baseline situation | Active decision | NSA/JBA example |
 | --- | --- | --- |
-| Aucune des deux variations n'est négative | Diviser chaque gain par deux, avec arrondi entier inférieur | +5/0 → +2/0 ; +15/0 → +7/0 |
-| Les deux camps gagnent sans perte | Diviser les deux gains par deux | +5/+5 → +2/+2 |
-| Au moins un camp perd de la confiance | Doubler chaque perte, sauf −30 qui devient −40 ; conserver le gain positif de l'autre camp | −5/+5 → −10/+5 |
-| Perte sans récompense opposée | Doubler la perte | 0/−15 → 0/−30 |
-| Annulation d'un crédit déjà attribué | Retirer exactement sa variation effective stockée ; ne pas réappliquer la politique | Un ancien gain effectif de +5 s'annule par −5 |
+| Neither delta is negative | Halve each gain, rounding down to an integer | +5/0 → +2/0; +15/0 → +7/0 |
+| Both factions gain without a loss | Halve both gains | +5/+5 → +2/+2 |
+| At least one faction loses trust | Double each loss, except −30 becomes −40; retain the other faction's positive gain | −5/+5 → −10/+5 |
+| Loss without an opposing reward | Double the loss | 0/−15 → 0/−30 |
+| Reversal of an existing credit | Remove its exact stored effective change; do not reapply the policy | An old effective +5 gain is reversed by −5 |
 
-La classification porte sur **la paire narrative complète avant tout report**
-d'une perte à la découverte. Un sabotage +30/−30 devient +30/−40, même si la
-partie −40 n'est appliquée qu'à la sortie de mission. Son gain immédiat n'est
-donc pas réduit à +15 au prétexte que sa perte est temporairement différée.
+Classification uses **the complete narrative pair before any discovery loss is
+deferred**. A +30/−30 sabotage becomes +30/−40, even if the −40 component is
+applied only at mission exit. Its immediate gain is therefore not reduced to
++15 merely because its loss is temporarily deferred.
 
-Ajustement inclus dans alpha.2 (publication mise à jour) : les pertes narratives de base −30 deviennent **−40**
-(au lieu de −60). Les autres pertes restent doublées ; le plafond statistique
-reste −60. Depuis 75, une telle décision laisse 35 ; une confiance déjà faible
-peut toujours déclencher une crise. Les deux désamorçages à −30 chacun restent
-cumulables : cette exception porte sur chaque valeur de base, pas sur leur somme.
+Adjustment included in alpha.2 (updated release): baseline −30 story losses
+become **−40** instead of −60. Other losses remain doubled; the statistics cap
+remains −60. Starting from 75, this decision leaves 35; an already low score
+can still trigger a crisis. The two disarmings at −30 each can still stack:
+the exception applies to each baseline value, not their sum.
 
-Exceptions conservées : **état initial 75/75** et **récupérations d'urgence +25**.
-Ces dernières doivent encore permettre de sortir d'une crise. Les statistiques
-répétables suivent leur propre accumulation entière, détaillée plus bas.
+Preserved exceptions: **starting scores 75/75** and **emergency recoveries +25**.
+The latter must still allow a faction to leave crisis range. Repeatable
+statistics use their own integer accumulation, described below.
 
-### Attribution unique, choix opposés et saturation
+### One-time awards, opposing choices and saturation
 
-Une attribution par identifiant d'objectif et famille de mission ; une attribution
-par bombe distincte. Les variantes `_a`/`_b` partagent la famille, et les deux
-visites du QG sont distinguées malgré leurs déclarations de scripts dupliquées.
-Le registre conserve le delta demandé et celui réellement appliqué après bornage.
+One award per objective identifier and mission family; one award per distinct
+bomb. The `_a`/`_b` variants share a family, and the two HQ visits are distinguished
+despite duplicated script declarations. The ledger stores both the requested
+delta and the delta actually applied after clamping.
 
-Les paires exclusives sont Barnham vivant/mort, chef de gare vivant/mort,
-Yeager transmis à Lambert/dénoncé à Emile, couverture de Lambert
-confirmée/révélée, téléphone saboté/préservé et Hisham sauvé/tué. Le nouvel
-événement annule d'abord le crédit effectif de son opposé, puis applique sa règle.
-Les bombes du second QG et la découverte d'un sabotage possèdent aussi leurs
-annulations spécifiques, décrites dans les cas particuliers.
+Exclusive pairs are Barnham alive/dead, station chief alive/dead, Yeager handed
+to Lambert/reported to Emile, Lambert's cover confirmed/revealed, phone sabotaged/
+preserved, and Hisham rescued/killed. A new event first reverses the effective
+credit of its opposite, then applies its own rule. The second HQ's bombs and
+sabotage discovery also have specific reversals, described in the special cases.
 
-Un gain saturé ne peut pas créer de points lors de son annulation. Si +30 n'a
-réellement ajouté que +5 à un score de 95, son annulation retire **5**, pas 30.
-L'ancienne compensation scalaire du train est ignorée : le registre effectue
-déjà cette annulation. Les doublons ne donnent ni nouveau crédit ni nouveau pop-up.
+A saturated gain cannot create points when reversed. If +30 actually added only
++5 to a score of 95, reversing it removes **5**, not 30. The train's old scalar
+compensation is ignored: the ledger already performs that reversal. Duplicates
+produce neither a new credit nor a new pop-up.
 
-## Catalogue narratif des 45 objectifs à confiance non nulle
+## Narrative catalogue of the 45 nonzero-trust objectives
 
-Dans les tables : **ancien** désigne le delta de la jauge unique, avec +NSA et
-−JBA. **NSA/JBA actifs** sont les variations indépendantes après le réglage
-entier du 25 octobre. La colonne « Ancien » n'est jamais rééquilibrée : elle
-reste une preuve du jeu original. Les conditions et reports de découverte de
-la dernière colonne font partie de chaque règle.
+In the tables, **Original** is the single-meter delta, with +NSA and −JBA.
+**Active NSA/JBA** are the independent changes after the integer adjustment of
+25 October. The Original column is never rebalanced: it remains evidence of
+the original game. Conditions and deferred discovery in the final column are
+part of each rule.
 
-### Prison d’Ellsworth
+### Ellsworth Prison
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `BarnhamAlive` | Épargner Barnham | +15 | +15 | -30 | Témoin du DOJ protégé; Jamie constate personnellement le refus de le tuer. |
-| `Retrieve` | Récupérer le disque sur Jamie | +5 | +2 | +0 | Renseignement clandestin pour Third Echelon; aucune découverte JBA établie. |
-| `NeedSeringe` | Trouver la seringue pour Jamie | -10 | +0 | +5 | Préserver le contact qui permet l'infiltration; la NSA a autorisé cette opération. |
-| `BarnHamDead` | Aider Jamie à tuer Barnham | -15 | -30 | +15 | Tuer le témoin contredit l'ordre de Lambert et rassure directement Jamie. |
-| `Regroup` | Retrouver Jamie | -10 | +0 | +5 | Maintenir Jamie en vie et poursuivre l'infiltration autorisée. |
-| `Disc` | Falsifier les registres de décès | -5 | +0 | +2 | Faciliter l'évasion et renforcer la couverture; pas de trahison NSA supplémentaire. |
+| `BarnhamAlive` | Spare Barnham | +15 | +15 | -30 | Protect a DOJ witness; Jamie personally witnesses the refusal to kill him. |
+| `Retrieve` | Retrieve the disc from Jamie | +5 | +2 | +0 | Covert intelligence for Third Echelon; no JBA discovery has been established. |
+| `NeedSeringe` | Find the syringe for Jamie | -10 | +0 | +5 | Protect the contact who enables the infiltration; the NSA authorized this operation. |
+| `BarnHamDead` | Help Jamie kill Barnham | -15 | -30 | +15 | Killing the witness defies Lambert's order and directly reassures Jamie. |
+| `Regroup` | Regroup with Jamie | -10 | +0 | +5 | Keep Jamie alive and continue the authorized infiltration. |
+| `Disc` | Falsify the death records | -5 | +0 | +2 | Enable the escape and strengthen Sam's cover; no additional betrayal of the NSA. |
 
-### QG JBA — première visite
+### JBA HQ — first visit
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `OBJ_HQA_P_10` | Réduire le brouillage de la JBA | +10 | +5 | +0 | Ouvrir une fenêtre de surveillance NSA en secret; perte JBA seulement si une autre scène établit la découverte. |
-| `CarsonMoss` | Renforcer la fausse identité de Sam | -5 | +0 | +2 | Falsifier le contrôle de sécurité de Moss sert aussi l'infiltration autorisée par Lambert. |
-| `YeagerLambert` | Transmettre Yeager à Lambert | +15 | +7 | +0 | Lambert prévoit de le faire disparaître avant Emile; ne pas attribuer automatiquement cette exfiltration à Sam côté JBA. |
-| `YeagerEmile` | Dénoncer Yeager à Emile | -15 | -30 | +15 | Écarter la piste que Lambert voulait exploiter et fournir à Emile la preuve qu'il attend. |
-| `OBJ_HQA_P_20` | Ouvrir le serveur JBA à la NSA | +10 | +5 | +0 | Renseignement clandestin; la pénalité JBA relève d'une découverte avérée, pas de la seule réussite technique. |
-| `OBJ_HQA_O_20` | Relever les empreintes d'Enrica | +5 | +2 | +0 | Collecte de renseignement clandestine; les autres empreintes à montant original nul restent neutres. |
+| `OBJ_HQA_P_10` | Reduce the JBA's jamming | +10 | +5 | +0 | Secretly open an NSA surveillance window; apply a JBA loss only if another scene establishes discovery. |
+| `CarsonMoss` | Strengthen Sam's false identity | -5 | +0 | +2 | Falsifying Moss's security check also serves the infiltration authorized by Lambert. |
+| `YeagerLambert` | Hand Yeager over to Lambert | +15 | +7 | +0 | Lambert plans to make him disappear before Emile arrives; do not automatically attribute this extraction to Sam in the JBA's eyes. |
+| `YeagerEmile` | Report Yeager to Emile | -15 | -30 | +15 | Eliminate the lead Lambert wanted to pursue and give Emile the proof he expects. |
+| `OBJ_HQA_P_20` | Open the JBA server to the NSA | +10 | +5 | +0 | Covert intelligence; a JBA penalty requires confirmed discovery, not technical success alone. |
+| `OBJ_HQA_O_20` | Collect Enrica's fingerprints | +5 | +2 | +0 | Covert intelligence collection; other fingerprints with an original zero amount remain neutral. |
 
-### Train blindé
+### Armored train
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `P_WoltCode` | Obtenir le code du coffre | -10 | +0 | +5 | Étape du braquage confié par Emile, nécessaire à la couverture. |
-| `P_KillChief` | Tuer le chef de gare | -15 | -30 | +15 | Preuve de loyauté exigée par Emile; meurtre d'un innocent expressément interdit par Lambert. |
-| `P_ChiefAlive` | Laisser le chef de gare vivant | +15 | +15 | -30 | Respecter l'ordre NSA tout en refusant une preuve de loyauté explicite. |
-| `O_DetachCars` | Décrocher les wagons arrière | +5 | +2 | +0 | Éloigner des employés du danger sans empêcher le braquage principal. |
-| `P_DisconnectCom` | Couper les communications du train | -10 | +0 | +5 | Retarder l'alerte et permettre le braquage sous couverture. |
+| `P_WoltCode` | Obtain the vault code | -10 | +0 | +5 | A step in the robbery assigned by Emile, necessary to maintain cover. |
+| `P_KillChief` | Kill the station chief | -15 | -30 | +15 | Proof of loyalty demanded by Emile; Lambert explicitly forbids killing an innocent. |
+| `P_ChiefAlive` | Leave the station chief alive | +15 | +15 | -30 | Follow the NSA order while refusing an explicit demonstration of loyalty. |
+| `O_DetachCars` | Detach the rear carriages | +5 | +2 | +0 | Move employees out of danger without preventing the main robbery. |
+| `P_DisconnectCom` | Cut the train's communications | -10 | +0 | +5 | Delay the alert and enable the undercover robbery. |
 
 ### Cozumel
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `ChipCellPhone` | Saboter le déclencheur d'Enrica | +30 | +30 | -40 | NSA +30 au sabotage secret ; JBA −40 à la sortie de mission dans l’implémentation actuelle. Perte différée, pas gain sans contrepartie. |
-| `ProCellPhone` | Préserver le déclencheur de la bombe | -30 | -40 | +30 | Permettre volontairement l'attentat malgré l'ordre de Lambert; résolution opposée au sabotage, jamais cumulée avec lui. |
-| `PlaceRelay` | Installer le relais avec Enrica | -10 | +0 | +5 | Maintenir la couverture avant le choix sur le téléphone; ne pas punir une seconde fois le résultat final. |
-| `PassengerLog` | Récupérer le manifeste des passagers | +5 | +2 | +2 | La description sert l'identification des victimes et Enrica rapporte une demande explicite d'Emile: intérêt des deux camps. |
-| `GetBomb` | Récupérer la bombe | -10 | +0 | +5 | Continuer la mission de couverture avec Enrica; le sort du navire possède son propre événement majeur. |
-| `CameraRecord` | Effacer les enregistrements vidéo | +5 | +2 | +2 | Le texte exige de préserver le secret de la présence de Sam; préserver sa couverture protège les intérêts opérationnels des deux camps. |
-| `ShipEngine` | Immobiliser le navire | +5 | +2 | +0 | Réduire les victimes à terre sans rendre ce sabotage automatiquement connu de la JBA. |
+| `ChipCellPhone` | Sabotage Enrica's detonator | +30 | +30 | -40 | NSA +30 for the secret sabotage; JBA −40 at mission exit in the current implementation. A deferred loss, not a no-loss reward. |
+| `ProCellPhone` | Preserve the bomb's detonator | -30 | -40 | +30 | Deliberately allow the attack despite Lambert's order; this outcome replaces sabotage and never stacks with it. |
+| `PlaceRelay` | Install the relay with Enrica | -10 | +0 | +5 | Maintain cover before the phone decision; do not penalize the final outcome a second time. |
+| `PassengerLog` | Retrieve the passenger manifest | +5 | +2 | +2 | The description concerns identifying the victims, and Enrica reports an explicit request from Emile: both factions benefit. |
+| `GetBomb` | Retrieve the bomb | -10 | +0 | +5 | Continue the undercover mission with Enrica; the ship's fate has its own major event. |
+| `CameraRecord` | Erase the video recordings | +5 | +2 | +2 | The text requires keeping Sam's presence secret; maintaining his cover protects both factions' operational interests. |
+| `ShipEngine` | Disable the ship | +5 | +2 | +0 | Reduce casualties ashore without making the sabotage automatically known to the JBA. |
 
-### Mer d’Okhotsk
+### Sea of Okhotsk
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `Mercenaries` | Neutraliser les mercenaires du camp | -10 | +0 | +5 | Permettre aux alliés d'Emile d'aborder; l'objectif accepte létal ou non létal. Les pertes humaines sont évaluées séparément. |
-| `Communications` | Couper le réseau des mercenaires | -10 | +0 | +5 | Empêcher l'alerte pendant la prise du pétrolier. |
-| `Bombs` | Désarmer les charges dans la glace | -5 | +0 | +2 | Maintenir le pétrolier bloqué jusqu'à sa capture; ces charges ne sont pas les bombes d'attentat de la JBA. |
-| `KeyCode` | Récupérer la clé de chiffrement | +5 | +2 | +0 | Surveiller le réseau des contrebandiers pour la NSA. |
-| `Freight_Done` | Identifier la cargaison | +5 | +2 | +0 | Renseigner la NSA sur ce que la JBA pourrait exploiter; conserver une seule attribution malgré deux branches de complétion. |
-| `Tracker_Done` | Poser le traceur du pétrolier | +5 | +2 | +0 | Suivre clandestinement le navire après sa capture par la JBA. |
-| `Bombs_Done` | Empêcher le sabordage du pétrolier | -10 | +0 | +5 | Sauver le navire destiné à la JBA; ne pas confondre ce désamorçage avec un sabotage de ses attentats. |
+| `Mercenaries` | Neutralize the camp's mercenaries | -10 | +0 | +5 | Allow Emile's allies to board; the objective accepts lethal or nonlethal action. Casualties are evaluated separately. |
+| `Communications` | Cut the mercenaries' network | -10 | +0 | +5 | Prevent an alert during the tanker takeover. |
+| `Bombs` | Disarm the charges in the ice | -5 | +0 | +2 | Keep the tanker trapped until its capture; these charges are not the JBA's terrorist bombs. |
+| `KeyCode` | Retrieve the encryption key | +5 | +2 | +0 | Monitor the smugglers' network for the NSA. |
+| `Freight_Done` | Identify the cargo | +5 | +2 | +0 | Inform the NSA about what the JBA could exploit; award only once despite two completion branches. |
+| `Tracker_Done` | Plant the tanker's tracker | +5 | +2 | +0 | Secretly track the ship after its capture by the JBA. |
+| `Bombs_Done` | Prevent the tanker's scuttling | -10 | +0 | +5 | Save the ship intended for the JBA; do not confuse this disarming with sabotaging its terrorist attacks. |
 
 ### Kinshasa
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `OBJ_10_P_50` | Vérifier les partenaires d'Emile | -10 | +0 | +5 | Confirmer le calendrier et la loyauté des deux autres groupes. |
-| `OBJ_10_O_10` | Renseigner la NSA sur Takfir | +5 | +2 | +0 | Collecte clandestine sur un groupe terroriste. |
-| `OBJ_10_O_20` | Renseigner la NSA sur Massoud | +5 | +2 | +0 | Même intention, cible et objectif distincts. |
-| `OBJ_10_P_60` | Tuer Hisham | -15 | -30 | +15 | Exécuter un agent allié à la demande d'Emile; conserver la gravité du choix original même si Lambert privilégie la mission. |
-| `HishamBody` | Faire exploser le véhicule censé contenir Hisham | -5 | +0 | +2 | Valider la preuve fournie à Emile. Un autre corps peut servir au simulacre: aucune perte NSA pour une fausse mort réussie; le meurtre réel est déjà pénalisé par son objectif. |
-| `OBJ_10_P_30` | Sauver Hisham | +15 | +7 | +0 | Sauvetage discret : NSA +7 / JBA 0. Si Emile voit la fuite : perte JBA −30 distincte, sans second crédit NSA ; retirer tout bonus de preuve déjà attribué. |
-| `OBJ_10_P_70` | Sécuriser l'extraction et le canon AA | -10 | +0 | +5 | Permettre le départ du groupe sous couverture; ne pas sanctionner des neutralisations obligatoires comme des victimes civiles. |
+| `OBJ_10_P_50` | Check Emile's partners | -10 | +0 | +5 | Confirm the schedule and the loyalty of the other two groups. |
+| `OBJ_10_O_10` | Give the NSA intelligence on Takfir | +5 | +2 | +0 | Covert intelligence collection on a terrorist group. |
+| `OBJ_10_O_20` | Give the NSA intelligence on Massoud | +5 | +2 | +0 | Same intention, separate target and objective. |
+| `OBJ_10_P_60` | Kill Hisham | -15 | -30 | +15 | Execute an allied agent at Emile's request; preserve the gravity of the original choice even though Lambert prioritizes the mission. |
+| `HishamBody` | Blow up the vehicle supposedly containing Hisham | -5 | +0 | +2 | Validate the proof given to Emile. Another body can be used for the deception: no NSA loss for a successful fake death; the actual killing is already penalized by its objective. |
+| `OBJ_10_P_30` | Rescue Hisham | +15 | +7 | +0 | Covert rescue: NSA +7 / JBA 0. If Emile witnesses the escape: a separate JBA −30 loss, without a second NSA credit; reverse any proof bonus already awarded. |
+| `OBJ_10_P_70` | Secure the extraction and AA gun | -10 | +0 | +5 | Enable the undercover group's departure; do not classify mandatory neutralizations as civilian casualties. |
 
-### QG JBA — seconde visite
+### JBA HQ — second visit
 
-| ID | Événement | Ancien | NSA actif | JBA actif | Intention et conditions |
+| ID | Event | Original | Active NSA | Active JBA | Intention and conditions |
 | --- | --- | ---: | ---: | ---: | --- |
-| `OBJ_HQB_P_10` | Voler les contacts d'Emile | +10 | +5 | +0 | Obtenir les contacts pour Third Echelon sans informer la JBA. |
-| `OBJ_HQB_P_20` | Analyser le mercure rouge | +10 | +5 | +0 | Vérifier l'authenticité de l'arme pour Williams; action clandestine. |
-| `P_LambertNOTCover` | Révéler l'identité de Lambert | -15 | -30 | +15 | Conserver l'orientation morale du jeu original et le sacrifice d'un agent allié; Williams encourage pourtant ce choix: tension narrative à conserver explicitement. |
-| `P_LambertCover` | Confirmer la couverture de Lambert | +15 | +15 | -30 | Sauver Lambert entretient les soupçons d'Emile selon le texte de l'objectif. |
-| `OBJ_HQB_P_30` | Désamorcer la bombe de Nashville | +15 | +15 | -30 | NSA +15 immédiatement ; JBA −30 à la sortie de mission. Crédit et pénalité distincts pour chaque bombe ; annulation si KeepBombs remplace ce résultat. |
-| `OBJ_HQB_P_31` | Désamorcer la bombe de Los Angeles | +15 | +15 | -30 | NSA +15 immédiatement ; JBA −30 à la sortie de mission. Crédit et pénalité distincts pour chaque bombe ; annulation si KeepBombs remplace ce résultat. |
-| `KeepBombs` | Empêcher la neutralisation des bombes | -30 | -40 | +30 | Faire partir les bombes par une autre route compromet volontairement leur interception par la NSA. |
+| `OBJ_HQB_P_10` | Steal Emile's contacts | +10 | +5 | +0 | Obtain the contacts for Third Echelon without informing the JBA. |
+| `OBJ_HQB_P_20` | Analyze the red mercury | +10 | +5 | +0 | Verify the weapon's authenticity for Williams; a covert action. |
+| `P_LambertNOTCover` | Reveal Lambert's identity | -15 | -30 | +15 | Preserve the original game's moral direction and the sacrifice of an allied agent; Williams nevertheless encourages this choice: explicitly preserve this narrative tension. |
+| `P_LambertCover` | Confirm Lambert's cover | +15 | +15 | -30 | According to the objective text, saving Lambert maintains Emile's suspicions. |
+| `OBJ_HQB_P_30` | Disarm the Nashville bomb | +15 | +15 | -30 | NSA +15 immediately; JBA −30 at mission exit. Separate credit and penalty for each bomb; reverse them if KeepBombs replaces this outcome. |
+| `OBJ_HQB_P_31` | Disarm the Los Angeles bomb | +15 | +15 | -30 | NSA +15 immediately; JBA −30 at mission exit. Separate credit and penalty for each bomb; reverse them if KeepBombs replaces this outcome. |
+| `KeepBombs` | Prevent the bombs from being neutralized | -30 | -40 | +30 | Sending the bombs along another route deliberately compromises their interception by the NSA. |
 
+## Special cases and agreed narrative conditions
 
-## Cas particuliers et conditions narratives retenues
+### Station chief: reversing a previous outcome
 
-### Chef de gare : annulation d'un résultat précédent
+A direct `ModifyTrust(15, true)` call exists in `x04_moneytrain_a`, at decompressed
+offset **`0x3579cc`**, in `Primary_Obj_Kill_Done_After_Alive`. Its original −15
+delta removes the spared chief's scalar credit. This historical amount does
+not become a second penalty in the mod.
 
-Un appel direct `ModifyTrust(15, true)` existe dans `x04_moneytrain_a`, offset
-décompressé **`0x3579cc`**, dans `Primary_Obj_Kill_Done_After_Alive`. Son delta
-original −15 retire le crédit scalaire du chef épargné. Ce montant historique
-ne devient pas une deuxième pénalité dans le mod.
+Current rule without saturation: `spared (+15,−30)` → reversal `(−15,+30)` →
+`killed (−30,+15)`. The choice's resulting award is therefore `(−30,+15)`, with
+no residual old bonus. At the 0/100 bounds, reversals use the changes
+**actually** credited, including those from an old save. They are neither
+doubled nor halved.
 
-Règle actuelle, sans saturation : `épargné (+15,−30)` → annulation
-`(−15,+30)` → `tué (−30,+15)`. Le résultat attribué au choix est donc
-`(−30,+15)`, sans ancien bonus résiduel. Aux bornes 0/100, l'annulation utilise
-les variations **effectivement** créditées, y compris celles d'une ancienne
-sauvegarde. Elle n'est ni doublée ni divisée par deux.
+### Hisham: actual death, fake death and discovered deception
 
-### Hisham : mort réelle, mort simulée et mensonge découvert
+`HishamBody` describes a body, but keys `Speech_0016L` through `Speech_0020L`
+in `p_x10_kinshasa_b_hisham_script` introduce using another body of a similar
+build. Reminders in `p_x10_kinshasa_b_hisham_barks` ask Sam to prepare the car.
+The ID alone therefore does not establish that Hisham was killed.
 
-`HishamBody` décrit un corps, mais les clés `Speech_0016L` à `Speech_0020L`
-de `p_x10_kinshasa_b_hisham_script` introduisent l'utilisation d'un autre corps
-de même gabarit. Les rappels `p_x10_kinshasa_b_hisham_barks` demandent de
-préparer la voiture. L'ID seul ne prouve donc pas qu'Hisham a été tué.
-
-| Branche / événement | NSA actif | JBA actif | Traitement |
+| Branch / event | Active NSA | Active JBA | Handling |
 | --- | ---: | ---: | --- |
-| Sauver Hisham, `OBJ_10_P_30` | +7 | 0 | Une seule attribution ; la fausse mort peut préserver la couverture |
-| Preuve, `HishamBody` | 0 | +2 | Une seule attribution, seulement si aucune fuite constatée n'est enregistrée |
-| Emile constate la fuite, `Speech_0050L` | 0 | −30 | Annuler le bonus de preuve effectif, puis appliquer cette perte une seule fois |
-| Tuer Hisham, `OBJ_10_P_60` | −30 | +15 | Remplacer le sauvetage et annuler une précédente pénalité de fuite ; preuve +2 possible séparément |
-| Emile accepte le récit, `Speech_0024L` | 0 | 0 | Enregistrer l'acceptation ; ne pas effacer une fuite déjà constatée |
+| Rescue Hisham, `OBJ_10_P_30` | +7 | 0 | Award once; the fake death can preserve cover |
+| Proof, `HishamBody` | 0 | +2 | Award once, only if no witnessed escape is recorded |
+| Emile witnesses the escape, `Speech_0050L` | 0 | −30 | Reverse the effective proof bonus, then apply this loss once |
+| Kill Hisham, `OBJ_10_P_60` | −30 | +15 | Replace the rescue and reverse any prior escape penalty; the +2 proof reward remains separately possible |
+| Emile accepts the account, `Speech_0024L` | 0 | 0 | Record acceptance; do not erase an already witnessed escape |
 
-Le hook observe l'appel `Localize` **sélectionné par le script** dans
-`p_x10_kinshasa_b_comms`, avant l'affichage éventuel des sous-titres.
-Les clés `Speech_0036L` à `Speech_0040L` n'établissent pas un aveu suffisamment
-clair : aucune pénalité supplémentaire n'est déduite de leur ancienne interprétation.
+The hook observes the `Localize` call **selected by the script** in
+`p_x10_kinshasa_b_comms`, before subtitles might be displayed. Keys
+`Speech_0036L` through `Speech_0040L` do not establish a sufficiently clear
+admission: no additional penalty is inferred from their earlier interpretation.
 
-La branche de fausse mort réussie complète `OBJ_10_P_30`, puis annule
-`OBJ_10_P_60` et `HishamBody` (`x10_kinshasa_b`, offsets décodés
-`0x2e0e70`–`0x2e0eb7` et suite). **Un objectif de preuve absent ou annulé
-ne suffit jamais à établir une découverte.** L'ancien repli « preuve manquante
-à la sortie de mission » a été retiré. Une acceptation ou fuite explicite peut
-aussi retirer cet ancien crédit erroné d'une sauvegarde antérieure.
+The successful fake-death branch completes `OBJ_10_P_30`, then cancels
+`OBJ_10_P_60` and `HishamBody` (`x10_kinshasa_b`, decoded offsets
+`0x2e0e70`–`0x2e0eb7` and following). **An absent or canceled proof objective
+never establishes discovery on its own.** The old "missing proof at mission
+exit" fallback was removed. Explicit acceptance or escape can also remove that
+old incorrect credit from an earlier save.
 
-Test natif actuel : **75/75 → 82/75 → 82/77 → 82/45**. Le dernier passage
-retire le bonus effectif +2 puis applique −30 ; ce n'est pas une pénalité −32
-supplémentaire à répéter. Les répétitions, une preuve tardive et une acceptation
-après découverte ne recréditent rien. La séquence narrative complète reste à jouer.
+Current native test: **75/75 → 82/75 → 82/77 → 82/45**. The final transition
+removes the effective +2 bonus and then applies −30; it is not an additional
+−32 penalty to repeat. Repeated calls, late proof and acceptance after discovery
+award nothing again. The complete narrative sequence still needs a playthrough.
 
-### Cozumel : bénéfice partagé et conséquences différées
+### Cozumel: shared benefits and deferred consequences
 
-Le manifeste identifie les victimes éventuelles ; Enrica mentionne aussi la
-demande d'Emile dans `p_x06_cozumel_a_enrika_coms:Speech_0082L`.
-`PassengerLog` bénéficie donc aux deux camps : **+2/+2**. `CameraRecord`
-protège la présence secrète et la couverture de Sam : **+2/+2** également.
-`ShipEngine` donne **+2/0**. `PlaceRelay` et `GetBomb` donnent chacun
-**0/+5**, sans sanction NSA supplémentaire pour poursuivre l'infiltration.
+The manifest identifies potential victims; Enrica also mentions Emile's request
+in `p_x06_cozumel_a_enrika_coms:Speech_0082L`. `PassengerLog` therefore benefits
+both factions: **+2/+2**. `CameraRecord` protects Sam's secret presence and cover:
+also **+2/+2**. `ShipEngine` gives **+2/0**. `PlaceRelay` and `GetBomb` each give
+**0/+5**, without an additional NSA penalty for continuing the infiltration.
 
-Le téléphone saboté donne **NSA +30 immédiatement**. La perte **JBA −40**
-est appliquée **à la sortie de mission** dans le code actuel, une fois par
-crédit de sabotage. Ce report est un choix d'implémentation : l'instant exact
-de découverte scénarisée reste à raccorder/valider. Il ne faut ni prétendre que
-Sam est découvert au geste clandestin ni attribuer à ce geste le demi-gain des
-tâches sans contrepartie : sa paire complète est bien +30/−40.
+Sabotaging the phone gives **NSA +30 immediately**. The **JBA −40** loss is
+applied **at mission exit** in the current code, once per sabotage credit.
+This deferral is an implementation choice: the exact scripted discovery point
+still needs to be connected/validated. Do not claim Sam is discovered during
+the covert action, or give it the halved reward of no-loss tasks: its complete
+pair is +30/−40.
 
-`ProCellPhone` donne **−40/+30** et remplace le sabotage. Le mod retire son
-crédit NSA effectif et toute pénalité `bomb-discovered` déjà enregistrée avant
-d'appliquer l'issue opposée. Les morts génériques restent évaluées séparément
-selon les catégories statistiques activées.
+`ProCellPhone` gives **−40/+30** and replaces sabotage. The mod removes the
+effective NSA credit and any recorded `bomb-discovered` penalty before applying
+the opposing outcome. Generic deaths remain separately evaluated according to
+the enabled statistics categories.
 
-### Second QG : bombes distinctes et choix final
+### Second HQ: distinct bombs and final choice
 
-Nashville et Los Angeles ont chacune leur crédit : **NSA +15 immédiatement**,
-puis **JBA −30 à la sortie de mission**. Leur découverte n'est pas instantanée.
-Les deux bombes peuvent donc produire au total +30/−60 avant saturation.
-`KeepBombs` donne **−40/+30** et retire les crédits de désamorçage ainsi que
-leurs pénalités de découverte déjà appliquées. Un désamorçage ultérieur retire
-le crédit `KeepBombs` ; chaque nouvelle attribution reste protégée par le registre.
+Nashville and Los Angeles each have their own credit: **NSA +15 immediately**,
+then **JBA −30 at mission exit**. Discovery is not instantaneous. Together the
+two bombs can therefore produce +30/−60 before saturation. `KeepBombs` gives
+**−40/+30** and removes disarming credits and any discovery penalties already
+applied. Later disarming removes the `KeepBombs` credit; each new award remains
+protected by the ledger.
 
-### Lambert et Yeager : intention narrative et décisions exclusives
+### Lambert and Yeager: narrative intention and exclusive decisions
 
-Dans `p_x11_hq5_r_communications_main:Speech_0015L` à `Speech_0022L`,
-Williams encourage le sacrifice de Lambert pour assurer la couverture. Le mod
-conserve néanmoins l'orientation morale originale : confirmer la couverture
-vaut **+15/−30**, révéler son identité **−30/+15**. Ce choix ne signifie pas
-que tous les ordres de la NSA exigent de sauver Lambert.
+In `p_x11_hq5_r_communications_main:Speech_0015L` through `Speech_0022L`,
+Williams encourages sacrificing Lambert to maintain cover. Nevertheless, the mod
+preserves the original moral direction: confirming his cover gives **+15/−30**,
+revealing his identity gives **−30/+15**. This choice does not mean every NSA
+order requires saving Lambert.
 
-Pour Yeager, l'exfiltration par Lambert reste clandestine : **+7/0**.
-Le dénoncer à Emile vaut **−30/+15**. Ces issues se remplacent, sans cumul.
+For Yeager, Lambert's extraction remains covert: **+7/0**. Reporting him to
+Emile gives **−30/+15**. These outcomes replace one another rather than stacking.
 
-## Déclencheurs de récupération : 19 règles, pas 19 choix de l'histoire
+## Recovery triggers: 19 rules, not 19 story choices
 
-Les variantes de `P_TrustNSA`, `P_TrustJBA`, `P_TrustNSAHq2` et `TrustNow`
-correspondent aux crises de couverture ou de loyauté.
+Variants of `P_TrustNSA`, `P_TrustJBA`, `P_TrustNSAHq2` and `TrustNow` correspond
+to cover or loyalty crises.
 
-| Famille | Original | Effet actif | Contexte |
+| Family | Original | Active effect | Context |
 | --- | ---: | --- | --- |
-| `P_TrustNSA`, `P_TrustNSAHq2` | +25 | NSA +25, JBA 0 | Contacter Williams / prouver que l'opération demeure sous contrôle |
-| `P_TrustJBA` | −25 | NSA 0, JBA +25 | Contacter Emile pour rassurer la JBA |
-| `TrustNow` | −25 | NSA 0, JBA +25 | Revenir en zone publique et se présenter à Emile au QG |
+| `P_TrustNSA`, `P_TrustNSAHq2` | +25 | NSA +25, JBA 0 | Contact Williams / prove that the operation remains under control |
+| `P_TrustJBA` | −25 | NSA 0, JBA +25 | Contact Emile to reassure the JBA |
+| `TrustNow` | −25 | NSA 0, JBA +25 | Return to the public area and report to Emile at HQ |
 
-Les cartes du train, Cozumel, Okhotsk et Kinshasa possèdent leurs variantes;
-le QG a ses branches propres. Le JSON et l'annexe gardent chaque origine.
-Les appels de complétion correspondants ont été retrouvés.
+The train, Cozumel, Okhotsk and Kinshasa maps have their own variants; HQ has
+its own branches. The JSON and appendix retain each origin. The corresponding
+completion calls have been found.
 
-Les récupérations restent **+25**, exception explicite à la réduction des petits
-gains. Le runtime ne les accorde que si le camp concerné est à **20 ou moins**.
-Un garde par camp bloque leur répétition ; il est réarmé lorsque ce score repasse
-de plus de 20 à 20 ou moins. Une nouvelle visite à un ordinateur ne donne donc
-pas arbitrairement +25.
+Recoveries remain **+25**, an explicit exception to the reduction of small gains.
+The runtime awards them only when the relevant faction is at **20 or less**.
+A per-faction guard prevents repetition; it rearms when that score crosses from
+above 20 to 20 or less. Revisiting a computer therefore does not arbitrarily
+award +25.
 
-L'adaptateur lance les événements de crise à partir d'une confiance **basse**,
-jamais d'une confiance élevée de l'autre camp. Il projette le camp en difficulté
-dans le système historique, et mémorise le niveau déjà transmis pour éviter de
-relancer l'alerte à chaque événement. Le seuil de projection est inférieur à 50 ;
-les niveaux, branches et délais effectifs restent ceux des scripts d'origine.
-Aucun nouveau délai de mort n'a été ajouté. Les lecteurs des kits et des
-composants d'ordinateurs sont adaptés ; les variantes complètes de campagne
-restent à vérifier. Le démarrage de carte utilise la projection indépendante,
-et JBA 40 est désormais projeté sur le niveau d'avertissement 61.
+The adapter starts crisis events from **low** trust, never from high trust in
+the other faction. It projects the faction in trouble into the original system
+and remembers the dispatched level to avoid restarting the warning at every
+event. Projection selects scores below 50; actual tiers, branches and timers
+remain those of the original scripts. No new death timer has been added.
+Kit and computer-component readers are adapted; complete campaign variants
+still require checking. Map entry uses the independent projection, and JBA 40
+now projects to warning level 61.
 
-## Déclencheurs techniques et objectifs neutres
+## Technical triggers and neutral objectives
 
-### Dix déclarations de test
+### Ten test declarations
 
-`TEMPNSA` vaut +20 et `TEMPJBA` −70, dans les deux cartes Cozumel,
-Okhotsk B et les deux cartes Kinshasa. Les déclarations et leurs complétions
-existent; les noms de branches `TempDebugNSA` / `TempDebugJBA` sont présents
-dans les noms de scripts. Les entrées de localisation associées sont nulles.
+`TEMPNSA` is +20 and `TEMPJBA` is −70 in both Cozumel maps, Okhotsk B and both
+Kinshasa maps. The declarations and their completions exist; branch names
+`TempDebugNSA` / `TempDebugJBA` appear among script names. Their associated
+localization entries are null.
 
-Décision active : **aucun effet** pour les objectifs dont l'ID commence par
-`TEMP`, avec diagnostic si l'un se déclenche. Ce ne sont pas dix choix narratifs.
-Leur atteignabilité normale n'a pas été démontrée; ne pas écrire qu'ils ont été
-prouvés inaccessibles.
+Active decision: **no effect** for objectives whose ID begins with `TEMP`, with
+a diagnostic if one triggers. These are not ten narrative choices. Normal
+reachability has not been demonstrated; do not state that they have been proven
+unreachable.
 
-### Trente-sept règles solo à montant nul
+### Thirty-seven zero-amount solo rules
 
-Conserver **NSA 0 / JBA 0** pour ces événements : progression en Islande,
-étapes de trajet/extraction, certaines empreintes et objectifs finaux de New York
-notamment. Leur liste exacte est dans le JSON et les 139 déclarations de l'annexe.
-Un objectif important dans l'histoire n'est pas forcément une source originale
-de confiance; cette référence ne lui invente pas de récompense.
+Keep **NSA 0 / JBA 0** for these events, including Iceland progression, travel/
+extraction steps, some fingerprints and New York's final objectives. Their exact
+list is in the JSON and the appendix's 139 declarations. An objective's narrative
+importance does not necessarily make it an original source of trust; this
+reference does not invent a reward for it.
 
-Les **44 déclarations coop** reconnues sont également nulles. La présente
-refonte ne leur ajoute pas un système de loyauté.
+The **44 recognized co-op declarations** also have zero amounts. This redesign
+does not add a loyalty system to them.
 
-### Écritures qui contournent l'événement
+### Writes that bypass the event
 
-`TRUSTVALUE=` et l'historique inter-missions peuvent écrire/restaurer la confiance
-sans passer par un objectif. Ce sont des chemins de persistance/initialisation,
-pas des actions narratives. Le mod n'en tire pas de récompense et restaure les
-deux scores depuis les métadonnées décrites plus bas. Les anciens deltas de
-menu ou appels non classés ne servent pas à inventer un effet narratif.
+`TRUSTVALUE=` and inter-mission history can write/restore trust without going
+through an objective. These are persistence/initialization paths, not narrative
+actions. The mod derives no reward from them and restores both scores from the
+metadata described below. Old menu deltas or unclassified calls are not used to
+invent narrative effects.
 
-## Actions générales au bilan
+## General actions in mission review
 
-Le calcul de confiance du bilan à `0x001BB69C` et sa prévisualisation à
-`0x001BA097` utilisent les mêmes groupes. Les catégories ont été recoupées avec
-les compteurs affichés dans `0x001BBFE6` et les libellés locaux `MISSIONREVIEW`.
-Le regroupement perd des distinctions utiles à deux jauges.
+The review trust calculation at `0x001BB69C` and its preview at `0x001BA097`
+use the same groups. Categories were cross-checked against counters displayed
+in `0x001BBFE6` and local `MISSIONREVIEW` labels. Grouping loses distinctions
+that are useful for two meters.
 
-| Type(s) interne(s) | Catégorie | Coefficient original | Drapeaux de mission |
+| Internal type(s) | Category | Original coefficient | Mission flags |
 | --- | --- | --- | --- |
-| 2 + 5 | Ennemis tués + civils tués | contrôleur +0x4EC | contexte +0xC60 |
-| 0 + 3 | Ennemis assommés + civils assommés | +0x4F0 | +0xC64 |
-| 7 | Repérages par l'ennemi | +0x4F4 | +0xC68 |
-| 10 | Alarmes | +0x4F8 | +0xC6C |
-| 6 | Corps découverts | +0x4FC | +0xC70 |
+| 2 + 5 | Enemies killed + civilians killed | controller +0x4EC | context +0xC60 |
+| 0 + 3 | Enemies knocked out + civilians knocked out | +0x4F0 | +0xC64 |
+| 7 | Enemy detections | +0x4F4 | +0xC68 |
+| 10 | Alarms | +0x4F8 | +0xC6C |
+| 6 | Bodies found | +0x4FC | +0xC70 |
 
-L'inventaire statique n'établit pas les valeurs effectives de tous les coefficients
-par mission. Les nombres actifs ci-dessous sont choisis par le mod et ne doivent
-pas être présentés comme leurs valeurs originales. Les deux accumulateurs originaux sont plafonnés
-à 15 et le résultat de ce chemin est borné à 5..95 avant `ModifyTrust`.
+The static inventory does not establish every mission's effective coefficient
+values. The active numbers below are chosen by the mod and must not be presented
+as the original values. Both original accumulators are capped at 15, and this
+path's result is clamped to 5..95 before `ModifyTrust`.
 
-### Règles actives pour les actions répétables
+### Active rules for repeatable actions
 
-Application au bilan, **NSA seulement**, avec les catégories activées par les
-drapeaux de mission. Ces montants sont des décisions du mod ; ce ne sont pas
-les coefficients originaux, qui restent décrits séparément ci-dessus.
+Applied at mission review, **NSA only**, for categories enabled by mission flags.
+These amounts are mod decisions, not the original coefficients, which are
+described separately above.
 
-| Action enregistrée | NSA actif | JBA actif | Condition / limite |
+| Recorded action | Active NSA | Active JBA | Condition / limit |
 | --- | ---: | ---: | --- |
-| Ennemi tué | −4 | 0 | Règle de retenue active ; décès nommés déjà traités par un choix retirés du compte |
-| Civil tué | −10 | 0 | Aucun gain JBA automatique ; classification civile fournie par les statistiques |
-| Ennemi assommé | +1 pour deux | 0 | Accumuler les KO puis diviser par deux, avec arrondi inférieur ; un seul KO vaut 0 |
-| Civil assommé | −2 | 0 | Règle de neutralisation active |
-| Repérage | −2 | 0 | Compteur d'incidents du jeu |
-| Alarme | −4 | 0 | Règle d'alarme active |
-| Corps découvert | −2 | 0 | Règle de discrétion active |
+| Enemy killed | −4 | 0 | Restraint rule enabled; named deaths already handled by a choice are removed from the count |
+| Civilian killed | −10 | 0 | No automatic JBA gain; civilian classification comes from statistics |
+| Enemy knocked out | +1 per two | 0 | Accumulate KOs then divide by two, rounding down; a single KO gives 0 |
+| Civilian knocked out | −2 | 0 | Knockout rule enabled |
+| Detection | −2 | 0 | The game's incident counter |
+| Alarm | −4 | 0 | Alarm rule enabled |
+| Body found | −2 | 0 | Stealth rule enabled |
 
-Calcul exact : `gain = floor(min(KO_ennemis, 15) / 2)` si la règle KO est
-active ; `perte_base` additionne les anciens coûts activés (2 par ennemi tué,
-5 par civil tué, 1 par civil assommé, 1 par repérage, 2 par alarme et 1 par corps).
-Le delta NSA est **`gain − 2 × min(perte_base, 30)`**. Les deux accumulateurs
-sont plafonnés indépendamment : **gain maximal +7, perte maximale −60**.
-Le score final est borné à 0–100 ; le clamp historique 5–95 ne limite plus la
-prévisualisation. Le JBA reçoit 0 de ce calcul générique.
-Le plafond de perte a été relevé de −30 à **−60** pour que les actions répétées
-imprudentes restent coûteuses : six civils ou quinze ennemis tués atteignent
-ce plafond si la règle de décès est active et sans bonus de KO. Les repérages,
-alarmes et corps découverts partagent ce même plafond ; ce n'est pas un plafond
-supplémentaire par catégorie. Les coûts par victime ne changent pas.
+Exact calculation: `gain = floor(min(enemy_KOs, 15) / 2)` when the KO rule is
+enabled; `base_loss` sums enabled old costs (2 per enemy killed, 5 per civilian
+killed, 1 per civilian KO, 1 per detection, 2 per alarm and 1 per body).
+The NSA delta is **`gain − 2 × min(base_loss, 30)`**. The accumulators have
+independent caps: **maximum gain +7, maximum loss −60**. The final score is
+clamped to 0–100; the historical 5–95 clamp no longer limits the preview. JBA
+receives 0 from this generic calculation. The loss cap was raised from −30 to
+**−60** so repeated reckless actions remain costly: six civilian kills or fifteen
+enemy kills reach it when the death rule is enabled and there are no KO bonuses.
+Detections, alarms and bodies found share this same cap; it is not an additional
+cap per category. Per-victim costs are unchanged.
 
-Le tableau du bilan affiche les contributions brutes rééquilibrées par catégorie,
-et les deux jauges montrent le résultat total effectif après plafonds et saturation.
-La prévisualisation utilise une copie de l'état ; elle ne crédite rien. Une fois
-le bilan appliqué, elle réutilise son crédit effectif au lieu de le prévoir une
-deuxième fois. L'application native est protégée contre les répétitions par carte.
+The review table shows raw rebalanced contributions by category, while both
+meters show the effective total after caps and saturation. The preview uses a
+copy of state and awards nothing. Once the review is applied, it reuses the
+effective credit instead of forecasting it again. Native application is protected
+against repetition per map.
 
-Les morts nommées de Barnham, du chef de gare et d'Hisham sont soustraites des
-statistiques de décès si leur choix a déjà été crédité, pour éviter une deuxième
-sanction générique. Le code retire d'abord un décès civil, sinon un ennemi ; la
-classification d'une cible particulière reste donc une limite à vérifier.
-À New York, les décès sont exemptés pour le combat imposé ; les autres règles
-activées continuent à s'appliquer.
+The named deaths of Barnham, the station chief and Hisham are subtracted from
+death statistics if their choice has already been credited, preventing a second
+generic penalty. The code removes a civilian death first, otherwise an enemy;
+classification of a particular target therefore remains a verification limit.
+New York's mandatory combat deaths are exempt; other enabled rules still apply.
 
-**Limite policiers :** un policier protégé enregistré comme ennemi ne peut pas
-encore être distingué d'un autre ennemi par ces seuls enregistrements. Il ne faut
-donc pas promettre −10 pour tout policier : seul le type civil reçoit ce coût.
-Les actes attendus par Emile donnent déjà leur confiance JBA via leurs objectifs.
-Aucune règle générique « tout meurtre fait gagner la JBA » n'a été ajoutée.
+**Police limitation:** a protected officer recorded as an enemy cannot yet be
+distinguished from another enemy using these records alone. Therefore do not
+promise −10 for every officer: only the civilian type receives that cost.
+Actions expected by Emile already award JBA trust through their objectives.
+No generic "every killing rewards the JBA" rule has been added.
 
-## Interface retenue
+## Selected interface
 
-- **Style B, rangées par faction** : cadre métallique olive, badge circulaire
-  NSA/JBA, vingt segments ivoire, libellés inclinés et score entier. Chaque segment
-  représente 5 points ; un segment partiel représente les autres valeurs entières.
-  Les deux pistes ont la même longueur. Une confiance à 20 ou moins passe au rouge.
-- **OPSAT** : deux rangées permanentes dans la page de confiance ; conservation du
-  cadre natif et légende localisée expliquant l'indépendance. Les deux niveaux
-  textuels natifs sont lus pour leur propre camp, sans inversion artificielle JBA.
-- **En jeu** : aucun affichage permanent de diagnostic. Pop-up de cinq secondes,
-  seulement pour le ou les camps affectés ; pas de ligne +0 pour le camp inchangé.
-- Les annulations et attributions rapprochées de 250 ms sont regroupées en un
-  changement net. Un événement nul ou déjà crédité ne crée pas de notification.
-- Le delta signé est **dans la piste, juste après le bord de la nouvelle valeur**,
-  et non au milieu de la barre, au milieu des points perdus ou après l'ancien maximum.
-  Il tient compte des segments partiels et des espaces ; près de 100, sa position
-  est bornée pour rester lisible dans la piste. Aucun fond opaque ne masque la perte.
-- Pour une perte, le remplissage ivoire est fixé à la nouvelle valeur et la queue
-  rouge part de ce même bord ; elle se rétracte depuis l'ancienne valeur. Pour un
-  gain, le remplissage progresse vers la nouvelle valeur avec une lueur verte.
-  Transition de 1,25 s après 0,15 s d'attente, léger mouvement vertical du delta,
-  puis fondu pendant les 0,65 dernières secondes. Les scores sont appliqués
-  immédiatement : seule leur présentation est animée.
-- **Bilan** : résultats séparés sous le tableau natif ; le delta est dans chaque
-  piste. La prévision est stable et indépendante de l'horloge des pop-up en jeu,
-  même si les deux deltas sont identiques. La révélation native du tableau reste
-  active ; les captures de référence attendent sa fin.
-- Console, paramètres et option de masquage du HUD cachent la présentation.
-  Le rendu est assuré par l'hôte ; aucune texture ni ressource LIN du jeu n'est modifiée.
+- **Style B, faction rows:** olive metal frame, circular NSA/JBA badge, twenty
+  ivory segments, slanted labels and an integer score. Each segment represents
+  5 points; partial segments represent the other integer values. Both tracks
+  have the same length. Trust at 20 or less turns red.
+- **OPSAT:** two permanent rows on the trust page; the native frame is retained
+  with a localized legend explaining independence. Both native textual tiers
+  are read for their own faction, without an artificial JBA inversion.
+- **Gameplay:** no permanent diagnostic display. Five-second pop-up only for
+  affected factions; no +0 row for the unchanged faction.
+- Reversals and awards within 250 ms are grouped into one net change. A zero
+  event or one already credited does not produce a notification.
+- The signed delta is **inside the track, just after the new value's edge**,
+  not at the bar's center, in the middle of lost points or beyond the old maximum.
+  It accounts for partial segments and gaps; near 100 its position is clamped
+  to remain readable inside the track. No opaque background hides the loss.
+- For a loss, ivory fill stays at the new value and the red tail starts at that
+  same edge, retracting from the old value. For a gain, fill moves toward the
+  new value with a green glow. The transition lasts 1.25 s after a 0.15 s hold,
+  with a slight vertical delta movement and a fade during the final 0.65 seconds.
+  Scores apply immediately; only their presentation is animated.
+- **Mission review:** separate results below the native table; each delta is
+  inside its track. The forecast is stable and independent of gameplay pop-up
+  timing, even when the deltas match. Native table reveal remains enabled;
+  reference captures wait until it completes.
+- The console, settings and hide-HUD option hide this presentation. Rendering
+  is host-side; no game texture or LIN resource is modified.
 
-## Sauvegardes et compatibilité des décisions
+## Saves and decision compatibility
 
-Le registre stocke les scores, la mission/carte, les crédits demandés/effectifs et
-l'état de l'adaptateur d'alertes. Les octets du checkpoint Xbox restent à leur
-format original. Les informations additionnelles sont enregistrées atomiquement
-dans des fichiers versionnés à côté de l'exécutable :
+The ledger stores scores, mission/map, requested/effective credits and warning-
+adapter state. Xbox checkpoint bytes retain their original format. Additional
+information is written atomically to versioned files beside the executable:
 
 ```text
-trust-state/<nom du checkpoint>/<SHA1 du chemin relatif>/<SHA1 des octets du checkpoint>.txt
+trust-state/<checkpoint name>/<SHA1 of relative path>/<SHA1 of checkpoint bytes>.txt
 ```
 
-Ce dossier est distinct du cache Xbox ; il doit accompagner les sauvegardes
-lors d'une copie, migration ou restauration. Une sauvegarde sans ces métadonnées
-importe l'ancien scalaire en **NSA=x / JBA=100−x** : son passé à deux confiances
-ne peut pas être reconstruit. Un état neuf reste à 75/75.
+This folder is separate from the Xbox cache; it must accompany saves when
+copying, migrating or restoring them. A save without this metadata imports the
+old scalar as **NSA=x / JBA=100−x**: its independent-trust history cannot be
+reconstructed. New state remains 75/75.
 
-Les changements de processus du port utilisent un fichier de passage par instance,
-lu uniquement lors d'un relancement signalé. Un démarrage à froid ignore un ancien
-fichier de passage. L'initialisation en attente lors d'un chargement depuis le menu
-est conservée jusqu'au premier contrôleur jouable.
+The port's process changes use a per-instance handover file, read only on an
+explicitly marked relaunch. A cold start ignores an old handover file. Pending
+initialization when loading from the menu is preserved until the first playable
+controller appears.
 
-**Pas de rééquilibrage rétroactif** : charger un ancien état 100/100 le laisse à
-100/100. Les futurs événements utilisent les nouvelles règles. Les crédits d'une
-ancienne version gardent leur variation effective et sont annulés à cette valeur,
-sans être recalculés. Rejouer un objectif déjà crédité ne donne pas sa récompense
-réduite une deuxième fois. Une nouvelle campagne est le meilleur comparatif global.
+**No retroactive rebalancing:** loading an old 100/100 state leaves it at 100/100.
+Future events use the new rules. Older credits retain their effective changes
+and are reversed at those values without recalculation. Replaying a credited
+objective does not award its reduced reward a second time. A new campaign is
+the best overall comparison.
 
-La refonte vise le solo ; coop et versus gardent leur comportement d'origine.
-Leur régression complète n'est pas validée. L'historique natif du profil reste
-scalaire ; les scores actuels et leur registre indépendant sont dans les
-métadonnées du mod. Les graphiques historiques n'ont pas été convertis en deux
-historiques. Pour revenir au port d'origine, utiliser une sauvegarde pré-mod et
-un build non modifié ; l'ancien jeu ne sait pas lire l'historique JBA indépendant.
+The redesign targets solo play; co-op and versus retain their original behavior.
+Full regression coverage is not validated. Native profile history remains a
+scalar; current scores and their independent ledger are in the mod metadata.
+Historical charts have not been converted to two histories. To return to the
+original port, use a pre-mod save and an unmodified build; the old game cannot
+read the independent JBA history.
 
-## Vérifications et limites actuelles
+## Current verification and limitations
 
-| Vérification | Résultat / portée |
+| Check | Result / scope |
 | --- | --- |
-| Tests C++ du modèle | Exception −30 → −40, annulation après saturation, arrondis entiers, gains partagés, arbitrages, autres pertes doublées, saturation, annulations effectives et doublons validés |
-| Manifeste puis moteur, appels natifs | 75/75 → 77/77 → 79/77 ; répétition sans gain |
-| Choix du téléphone saturé, appels natifs | Fixture alpha.2 : 95/50 → 100/50 → 35/80 avec −60/+30. Politique actuelle : résultat attendu 55/80 avec −40/+30 ; non rejoué en jeu |
-| Statistiques : civil tué, KO ennemi, repérage, alarme | Prévision 80/80 → 64/80 ; application 64/80 ; répétition inchangée |
-| Sauvetage/preuve/fuite Hisham, objectifs et dialogue synthétiques | 75/75 → 82/75 → 82/77 → 82/45 |
-| Récupération NSA native | 10/80 → 35/80 ; autre camp inchangé |
-| Persistance / recharge / doublons | Validée sur la version précédente ; format et annulation des anciens crédits conservés, sans prétendre à un parcours complet du nouvel équilibrage |
-| Interface | OPSAT, pop-up et bilan capturés en jeu ; table de bilan capturée après révélation |
+| C++ model tests | Validated: −30 → −40 exception, reversal after saturation, integer rounding, shared gains, trade-offs, other doubled losses, saturation, effective reversals and duplicate suppression |
+| Manifest then engine, native calls | 75/75 → 77/77 → 79/77; repeating awards nothing |
+| Saturated phone choice, native calls | Alpha.2 fixture: 95/50 → 100/50 → 35/80 with −60/+30. Current policy: expected 55/80 with −40/+30; not replayed in-game |
+| Statistics: civilian kill, enemy KO, detection, alarm | Forecast 80/80 → 64/80; applied 64/80; repeating is unchanged |
+| Hisham rescue/proof/escape, synthetic objectives and dialogue | 75/75 → 82/75 → 82/77 → 82/45 |
+| Native NSA recovery | 10/80 → 35/80; other faction unchanged |
+| Persistence / reload / duplicates | Validated on the previous version; format and old-credit reversal preserved, without claiming a complete playthrough of the new balance |
+| Interface | OPSAT, pop-ups and mission review captured in-game; review table captured after reveal |
 
-Ces tests utilisent une instance isolée et des fixtures contrôlées, pas une
-certification de toutes les branches narratives. Restent à valider :
+These tests use an isolated instance and controlled fixtures, not certification
+of every narrative branch. Remaining validation includes:
 
-- campagne complète avec le nouvel équilibrage et atteignabilité de toutes les branches ;
-- crises, délais, équipements et lecteurs directs du scalaire historique ;
-- moment précis de découverte des sabotages, actuellement reporté à la sortie ;
-- séquence naturelle complète d'Hisham et toutes les fins ;
-- distinction des policiers protégés dans les statistiques génériques ;
-- chargements inter-cartes usuels et régression multijoueur complète.
+- the complete campaign with the new balance and reachability of every branch;
+- crises, timers, equipment and direct readers of the historical scalar;
+- the exact sabotage-discovery moment, currently deferred to mission exit;
+- Hisham's full natural sequence and all endings;
+- distinguishing protected police in generic statistics;
+- ordinary cross-map loading and complete multiplayer regression.
 
-Un `LOADGAME` brut lancé depuis le titre a planté dans la désérialisation invitée
-lors d'un test antérieur ; utiliser les menus normaux pour les sauvegardes
-inter-cartes. Aucun nouveau comportement de téléchargement ou ressource du jeu
-n'est requis pour appliquer ces règles.
+A raw `LOADGAME` issued from the title screen crashed in guest deserialization
+during an earlier test; use normal menus for cross-map saves. No new download
+behavior or game asset is required to apply these rules.
 
-## Traçabilité, reproduction et contrôle de couverture
+## Traceability, reproduction and coverage checks
 
-Binaire de référence `assets/default.xbe`, SHA256 :
+Reference binary `assets/default.xbe`, SHA256:
 `C742D61C9B8D8C1C4F886A4A4A69FFB65AB3961E0283DCAD33BFCFA963885143`.
-Les empreintes des 33 LIN examinés (commun, menu, 17 solo, 14 coop) sont
-conservées dans le JSON. Certains LIN ont des remplacements de textures issus
-de travaux précédents : les offsets sont ceux des fichiers réellement examinés.
+Hashes of the 33 examined LINs (common, menu, 17 solo, 14 co-op) are retained in
+the JSON. Some LINs contain texture replacements from earlier work: the offsets
+belong to the files actually examined.
 
-Outil local : [inventory_trust.py](../tools/analysis/inventory_trust.py).
+Local tool: [inventory_trust.py](../tools/analysis/inventory_trust.py).
 
 ```powershell
 python tools/analysis/inventory_trust.py --output C:/Users/bastien/scda-trust-analysis
 ```
 
-Il décompresse les LIN en vérifiant chaque taille de bloc, lit les appels
-constants et leurs fins de paramètres, extrait les textes anglais pour le
-travail privé et écrit son inventaire **hors du projet**. Il refuse une empreinte
-XBE différente, car les numéros natifs sont propres à cette version.
-Les textes complets, scripts et flux décompressés restent hors du dépôt.
+It decompresses LINs while checking every block size, reads constant calls and
+their parameter terminators, extracts English text for private work and writes
+its inventory **outside the project**. It rejects a different XBE hash because
+native numbers are specific to this version. Full text, scripts and decompressed
+streams remain outside the repository.
 
-Vérifications effectuées :
+Checks performed:
 
-- 183 déclarations constantes reconnues, dont 139 solo et 44 coop;
-  aucune erreur de lecture sur ces déclarations.
-- Montant et direction reliés aux écritures natives des objectifs.
-- Les 74 règles solo distinctes à montant non nul ont au moins un appel
-  constant de complétion associé dans leur famille de mission.
-- Les doublons de QG et les déclarations alternatives du chef de gare sont
-  regroupés sans être supprimés de l'annexe des origines.
-- Le seul appel direct constant retenu est relié à sa branche de compensation.
-- Les faux motifs supplémentaires `6D 05 1F` observés hors des appels de
-  localisation sont dans les données graphiques examinées, pas des objectifs.
+- 183 recognized constant declarations, including 139 solo and 44 co-op; no
+  parsing errors in these declarations.
+- Amount and direction traced to native objective writes.
+- All 74 distinct nonzero-amount solo rules have at least one associated
+  constant completion call in their mission family.
+- HQ duplicates and alternative station-chief declarations are grouped without
+  removing them from the origins appendix.
+- The single retained direct constant call is linked to its compensation branch.
+- Additional false `6D 05 1F` patterns observed outside localization calls are
+  in examined graphics data, not objectives.
 
-Avant de dire « tous les déclencheurs exécutables sont couverts », il reste
-à tracer au moins une partie des branches exclusives, les crises et les bilans,
-puis à vérifier les appels indirects/arguments dynamiques avec un décodeur
-complet ou une instrumentation de la VM. Ce document garde cette limite visible.
+Before claiming "all executable triggers are covered", some exclusive branches,
+crises and reviews still need tracing, followed by checks for indirect calls /
+dynamic arguments using a complete decoder or VM instrumentation. This document
+keeps that limitation explicit.
 
-## Sources de contexte
+## Context sources
 
-**Sources principales** : les scripts/constants des LIN locaux, le XBE et les
-textes du `dynamicxbox.umd` fourni. Les sections et clés indiquées dans ce
-document permettent de retrouver la preuve dans l'extraction privée. Les règles
-de la table pointent vers leur section et leurs offsets dans le JSON.
+**Primary sources:** scripts/constants in local LINs, the XBE and text from the
+provided `dynamicxbox.umd`. Sections and keys cited here allow evidence to be
+located in the private extraction. Table rules point to their sections and
+offsets in the JSON.
 
-Lecture externe de contrôle : le [guide Xbox de VampireHorde](https://gamefaqs.gamespot.com/xbox/926929-tom-clancys-splinter-cell-double-agent/faqs/45455)
-décrit les crises de confiance et la différence entre objectifs et bilan des
-actions. Source secondaire, utilisée comme contrôle de contexte, jamais pour
-inventer des montants ou importer des choix de la version Xbox 360.
+External cross-check: [VampireHorde's Xbox guide](https://gamefaqs.gamespot.com/xbox/926929-tom-clancys-splinter-cell-double-agent/faqs/45455)
+describes trust crises and the difference between objectives and action review.
+It is a secondary source used to check context, never to invent amounts or
+import Xbox 360 choices.
 
-Pour la méthode d'analyse des ressources : la [discussion de recherche sur les LIN](https://github.com/EliotVU/Unreal-Library/discussions/134)
-explique pourquoi leurs offsets de packages ne doivent pas être traités comme
-ceux d'un paquet Unreal ordinaire. Les décalages cités ici sont donc ceux du
-flux décompressé réellement lu, pas des `SerialOffset` supposés valides.
+For the resource-analysis method, the [LIN research discussion](https://github.com/EliotVU/Unreal-Library/discussions/134)
+explains why its package offsets must not be treated like ordinary Unreal
+package offsets. All cited offsets therefore refer to the decompressed stream
+actually read, not supposedly valid `SerialOffset` values.
 
-Requêtes de recherche utilisées : « Splinter Cell Double Agent Xbox original
-trust objectives walkthrough NSA JBA GameFAQs » et « Splinter Cell Double Agent
-Xbox lin umd Unreal script format ». Ces requêtes concernent l'inventaire initial
-du 23 octobre. Les tests natifs
-et captures ajoutés ensuite sont recensés ci-dessus ; ils ne constituent pas
-un parcours complet de campagne.
+Search queries used: "Splinter Cell Double Agent Xbox original trust objectives
+walkthrough NSA JBA GameFAQs" and "Splinter Cell Double Agent Xbox lin umd Unreal
+script format". These searches concern the initial inventory of 23 October.
+Native tests and captures added afterward are listed above; they do not
+constitute a complete campaign playthrough.

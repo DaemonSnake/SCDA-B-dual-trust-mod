@@ -199,7 +199,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -223,7 +223,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -252,7 +252,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -291,7 +291,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -315,7 +315,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -339,7 +339,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -363,7 +363,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -387,7 +387,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -411,7 +411,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -433,10 +433,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Épargner Barnham",
+        "label": "Spare Barnham",
         "nsa": 15,
         "jba": -15,
-        "reason": "Témoin du DOJ protégé; Jamie constate personnellement le refus de le tuer."
+        "reason": "Protect a DOJ witness; Jamie personally witnesses the refusal to kill him."
       },
       "status_calls": [
         {
@@ -463,10 +463,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Récupérer le disque sur Jamie",
+        "label": "Retrieve the disc from Jamie",
         "nsa": 5,
         "jba": 0,
-        "reason": "Renseignement clandestin pour Third Echelon; aucune découverte JBA établie."
+        "reason": "Covert intelligence for Third Echelon; no JBA discovery has been established."
       },
       "status_calls": [
         {
@@ -488,10 +488,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Trouver la seringue pour Jamie",
+        "label": "Find the syringe for Jamie",
         "nsa": 0,
         "jba": 10,
-        "reason": "Préserver le contact qui permet l'infiltration; la NSA a autorisé cette opération."
+        "reason": "Protect the contact who enables the infiltration; the NSA authorized this operation."
       },
       "status_calls": [
         {
@@ -513,10 +513,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Aider Jamie à tuer Barnham",
+        "label": "Help Jamie kill Barnham",
         "nsa": -15,
         "jba": 15,
-        "reason": "Tuer le témoin contredit l'ordre de Lambert et rassure directement Jamie."
+        "reason": "Killing the witness defies Lambert's order and directly reassures Jamie."
       },
       "status_calls": [
         {
@@ -543,10 +543,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Retrouver Jamie",
+        "label": "Regroup with Jamie",
         "nsa": 0,
         "jba": 10,
-        "reason": "Maintenir Jamie en vie et poursuivre l'infiltration autorisée."
+        "reason": "Keep Jamie alive and continue the authorized infiltration."
       },
       "status_calls": [
         {
@@ -568,10 +568,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Falsifier les registres de décès",
+        "label": "Falsify the death records",
         "nsa": 0,
         "jba": 5,
-        "reason": "Faciliter l'évasion et renforcer la couverture; pas de trahison NSA supplémentaire."
+        "reason": "Enable the escape and strengthen Sam's cover; no additional betrayal of the NSA."
       },
       "status_calls": [
         {
@@ -595,7 +595,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -617,10 +617,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Obtenir le code du coffre",
+        "label": "Obtain the vault code",
         "nsa": 0,
         "jba": 10,
-        "reason": "Étape du braquage confié par Emile, nécessaire à la couverture."
+        "reason": "A step in the robbery assigned by Emile, necessary to maintain cover."
       },
       "status_calls": [
         {
@@ -653,7 +653,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -694,10 +694,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Tuer le chef de gare",
+        "label": "Kill the station chief",
         "nsa": -15,
         "jba": 15,
-        "reason": "Preuve de loyauté exigée par Emile; meurtre d'un innocent expressément interdit par Lambert."
+        "reason": "Proof of loyalty demanded by Emile; Lambert explicitly forbids killing an innocent."
       },
       "status_calls": [
         {
@@ -733,10 +733,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Laisser le chef de gare vivant",
+        "label": "Leave the station chief alive",
         "nsa": 15,
         "jba": -15,
-        "reason": "Respecter l'ordre NSA tout en refusant une preuve de loyauté explicite."
+        "reason": "Follow the NSA order while refusing an explicit demonstration of loyalty."
       },
       "status_calls": [
         {
@@ -770,7 +770,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -809,7 +809,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -846,10 +846,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Décrocher les wagons arrière",
+        "label": "Detach the rear carriages",
         "nsa": 5,
         "jba": 0,
-        "reason": "Éloigner des employés du danger sans empêcher le braquage principal."
+        "reason": "Move employees out of danger without preventing the main robbery."
       },
       "status_calls": [
         {
@@ -871,10 +871,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Couper les communications du train",
+        "label": "Cut the train's communications",
         "nsa": 0,
         "jba": 10,
-        "reason": "Retarder l'alerte et permettre le braquage sous couverture."
+        "reason": "Delay the alert and enable the undercover robbery."
       },
       "status_calls": [
         {
@@ -898,7 +898,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -937,7 +937,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -978,10 +978,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Réduire le brouillage de la JBA",
+        "label": "Reduce the JBA's jamming",
         "nsa": 10,
         "jba": 0,
-        "reason": "Ouvrir une fenêtre de surveillance NSA en secret; perte JBA seulement si une autre scène établit la découverte."
+        "reason": "Secretly open an NSA surveillance window; apply a JBA loss only if another scene establishes discovery."
       },
       "status_calls": [
         {
@@ -1012,10 +1012,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Renforcer la fausse identité de Sam",
+        "label": "Strengthen Sam's false identity",
         "nsa": 0,
         "jba": 5,
-        "reason": "Falsifier le contrôle de sécurité de Moss sert aussi l'infiltration autorisée par Lambert."
+        "reason": "Falsifying Moss's security check also serves the infiltration authorized by Lambert."
       },
       "status_calls": [
         {
@@ -1046,10 +1046,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Transmettre Yeager à Lambert",
+        "label": "Hand Yeager over to Lambert",
         "nsa": 15,
         "jba": 0,
-        "reason": "Lambert prévoit de le faire disparaître avant Emile; ne pas attribuer automatiquement cette exfiltration à Sam côté JBA."
+        "reason": "Lambert plans to make him disappear before Emile arrives; do not automatically attribute this extraction to Sam in the JBA's eyes."
       },
       "status_calls": [
         {
@@ -1090,10 +1090,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Dénoncer Yeager à Emile",
+        "label": "Report Yeager to Emile",
         "nsa": -15,
         "jba": 15,
-        "reason": "Écarter la piste que Lambert voulait exploiter et fournir à Emile la preuve qu'il attend."
+        "reason": "Eliminate the lead Lambert wanted to pursue and give Emile the proof he expects."
       },
       "status_calls": [
         {
@@ -1134,10 +1134,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Ouvrir le serveur JBA à la NSA",
+        "label": "Open the JBA server to the NSA",
         "nsa": 10,
         "jba": 0,
-        "reason": "Renseignement clandestin; la pénalité JBA relève d'une découverte avérée, pas de la seule réussite technique."
+        "reason": "Covert intelligence; a JBA penalty requires confirmed discovery, not technical success alone."
       },
       "status_calls": [
         {
@@ -1170,7 +1170,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -1211,10 +1211,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Voler les contacts d'Emile",
+        "label": "Steal Emile's contacts",
         "nsa": 10,
         "jba": 0,
-        "reason": "Obtenir les contacts pour Third Echelon sans informer la JBA."
+        "reason": "Obtain the contacts for Third Echelon without informing the JBA."
       },
       "status_calls": [
         {
@@ -1245,10 +1245,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Analyser le mercure rouge",
+        "label": "Analyze the red mercury",
         "nsa": 10,
         "jba": 0,
-        "reason": "Vérifier l'authenticité de l'arme pour Williams; action clandestine."
+        "reason": "Verify the weapon's authenticity for Williams; a covert action."
       },
       "status_calls": [
         {
@@ -1279,10 +1279,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Révéler l'identité de Lambert",
+        "label": "Reveal Lambert's identity",
         "nsa": -15,
         "jba": 15,
-        "reason": "Conserver l'orientation morale du jeu original et le sacrifice d'un agent allié; Williams encourage pourtant ce choix: tension narrative à conserver explicitement."
+        "reason": "Preserve the original game's moral direction and the sacrifice of an allied agent; Williams nevertheless encourages this choice: explicitly preserve this narrative tension."
       },
       "status_calls": [
         {
@@ -1323,10 +1323,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Confirmer la couverture de Lambert",
+        "label": "Confirm Lambert's cover",
         "nsa": 15,
         "jba": -15,
-        "reason": "Sauver Lambert entretient les soupçons d'Emile selon le texte de l'objectif."
+        "reason": "According to the objective text, saving Lambert maintains Emile's suspicions."
       },
       "status_calls": [
         {
@@ -1369,7 +1369,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -1400,10 +1400,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Désamorcer la bombe de Nashville",
+        "label": "Disarm the Nashville bomb",
         "nsa": 15,
         "jba": -15,
-        "reason": "Empêcher un attentat et compromettre le plan JBA; appliquer la perte JBA lorsque l'échec de la bombe est établi, pas au seul geste clandestin."
+        "reason": "Prevent an attack and undermine the JBA's plan; apply the JBA loss when the bomb's failure is established, not for the covert action alone."
       },
       "status_calls": [
         {
@@ -1444,10 +1444,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Désamorcer la bombe de Los Angeles",
+        "label": "Disarm the Los Angeles bomb",
         "nsa": 15,
         "jba": -15,
-        "reason": "Même règle que Nashville, avec un identifiant de bombe distinct."
+        "reason": "Use the same rule as Nashville, with a separate bomb identifier."
       },
       "status_calls": [
         {
@@ -1488,10 +1488,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Empêcher la neutralisation des bombes",
+        "label": "Prevent the bombs from being neutralized",
         "nsa": -30,
         "jba": 30,
-        "reason": "Faire partir les bombes par une autre route compromet volontairement leur interception par la NSA."
+        "reason": "Sending the bombs along another route deliberately compromises their interception by the NSA."
       },
       "status_calls": [
         {
@@ -1584,7 +1584,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -1627,7 +1627,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": []
     },
@@ -1647,10 +1647,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Relever les empreintes d'Enrica",
+        "label": "Collect Enrica's fingerprints",
         "nsa": 5,
         "jba": 0,
-        "reason": "Collecte de renseignement clandestine; les autres empreintes à montant original nul restent neutres."
+        "reason": "Covert intelligence collection; other fingerprints with an original zero amount remain neutral."
       },
       "status_calls": [
         {
@@ -1683,7 +1683,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": []
     },
@@ -1705,7 +1705,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": []
     },
@@ -1727,7 +1727,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": []
     },
@@ -1757,7 +1757,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -1820,7 +1820,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -1863,7 +1863,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -1900,10 +1900,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Saboter le déclencheur d'Enrica",
+        "label": "Sabotage Enrica's detonator",
         "nsa": 30,
         "jba": -30,
-        "reason": "Sauver les passagers; perte JBA à l'échec constaté de l'attentat. Pendant le sabotage secret seul: NSA +30, JBA 0."
+        "reason": "Save the passengers; apply the JBA loss when the attack is confirmed to have failed. During the secret sabotage alone: NSA +30, JBA 0."
       },
       "status_calls": [
         {
@@ -1930,10 +1930,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Préserver le déclencheur de la bombe",
+        "label": "Preserve the bomb's detonator",
         "nsa": -30,
         "jba": 30,
-        "reason": "Permettre volontairement l'attentat malgré l'ordre de Lambert; résolution opposée au sabotage, jamais cumulée avec lui."
+        "reason": "Deliberately allow the attack despite Lambert's order; this outcome replaces sabotage and never stacks with it."
       },
       "status_calls": [
         {
@@ -1960,10 +1960,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Installer le relais avec Enrica",
+        "label": "Install the relay with Enrica",
         "nsa": 0,
         "jba": 10,
-        "reason": "Maintenir la couverture avant le choix sur le téléphone; ne pas punir une seconde fois le résultat final."
+        "reason": "Maintain cover before the phone decision; do not penalize the final outcome a second time."
       },
       "status_calls": [
         {
@@ -1985,10 +1985,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Récupérer le manifeste des passagers",
+        "label": "Retrieve the passenger manifest",
         "nsa": 5,
         "jba": 5,
-        "reason": "La description sert l'identification des victimes et Enrica rapporte une demande explicite d'Emile: intérêt des deux camps."
+        "reason": "The description concerns identifying the victims, and Enrica reports an explicit request from Emile: both factions benefit."
       },
       "status_calls": [
         {
@@ -2012,7 +2012,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2034,10 +2034,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Récupérer la bombe",
+        "label": "Retrieve the bomb",
         "nsa": 0,
         "jba": 10,
-        "reason": "Continuer la mission de couverture avec Enrica; le sort du navire possède son propre événement majeur."
+        "reason": "Continue the undercover mission with Enrica; the ship's fate has its own major event."
       },
       "status_calls": [
         {
@@ -2061,7 +2061,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2100,7 +2100,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2139,7 +2139,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2168,7 +2168,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2197,7 +2197,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2221,7 +2221,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2243,10 +2243,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Effacer les enregistrements vidéo",
+        "label": "Erase the video recordings",
         "nsa": 5,
         "jba": 5,
-        "reason": "Le texte exige de préserver le secret de la présence de Sam; préserver sa couverture protège les intérêts opérationnels des deux camps."
+        "reason": "The text requires keeping Sam's presence secret; maintaining his cover protects both factions' operational interests."
       },
       "status_calls": [
         {
@@ -2268,10 +2268,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Immobiliser le navire",
+        "label": "Disable the ship",
         "nsa": 5,
         "jba": 0,
-        "reason": "Réduire les victimes à terre sans rendre ce sabotage automatiquement connu de la JBA."
+        "reason": "Reduce casualties ashore without making the sabotage automatically known to the JBA."
       },
       "status_calls": [
         {
@@ -2295,7 +2295,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2334,7 +2334,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2373,7 +2373,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2402,7 +2402,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2429,10 +2429,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Neutraliser les mercenaires du camp",
+        "label": "Neutralize the camp's mercenaries",
         "nsa": 0,
         "jba": 10,
-        "reason": "Permettre aux alliés d'Emile d'aborder; l'objectif accepte létal ou non létal. Les pertes humaines sont évaluées séparément."
+        "reason": "Allow Emile's allies to board; the objective accepts lethal or nonlethal action. Casualties are evaluated separately."
       },
       "status_calls": [
         {
@@ -2454,10 +2454,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Couper le réseau des mercenaires",
+        "label": "Cut the mercenaries' network",
         "nsa": 0,
         "jba": 10,
-        "reason": "Empêcher l'alerte pendant la prise du pétrolier."
+        "reason": "Prevent an alert during the tanker takeover."
       },
       "status_calls": [
         {
@@ -2479,10 +2479,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Désarmer les charges dans la glace",
+        "label": "Disarm the charges in the ice",
         "nsa": 0,
         "jba": 5,
-        "reason": "Maintenir le pétrolier bloqué jusqu'à sa capture; ces charges ne sont pas les bombes d'attentat de la JBA."
+        "reason": "Keep the tanker trapped until its capture; these charges are not the JBA's terrorist bombs."
       },
       "status_calls": [
         {
@@ -2509,10 +2509,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Récupérer la clé de chiffrement",
+        "label": "Retrieve the encryption key",
         "nsa": 5,
         "jba": 0,
-        "reason": "Surveiller le réseau des contrebandiers pour la NSA."
+        "reason": "Monitor the smugglers' network for the NSA."
       },
       "status_calls": [
         {
@@ -2541,7 +2541,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2565,7 +2565,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2604,7 +2604,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2641,10 +2641,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Identifier la cargaison",
+        "label": "Identify the cargo",
         "nsa": 5,
         "jba": 0,
-        "reason": "Renseigner la NSA sur ce que la JBA pourrait exploiter; conserver une seule attribution malgré deux branches de complétion."
+        "reason": "Inform the NSA about what the JBA could exploit; award only once despite two completion branches."
       },
       "status_calls": [
         {
@@ -2671,10 +2671,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Poser le traceur du pétrolier",
+        "label": "Plant the tanker's tracker",
         "nsa": 5,
         "jba": 0,
-        "reason": "Suivre clandestinement le navire après sa capture par la JBA."
+        "reason": "Secretly track the ship after its capture by the JBA."
       },
       "status_calls": [
         {
@@ -2698,7 +2698,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2720,10 +2720,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Empêcher le sabordage du pétrolier",
+        "label": "Prevent the tanker's scuttling",
         "nsa": 0,
         "jba": 10,
-        "reason": "Sauver le navire destiné à la JBA; ne pas confondre ce désamorçage avec un sabotage de ses attentats."
+        "reason": "Save the ship intended for the JBA; do not confuse this disarming with sabotaging its terrorist attacks."
       },
       "status_calls": [
         {
@@ -2747,7 +2747,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2786,7 +2786,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -2825,7 +2825,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2849,7 +2849,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -2871,10 +2871,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Vérifier les partenaires d'Emile",
+        "label": "Check Emile's partners",
         "nsa": 0,
         "jba": 10,
-        "reason": "Confirmer le calendrier et la loyauté des deux autres groupes."
+        "reason": "Confirm the schedule and the loyalty of the other two groups."
       },
       "status_calls": [
         {
@@ -2896,10 +2896,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Renseigner la NSA sur Takfir",
+        "label": "Give the NSA intelligence on Takfir",
         "nsa": 5,
         "jba": 0,
-        "reason": "Collecte clandestine sur un groupe terroriste."
+        "reason": "Covert intelligence collection on a terrorist group."
       },
       "status_calls": [
         {
@@ -2926,10 +2926,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Renseigner la NSA sur Massoud",
+        "label": "Give the NSA intelligence on Massoud",
         "nsa": 5,
         "jba": 0,
-        "reason": "Même intention, cible et objectif distincts."
+        "reason": "Same intention, separate target and objective."
       },
       "status_calls": [
         {
@@ -2958,7 +2958,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -2982,7 +2982,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3004,10 +3004,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Tuer Hisham",
+        "label": "Kill Hisham",
         "nsa": -15,
         "jba": 15,
-        "reason": "Exécuter un agent allié à la demande d'Emile; conserver la gravité du choix original même si Lambert privilégie la mission."
+        "reason": "Execute an allied agent at Emile's request; preserve the gravity of the original choice even though Lambert prioritizes the mission."
       },
       "status_calls": [
         {
@@ -3034,10 +3034,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Faire exploser le véhicule censé contenir Hisham",
+        "label": "Blow up the vehicle supposedly containing Hisham",
         "nsa": 0,
         "jba": 5,
-        "reason": "Valider la preuve fournie à Emile. Un autre corps peut servir au simulacre: aucune perte NSA pour une fausse mort réussie; le meurtre réel est déjà pénalisé par son objectif."
+        "reason": "Validate the proof given to Emile. Another body can be used for the deception: no NSA loss for a successful fake death; the actual killing is already penalized by its objective."
       },
       "status_calls": [
         {
@@ -3069,10 +3069,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Sauver Hisham",
+        "label": "Rescue Hisham",
         "nsa": 15,
         "jba": 0,
-        "reason": "Si la fausse mort convainc Emile: JBA 0. Si Emile le voit fuir, variante NSA +15 / JBA -15, attestée par les dialogues."
+        "reason": "If the fake death convinces Emile: JBA 0. If Emile sees him flee, the dialogue supports the NSA +15 / JBA -15 variant."
       },
       "status_calls": [
         {
@@ -3101,7 +3101,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -3140,7 +3140,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -3179,7 +3179,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -3208,7 +3208,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -3235,10 +3235,10 @@
       ],
       "kind": "story",
       "proposal": {
-        "label": "Sécuriser l'extraction et le canon AA",
+        "label": "Secure the extraction and AA gun",
         "nsa": 0,
         "jba": 10,
-        "reason": "Permettre le départ du groupe sous couverture; ne pas sanctionner des neutralisations obligatoires comme des victimes civiles."
+        "reason": "Enable the undercover group's departure; do not classify mandatory neutralizations as civilian casualties."
       },
       "status_calls": [
         {
@@ -3262,7 +3262,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3286,7 +3286,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 25,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -3325,7 +3325,7 @@
       "proposal": {
         "nsa": 25,
         "jba": 0,
-        "reason": "Rassurer uniquement le camp méfiant, une fois par crise; déclencher sur sa jauge basse indépendante."
+        "reason": "Reassure only the suspicious faction, once per crisis; trigger from its own independent low score."
       },
       "status_calls": [
         {
@@ -3364,7 +3364,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -3393,7 +3393,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Branches TempDebug sans contexte narratif; ne pas intégrer leurs valeurs 20/70 à la balance. Activation réelle non vérifiée."
+        "reason": "TempDebug branches without narrative context; do not include their 20/70 values in balancing. Actual activation is unverified."
       },
       "status_calls": [
         {
@@ -3422,7 +3422,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3446,7 +3446,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3470,7 +3470,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3499,7 +3499,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3523,7 +3523,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3547,7 +3547,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3571,7 +3571,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3600,7 +3600,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3624,7 +3624,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3648,7 +3648,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {
@@ -3672,7 +3672,7 @@
       "proposal": {
         "nsa": 0,
         "jba": 0,
-        "reason": "Conserver le montant original nul; aucun nouveau gain de confiance pour une étape logistique."
+        "reason": "Keep the original zero amount; do not add trust rewards for a logistical step."
       },
       "status_calls": [
         {

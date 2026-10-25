@@ -1,11 +1,11 @@
-# Annexe — inventaire technique de confiance
+# Appendix — technical trust inventory
 
-Offsets en hexadécimal dans le flux LIN décompressé; ce ne sont ni des offsets de fichier comprimé, ni des adresses mémoire.
-Généré depuis les faits locaux du 23 octobre 2026. Le document de référence est [TRUST_REFERENCE.md](TRUST_REFERENCE.md).
+Offsets are hexadecimal positions in the decompressed LIN stream, not compressed-file offsets or memory addresses.
+Generated from local evidence collected on 23 October 2026. The reference document is [TRUST_REFERENCE.md](TRUST_REFERENCE.md).
 
-## Les 139 déclarations solo
+## The 139 solo declarations
 
-| Carte contenant le code | Offset | Section de contexte | ID | Ancien delta (+NSA / −JBA) |
+| Map containing the code | Offset | Context section | ID | Original delta (+NSA / −JBA) |
 | --- | --- | --- | --- | ---: |
 | `x01_Iceland_a` | `0x196932` | `p_x01_iceland_a_objectives` | `OBJ_01_P_01` | +0 |
 | `x01_Iceland_a` | `0x196afd` | `p_x01_iceland_a_objectives` | `Ice_A_BackT` | +0 |
@@ -147,11 +147,11 @@ Généré depuis les faits locaux du 23 octobre 2026. Le document de référence
 | `x12_ny_c` | `0x409ea0` | `p_x12_ny_c_objectives` | `hikillc` | +0 |
 | `x12_ny_c` | `0x409f0d` | `p_x12_ny_c_objectives` | `killallc` | +0 |
 
-## Les 208 changements d’état solo constants
+## The 208 constant solo state changes
 
-État 1 = complété, état 2 = annulé. La présence d’un appel ne prouve pas que sa branche est atteignable. Une annulation ne déclenche pas à elle seule le montant de confiance.
+State 1 = completed, state 2 = canceled. A call's presence does not prove its branch is reachable. Cancellation alone does not trigger the trust amount.
 
-| Carte contenant le code | Offset | ID | État |
+| Map containing the code | Offset | ID | State |
 | --- | --- | --- | ---: |
 | `x01_Iceland_a` | `0x196c45` | `Ice_A_BackT` | 1 |
 | `x01_Iceland_a` | `0x196dfa` | `knocknpcs` | 1 |
@@ -362,14 +362,14 @@ Généré depuis les faits locaux du 23 octobre 2026. Le document de référence
 | `x12_ny_c` | `0x40a277` | `killallc` | 1 |
 | `x12_ny_c` | `0x40a3a9` | `killallc` | 2 |
 
-## Hors campagne solo
+## Outside the solo campaign
 
-Les 44 déclarations coop reconnues ont toutes un montant de confiance nul, y compris les montants optionnels omis (valeur native par défaut 0). Aucun appel direct constant `ModifyTrust` n’a été retenu dans ces cartes.
+All 44 recognized co-op declarations have zero trust amounts, including omitted optional amounts (native default 0). No direct constant `ModifyTrust` call was retained in these maps.
 
-## Appel direct constant
+## Direct constant call
 
-`x04_moneytrain_a`, offset `0x3579cc`: montant 15, booléen JBA vrai, donc delta −15. Branche nommée `Primary_Obj_Kill_Done_After_Alive`; compensation du crédit NSA antérieur du chef de gare.
+`x04_moneytrain_a`, offset `0x3579cc`: amount 15, JBA boolean true, hence delta −15. Branch name: `Primary_Obj_Kill_Done_After_Alive`; reverses the station chief's earlier NSA credit.
 
-## Couverture
+## Coverage
 
-Le scanner reconnaît les appels natifs constants documentés. Il ne remplace pas un décompilateur de contrôle de flux et ne prouve pas l’absence de références dynamiques. Les faux motifs présents dans les données graphiques ne sont pas comptés comme scripts.
+The scanner recognizes the documented constant native calls. It does not replace a control-flow decompiler or prove the absence of dynamic references. False patterns in graphics data are not counted as scripts.

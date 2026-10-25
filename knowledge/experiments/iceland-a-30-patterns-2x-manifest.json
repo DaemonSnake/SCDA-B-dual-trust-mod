@@ -1,0 +1,610 @@
+{
+  "status": "user_visual_validation_passed_runtime_dimensions_not_captured",
+  "scale": 2,
+  "texture_count": 30,
+  "baseline_sha256": "f46ca304ba08fc466e6ca3c565330d765a5fa21d5663bc38bc3d37c0a4de6b38",
+  "installed_sha256": "03607e0e011b6ece9134b9f38feb839be58e2470e973a3c340b757b97266e149",
+  "backup": "I:\\game\\xbox\\SCDA-XBERecomp-2\\assets\\Default\\DataXb\\LMaps\\x01_Iceland_a\\x01_Iceland_a.lin.patterns-2x.save",
+  "decoded_before": 22992838,
+  "decoded_after": 28793194,
+  "budgets_before": [
+    19119142,
+    10169856,
+    3082492,
+    480038,
+    912832
+  ],
+  "budgets_after": [
+    19120222,
+    15969792,
+    3082492,
+    480038,
+    912832
+  ],
+  "pixel_growth": 5799936,
+  "metadata_growth": 1080,
+  "targets": [
+    {
+      "id": "A01",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 11915451,
+      "insert_at": 11915492,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "5bbca69cff71bfc9ef7baab24a5db75aaae65d45785c605ebfbb030f3f779d09",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A02",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 12003117,
+      "insert_at": 12003158,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "d83634deac7955d1fdaa6864ce0f35a4515a0d37f5a8ba37862610599d43a712",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A03",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 12089323,
+      "insert_at": 12089364,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "d614e14518dc4698f3404d300e02dae7834f0982159a9b1ba5d787403986bee1",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A04",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 12186375,
+      "insert_at": 12186416,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "92ff1f7d0f67b4cefa478b0bc9b695b9d6978ff62d50ac52e1788a9c5b13b774",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A05",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 12355290,
+      "insert_at": 12355331,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "63a4da65d636cd03e263bc330278c2f56fa3895eeaad4dc7973dbf843736fd94",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A06",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 6,
+      "mips": 7,
+      "old_record_offset": 12521252,
+      "insert_at": 12521293,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "c7d793db2f63fab5785c9eecf279d7ebae2dcdbb8bac0a3c95982609461099ea",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A07",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 12600954,
+      "insert_at": 12600995,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "d6beb9bab58b75fbf282db25034cb94a88e7a86ff110e3c8f9a93bdfdecfee62",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A08",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 13126079,
+      "insert_at": 13126120,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "a509c998cfb0681b8fe5f47f1496610d64a19e66989f35daf8c033e322932103",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A09",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 14393889,
+      "insert_at": 14393930,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "41ff04da5c3bde58278a6afaaf2eb6ff285f249d1c70fc989c1efd266e5e948e",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A10",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 15036226,
+      "insert_at": 15036267,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "eebb43220f21878710880f4157d69adcca30a4aaf5fd577cfc7dbd52ea1b6aa1",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A11",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 15080059,
+      "insert_at": 15080100,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "6c2feeae59ce8082345be13e107fde3e2b3139b9ef0cfb6a0eaf17a7536cb9f3",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A12",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 15254978,
+      "insert_at": 15255019,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "889758df065f8809662b02bea75072c27d410d59242c90710c9659df2b7ef295",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A13",
+      "original_dimensions": [
+        512,
+        256
+      ],
+      "dimensions": [
+        1024,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 15429897,
+      "insert_at": 15429938,
+      "insert_bytes": 262158,
+      "new_top_bytes": 262144,
+      "new_top_sha256": "e7301b86e9f87b61edd9a24f67dcbc36e406952bbbb22bbc2d756c86c1346e98",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A14",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 15681341,
+      "insert_at": 15681382,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "4979ee937c80c1534b43e8a3e7e799ffe876161ff803f5d520b87228b11f75e5",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A15",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 15856398,
+      "insert_at": 15856439,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "2ed314489eae47607a07d6709e1a2ddd9e7d80f202d5b11d5ea2ac2ac69f34dd",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A16",
+      "original_dimensions": [
+        512,
+        256
+      ],
+      "dimensions": [
+        1024,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 16075743,
+      "insert_at": 16075784,
+      "insert_bytes": 262158,
+      "new_top_bytes": 262144,
+      "new_top_sha256": "726796414285d717bc8ba1b913c0534a66d16b7599f1831908037c46dbfe51c3",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A17",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 16543735,
+      "insert_at": 16543776,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "77970528c94a1ff8bc28f8e2e4b0e5f24dbf75c5119f9e511b1a526115e1cb5e",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A18",
+      "original_dimensions": [
+        256,
+        128
+      ],
+      "dimensions": [
+        512,
+        256
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 16587568,
+      "insert_at": 16587609,
+      "insert_bytes": 65550,
+      "new_top_bytes": 65536,
+      "new_top_sha256": "4139600f6abedbf06254a2641a6be6623a8a76d2cca226c042b3d28813abd85a",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A19",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 16609166,
+      "insert_at": 16609207,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "cf83650057c5041be66de12d0fa456574352801ebba4eb2d4419a55a43d2924a",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A20",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 16630924,
+      "insert_at": 16630965,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "0470224d86df101ae1a6c9662a074c7c74acf06ee616507bfe0e6f04331a1529",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A21",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 16896464,
+      "insert_at": 16896505,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "7c603bc5ffbe9a48ab4177fe4ec07d82ce18ed4a0a3a69ec7996ac6aec345411",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A22",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "original_mips": 8,
+      "mips": 9,
+      "old_record_offset": 16951182,
+      "insert_at": 16951223,
+      "insert_bytes": 524302,
+      "new_top_bytes": 524288,
+      "new_top_sha256": "614f9ecf5b0a69a9ffdc0589c06887e23942e0ad4b440c7e012bf17eaa374e68",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A23",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 17126239,
+      "insert_at": 17126280,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "4c117fb04121a2fb10eafb985bd4545a78c279ec4dc79d83d92dd0fab3dcb2d0",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A24",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 17213175,
+      "insert_at": 17213216,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "f102ed6266079730a74112d508ec5a7871c5c841edfbadd799f6ddfd3491c736",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A25",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 17300841,
+      "insert_at": 17300882,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "ac8f534a1b43304692b536e261d13be205c5f3e1a8c6d0576191d352d4c47127",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A26",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 3,
+      "mips": 4,
+      "old_record_offset": 17470329,
+      "insert_at": 17470370,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "a80b7889d8a7369d86c2bcd214de9e712b08fa22ce1ceac540715fc9faf8dde7",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A27",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 6,
+      "mips": 7,
+      "old_record_offset": 17600368,
+      "insert_at": 17600409,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "b1eee2e9546030fe0696ef664c03b1093b11bd545472f7a928d4f0c0dcd52604",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A28",
+      "original_dimensions": [
+        128,
+        128
+      ],
+      "dimensions": [
+        256,
+        256
+      ],
+      "original_mips": 6,
+      "mips": 7,
+      "old_record_offset": 17611419,
+      "insert_at": 17611460,
+      "insert_bytes": 32782,
+      "new_top_bytes": 32768,
+      "new_top_sha256": "c73ec33068e78aecc784242f614034f115ecfd37e24a27b5d487b04f124ef4bd",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A29",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 17934169,
+      "insert_at": 17934210,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "464c39492ac4e218b1d3e1ff253a34c85bc9b14c519dc21fb7e87c79806908e5",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    },
+    {
+      "id": "A30",
+      "original_dimensions": [
+        256,
+        256
+      ],
+      "dimensions": [
+        512,
+        512
+      ],
+      "original_mips": 7,
+      "mips": 8,
+      "old_record_offset": 18030240,
+      "insert_at": 18030281,
+      "insert_bytes": 131086,
+      "new_top_bytes": 131072,
+      "new_top_sha256": "ad8e364b9050957c4fb372bb29377ffa96812a4daa375e5f606530d37771db37",
+      "bulk_endpoint_policy": "Reuse original first endpoint in LIN logical archive; original records remain intact"
+    }
+  ],
+  "limitations": "Inline resize is experimental. Logical archive cursor semantics verified in guest code; allocation growth follows prior recipe but exact budget accounting is not proven. Test level from beginning. Existing unscaled markers remain in lower mip levels.",
+  "validation": {
+    "user_report": "Everything seems to be working",
+    "screenshots": [
+      "C:/Users/bastien/Desktop/Capture d'écran 2026-10-22 063734.png",
+      "C:/Users/bastien/Desktop/Capture d'écran 2026-10-22 063753.png",
+      "C:/Users/bastien/Desktop/Capture d'écran 2026-10-22 063855.png",
+      "C:/Users/bastien/Desktop/Capture d'écran 2026-10-22 063936.png"
+    ],
+    "visual_scope": "Numerous markers visible across outdoor and indoor tested route; no fault reported. Not every one of 30 IDs individually confirmed.",
+    "gpu_evidence": "Latest trace_20444.log exists but is zero bytes; actual bound GPU dimensions not independently verified in this run."
+  }
+}
